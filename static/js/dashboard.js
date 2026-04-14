@@ -1,6 +1,13 @@
 (function () {
   const cfg = window.__TRADE_AI__ || {};
 
+  function todayIsoUtc() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  let statsPeriod = "all";
+  let statsRefDate = todayIsoUtc();
+
   function parseJson(str) {
     if (str == null) return null;
     if (typeof str === "object") return str;
@@ -22,6 +29,48 @@
     const o = parseJson(str);
     if (o) return JSON.stringify(o, null, 2);
     return String(str || "");
+  }
+
+  function execPatchUrl(id) {
+    const base = (cfg.apiAnalysisPrefix || "/api/analysis").replace(/\/$/, "");
+    return base + "/" + id + "/exec";
+  }
+
+  function fmtPnlDisplay(v) {
+    if (v == null || v === "") return "";
+    var n = Number(v);
+    if (isNaN(n)) return String(v);
+    return n.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  }
+
+  function renderJournalPanel(prefix, data, isBuy, isSell) {
+    var wrap = document.getElementById(prefix + "trade-journal-wrap");
+    if (!wrap) return;
+    if (!isBuy && !isSell) {
+      wrap.hidden = true;
+      return;
+    }
+    wrap.hidden = false;
+    var idEl = document.getElementById(prefix + "trade-journal-analysis-id");
+    if (idEl && data.id != null) idEl.value = String(data.id);
+    var entry = document.getElementById(prefix + "trade-exec-entry");
+    var ex = document.getElementById(prefix + "trade-exec-exit");
+    var pnlIn = document.getElementById(prefix + "trade-exec-pnl");
+    if (entry) entry.value = data.exec_entry != null ? String(data.exec_entry) : "";
+    if (ex) ex.value = data.exec_exit != null ? String(data.exec_exit) : "";
+    if (pnlIn) {
+      if (data.exec_pnl != null && data.exec_pnl !== "") {
+        pnlIn.value = fmtPnlDisplay(data.exec_pnl);
+      } else {
+        pnlIn.value = "";
+      }
+    }
+    var st = document.getElementById(prefix + "trade-journal-status");
+    if (st) {
+      st.hidden = true;
+      st.textContent = "";
+      st.className = "trade-journal-status";
+    }
   }
 
   function getAlvos(trader) {
@@ -287,6 +336,8 @@
       }
     }
 
+    renderJournalPanel(isModal ? "modal-" : "", data, isBuy, isSell);
+
     if (!isModal) {
       document.getElementById("trade-result").classList.add("is-visible");
       document.getElementById("trade-result").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -324,6 +375,227 @@
       });
   }
   loadHistoryFromApi();
+
+  function updateHistoryJournalCell(analysisId, recorded) {
+    var tr = document.querySelector('#history-body tr[data-id="' + analysisId + '"]');
+    if (!tr) return;
+    var td = tr.querySelector(".td-journal");
+    if (!td) return;
+    td.innerHTML = recorded
+      ? '<span class="badge ok" title="Registrado">✓</span>'
+      : '<span class="muted">—</span>';
+  }
+
+  function readJournalPayload(prefix) {
+    var en = document.getElementById(prefix + "trade-exec-entry");
+    var ex = document.getElementById(prefix + "trade-exec-exit");
+    var pnlRaw = document.getElementById(prefix + "trade-exec-pnl");
+    var pv = pnlRaw && pnlRaw.value ? pnlRaw.value.trim() : "";
+    return {
+      recorded: true,
+      entry: en && en.value ? en.value.trim() : "",
+      exit: ex && ex.value ? ex.value.trim() : "",
+      pnl: pv === "" ? null : pv,
+    };
+  }
+
+  function saveJournal(prefix) {
+    var idEl = document.getElementById(prefix + "trade-journal-analysis-id");
+    var statusEl = document.getElementById(prefix + "trade-journal-status");
+    if (!idEl || !idEl.value) return;
+    var id = Number(idEl.value);
+    var payload = readJournalPayload(prefix);
+    fetch(execPatchUrl(id), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(payload),
+    })
+      .then(function (r) {
+        return r.json().then(function (j) {
+          if (!r.ok) throw new Error(j.error || "Erro ao salvar");
+          return j;
+        });
+      })
+      .then(function (out) {
+        var T = parseJson(out.trader_json);
+        var acaoRaw = T && T.acao ? String(T.acao).toUpperCase() : "";
+        var isBuy = acaoRaw.indexOf("COMPRA") >= 0;
+        var isSell = acaoRaw.indexOf("VENDA") >= 0;
+        renderJournalPanel(prefix, out, isBuy, isSell);
+        if (statusEl) {
+          statusEl.hidden = false;
+          statusEl.className = "trade-journal-status";
+          statusEl.textContent = "Registro salvo.";
+        }
+        loadStats();
+        updateHistoryJournalCell(id, !!out.exec_recorded);
+      })
+      .catch(function (err) {
+        if (statusEl) {
+          statusEl.hidden = false;
+          statusEl.className = "trade-journal-status trade-journal-status--err";
+          statusEl.textContent = err.message || "Falha ao salvar.";
+        }
+      });
+  }
+
+  function clearJournal(prefix) {
+    var idEl = document.getElementById(prefix + "trade-journal-analysis-id");
+    var statusEl = document.getElementById(prefix + "trade-journal-status");
+    if (!idEl || !idEl.value) return;
+    var id = Number(idEl.value);
+    fetch(execPatchUrl(id), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ recorded: false }),
+    })
+      .then(function (r) {
+        return r.json().then(function (j) {
+          if (!r.ok) throw new Error(j.error || "Erro");
+          return j;
+        });
+      })
+      .then(function (out) {
+        var T = parseJson(out.trader_json);
+        var acaoRaw = T && T.acao ? String(T.acao).toUpperCase() : "";
+        var isBuy = acaoRaw.indexOf("COMPRA") >= 0;
+        var isSell = acaoRaw.indexOf("VENDA") >= 0;
+        renderJournalPanel(prefix, out, isBuy, isSell);
+        if (statusEl) {
+          statusEl.hidden = false;
+          statusEl.className = "trade-journal-status";
+          statusEl.textContent = "Registro removido.";
+        }
+        loadStats();
+        updateHistoryJournalCell(id, false);
+      })
+      .catch(function (err) {
+        if (statusEl) {
+          statusEl.hidden = false;
+          statusEl.className = "trade-journal-status trade-journal-status--err";
+          statusEl.textContent = err.message || "Falha.";
+        }
+      });
+  }
+
+  function loadStats() {
+    var base = cfg.statsUrl || "/api/stats";
+    var q = ["period=" + encodeURIComponent(statsPeriod)];
+    if (statsPeriod !== "all") {
+      q.push("ref=" + encodeURIComponent(statsRefDate));
+    }
+    var full = base + (base.indexOf("?") >= 0 ? "&" : "?") + q.join("&");
+    fetch(full, { credentials: "same-origin" })
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (s) {
+        function el(id, v) {
+          var n = document.getElementById(id);
+          if (n) n.textContent = v != null ? String(v) : "—";
+        }
+        el("stat-registrados", s.total_registrados);
+        el("stat-com-pnl", s.com_pnl_informado);
+        el("stat-wins", s.wins);
+        el("stat-losses", s.losses);
+        el("stat-breakeven", s.breakeven);
+        var pnl = s.pnl_total;
+        var pnlEl = document.getElementById("stat-pnl-total");
+        if (pnlEl) {
+          pnlEl.textContent = pnl != null ? fmtPnlDisplay(pnl) : "—";
+          pnlEl.classList.remove("is-pos", "is-neg");
+          if (pnl > 0) pnlEl.classList.add("is-pos");
+          else if (pnl < 0) pnlEl.classList.add("is-neg");
+        }
+        var ctxEl = document.getElementById("stats-contexto");
+        if (ctxEl) ctxEl.textContent = s.contexto || "";
+        var hj = document.getElementById("stats-hoje");
+        if (hj) {
+          if (s.period === "all") {
+            var h = s.hoje_utc || {};
+            var st = h.status || "neutro";
+            var label =
+              st === "lucro"
+                ? "Lucro no dia (UTC)"
+                : st === "prejuizo"
+                ? "Prejuízo no dia (UTC)"
+                : "Dia neutro (soma zero ou sem P/L)";
+            hj.innerHTML =
+              "<strong>Hoje (UTC)</strong> — " +
+              esc(h.data || "") +
+              " · " +
+              esc(label) +
+              ": <strong>" +
+              esc(h.pnl != null ? String(h.pnl) : "—") +
+              "</strong> · " +
+              esc(String(h.trades_registrados_hoje != null ? h.trades_registrados_hoje : "—")) +
+              " registro(s).";
+          } else {
+            var inv = s.intervalo;
+            var invTxt = inv ? esc(inv.inicio) + " → " + esc(inv.fim) : "—";
+            hj.innerHTML =
+              "<strong>Resumo do filtro</strong> — " +
+              invTxt +
+              " · " +
+              esc(String(s.total_registrados != null ? s.total_registrados : "—")) +
+              " registro(s) · P/L: <strong>" +
+              esc(s.pnl_total != null ? String(s.pnl_total) : "—") +
+              "</strong>";
+          }
+        }
+        document.querySelectorAll(".stats-pill").forEach(function (p) {
+          p.classList.toggle("is-active", p.getAttribute("data-period") === (s.period || statsPeriod));
+        });
+      })
+      .catch(function () {});
+  }
+
+  var statsRefInput = document.getElementById("stats-ref-date");
+  if (statsRefInput && !statsRefInput.value) {
+    statsRefInput.value = todayIsoUtc();
+    statsRefDate = statsRefInput.value;
+  }
+
+  document.querySelectorAll(".stats-pill").forEach(function (pill) {
+    pill.addEventListener("click", function () {
+      statsPeriod = pill.getAttribute("data-period") || "all";
+      var wrap = document.getElementById("stats-ref-wrap");
+      var hint = document.getElementById("stats-ref-hint");
+      if (wrap) wrap.hidden = statsPeriod === "all";
+      if (hint) {
+        hint.textContent =
+          statsPeriod === "day"
+            ? "Dia (UTC)"
+            : statsPeriod === "month"
+            ? "Referência do mês (UTC)"
+            : "";
+      }
+      loadStats();
+    });
+  });
+  statsRefInput?.addEventListener("change", function () {
+    if (this.value) statsRefDate = this.value;
+    loadStats();
+  });
+
+  loadStats();
+
+  document.getElementById("trade-journal-form")?.addEventListener("submit", function (e) {
+    e.preventDefault();
+    saveJournal("");
+  });
+  document.getElementById("modal-trade-journal-form")?.addEventListener("submit", function (e) {
+    e.preventDefault();
+    saveJournal("modal-");
+  });
+  document.getElementById("trade-journal-clear")?.addEventListener("click", function () {
+    clearJournal("");
+  });
+  document.getElementById("modal-trade-journal-clear")?.addEventListener("click", function () {
+    clearJournal("modal-");
+  });
 
   /** Arquivo escolhido/colido (Safari nem sempre aceita só input.files = DataTransfer). */
   let stagedFile = null;
@@ -536,6 +808,11 @@
             ? 0
             : null,
         image_url: data.image_url,
+        exec_recorded: data.exec_recorded ? 1 : 0,
+        exec_entry: data.exec_entry,
+        exec_exit: data.exec_exit,
+        exec_pnl: data.exec_pnl,
+        exec_logged_at: data.exec_logged_at,
       };
       trades.unshift(rowPayload);
       prependHistoryRow(rowPayload);
@@ -649,6 +926,10 @@
     } else {
       permHtml = '<span class="badge neutral">&mdash;</span>';
     }
+    const regHtml =
+      row.exec_recorded === true || row.exec_recorded === 1
+        ? '<span class="badge ok" title="Registrado">✓</span>'
+        : '<span class="muted">—</span>';
     const tr = document.createElement("tr");
     tr.setAttribute("data-id", String(row.id));
     tr.innerHTML =
@@ -662,6 +943,8 @@
       escapeHtml(row.score_final != null ? String(row.score_final) : "—") +
       "</td><td>" +
       permHtml +
+      '</td><td class="td-journal">' +
+      regHtml +
       '</td><td><button type="button" class="btn btn-ghost js-detail" data-id="' +
       row.id +
       '">Detalhes</button></td>';
@@ -715,6 +998,7 @@
         const permitir =
           row.permitir_trade === 1 ? true : row.permitir_trade === 0 ? false : null;
         const viewData = {
+          id: row.id,
           trader: row.trader_json,
           validator: row.validator_json,
           risk_manager: row.risk_json,
@@ -724,6 +1008,11 @@
             score_final: row.score_final,
             permitir_trade: permitir,
           },
+          exec_recorded: row.exec_recorded,
+          exec_entry: row.exec_entry,
+          exec_exit: row.exec_exit,
+          exec_pnl: row.exec_pnl,
+          exec_logged_at: row.exec_logged_at,
         };
         renderTradeView(viewData, { target: "modal", createdAt: row.created_at });
       })

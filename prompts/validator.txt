@@ -21,6 +21,7 @@ Critérios de reprovação automática:
 - RR menor que 1:2
 - Stop mal posicionado
 - Baixa confiança (< 60%)
+- Se a operação for reprovada, preencha obrigatoriamente o campo "motivo_reprovacao_critico" com o principal erro (ex.: RR baixo, mercado lateral, stop mal posicionado).
 
 Responda no formato JSON:
 
@@ -28,10 +29,11 @@ Responda no formato JSON:
   "aprovado": true/false,
   "ativo_ok": true/false,
   "timeframe_ok": true/false,
-  "nota_confluencia": "ex.: 4/5 (alinhamento trader x gráfico)",
+  "nota_confluencia": "...",
   "confianca_validacao": 0-100,
   "erro_encontrado": "",
+  "motivo_reprovacao_critico": "",
   "ajustes_sugeridos": "",
-  "veredito_final": "APROVADO ou REPROVADO",
+  "veredito_final": "...",
   "justificativa": ""
 }

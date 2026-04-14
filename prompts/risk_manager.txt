@@ -28,8 +28,22 @@ Critérios obrigatórios:
 - Há volatilidade excessiva para esse TF?
 - Movimento já esticado em relação à escala desse TF?
 
-4. Confiança geral:
-- Média ponderada das análises
+4. Confiança geral (score_final):
+
+Calcule o score_final da seguinte forma:
+
+- 40% da confiança do TRADER
+- 40% da confiança do VALIDATOR
+- 20% da nota de confluência (converter de escala 0–5 para 0–100)
+
+Penalizações:
+- Se ativo_ok = false → subtrair 30 pontos
+- Se timeframe_ok = false → subtrair 30 pontos
+- Se houver conflito entre trader e validator → score_final = 0
+
+Regras finais baseadas no score:
+- score_final < 70 → NÃO OPERAR
+- score_final >= 70 → pode EXECUTAR
 
 REGRAS RÍGIDAS:
 
@@ -45,6 +59,6 @@ Formato JSON obrigatório:
   "score_final": 0-100,
   "nivel_risco": "baixo/médio/alto",
   "decisao": "EXECUTAR ou NAO_OPERAR",
-  "motivo": "",
+  "motivo": "explicação objetiva baseada no score e regras",
   "alertas": []
 }

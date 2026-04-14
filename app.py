@@ -18,7 +18,15 @@ from agents.risk_manager import run_risk_manager
 from agents.trader import run_trader
 from agents.validator import run_validator
 from services.config import Config
-from services.db import get_analysis, init_db, insert_analysis, list_analyses
+from services.db import (
+    get_analysis,
+    init_db,
+    insert_analysis,
+    journal_stats,
+    list_analyses,
+    parse_pnl_value,
+    update_execution,
+)
 from services.json_utils import extract_json_object, risk_summary
 
 logging.basicConfig(level=logging.INFO)
@@ -89,7 +97,15 @@ def api_history():
     rows = list_analyses(200)
     for t in rows:
         t["image_url"] = url_for("serve_upload", name=t["stored_filename"])
+        t["exec_recorded"] = bool(t.get("exec_recorded"))
     return jsonify({"items": rows})
+
+
+@app.route("/api/stats")
+def api_stats():
+    period = request.args.get("period", "all")
+    ref = request.args.get("ref")
+    return jsonify(journal_stats(period=period, ref=ref))
 
 
 @app.route("/api/analysis/<int:analysis_id>")
@@ -98,7 +114,35 @@ def api_analysis_detail(analysis_id: int):
     if not row:
         return jsonify({"error": "Análise não encontrada."}), 404
     row["image_url"] = url_for("serve_upload", name=row["stored_filename"])
+    row["exec_recorded"] = bool(row.get("exec_recorded"))
     return jsonify(row)
+
+
+@app.route("/api/analysis/<int:analysis_id>/exec", methods=["PATCH"])
+def api_analysis_exec(analysis_id: int):
+    row = get_analysis(analysis_id)
+    if not row:
+        return jsonify({"error": "Análise não encontrada."}), 404
+    body = request.get_json(silent=True) or {}
+    recorded = body.get("recorded", True)
+    if isinstance(recorded, str):
+        recorded = recorded.lower() in ("1", "true", "sim", "yes")
+    entry = body.get("entry")
+    exit_ = body.get("exit")
+    pnl_raw = body.get("pnl")
+    pnl = parse_pnl_value(pnl_raw) if pnl_raw not in (None, "") else None
+    updated = update_execution(
+        analysis_id,
+        recorded=bool(recorded),
+        entry=entry if isinstance(entry, str) else None,
+        exit_=exit_ if isinstance(exit_, str) else None,
+        pnl=pnl,
+    )
+    if not updated:
+        return jsonify({"error": "Falha ao atualizar."}), 500
+    updated["image_url"] = url_for("serve_upload", name=updated["stored_filename"])
+    updated["exec_recorded"] = bool(updated.get("exec_recorded"))
+    return jsonify(updated)
 
 
 @app.route("/analyze", methods=["POST"])
@@ -160,6 +204,11 @@ def analyze():
                 "permitir_trade": permitir_trade,
             },
             "image_url": url_for("serve_upload", name=stored),
+            "exec_recorded": False,
+            "exec_entry": None,
+            "exec_exit": None,
+            "exec_pnl": None,
+            "exec_logged_at": None,
         }
     )
 

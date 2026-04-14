@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Trade AI — Dashboard B3</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=2" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/trade-view.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=4" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/trade-view.css') }}?v=2" />
 </head>
 <body>
   <div class="shell">
@@ -26,6 +26,53 @@
         <a class="btn btn-ghost" href="{{ url_for('home') }}">API /</a>
       </div>
     </header>
+
+    <section class="card stats-dashboard" id="stats-dashboard">
+      <h2>Meu desempenho</h2>
+      <p class="stats-dashboard__note">
+        Registre entradas e saídas reais quando a análise for <strong>COMPRA</strong> ou <strong>VENDA</strong>.
+        O resumo considera apenas trades que você marcou. Filtros usam a <strong>data UTC</strong> do salvamento (alinhado ao histórico).
+      </p>
+      <div class="stats-filters">
+        <div class="stats-filters__period" role="tablist" aria-label="Período dos indicadores">
+          <button type="button" class="stats-pill is-active" data-period="all" id="stats-pill-all">Todo período</button>
+          <button type="button" class="stats-pill" data-period="day" id="stats-pill-day">Dia</button>
+          <button type="button" class="stats-pill" data-period="month" id="stats-pill-month">Mês</button>
+        </div>
+        <label class="stats-filters__date" id="stats-ref-wrap" hidden>
+          <span class="stats-filters__hint" id="stats-ref-hint">Data (UTC)</span>
+          <input type="date" id="stats-ref-date" />
+        </label>
+      </div>
+      <p class="stats-contexto" id="stats-contexto" aria-live="polite"></p>
+      <div class="stats-grid">
+        <div class="stat-tile">
+          <span class="stat-tile__val" id="stat-registrados">—</span>
+          <span class="stat-tile__lbl">Trades registrados</span>
+        </div>
+        <div class="stat-tile stat-tile--muted">
+          <span class="stat-tile__val" id="stat-com-pnl">—</span>
+          <span class="stat-tile__lbl">Com P/L informado</span>
+        </div>
+        <div class="stat-tile stat-tile--ok">
+          <span class="stat-tile__val" id="stat-wins">—</span>
+          <span class="stat-tile__lbl">No lucro</span>
+        </div>
+        <div class="stat-tile stat-tile--bad">
+          <span class="stat-tile__val" id="stat-losses">—</span>
+          <span class="stat-tile__lbl">No prejuízo</span>
+        </div>
+        <div class="stat-tile">
+          <span class="stat-tile__val" id="stat-breakeven">—</span>
+          <span class="stat-tile__lbl">Empates (0)</span>
+        </div>
+        <div class="stat-tile stat-tile--accent">
+          <span class="stat-tile__val" id="stat-pnl-total">—</span>
+          <span class="stat-tile__lbl">P/L acumulado</span>
+        </div>
+      </div>
+      <div class="stats-hoje" id="stats-hoje" aria-live="polite"></div>
+    </section>
 
     <section class="card" id="upload-section">
       <h2>Nova análise</h2>
@@ -156,6 +203,35 @@
         </div>
         <div class="trade-risk-strip" id="trade-risk-strip"></div>
 
+        <div class="trade-journal" id="trade-journal-wrap" hidden>
+          <h4>Meu trade (execução real)</h4>
+          <p class="trade-journal__hint">
+            Preencha após operar. O resultado pode ser em reais, pontos ou outra unidade — use o mesmo critério sempre para comparar.
+          </p>
+          <form class="trade-journal-form" id="trade-journal-form" data-journal-scope="main" onsubmit="return false;">
+            <input type="hidden" id="trade-journal-analysis-id" value="" />
+            <div class="trade-journal-grid">
+              <label class="trade-journal-field">
+                <span>Entrada (preço executado)</span>
+                <input type="text" id="trade-exec-entry" name="entry" autocomplete="off" placeholder="ex.: 128.450" />
+              </label>
+              <label class="trade-journal-field">
+                <span>Saída (preço executado)</span>
+                <input type="text" id="trade-exec-exit" name="exit" autocomplete="off" placeholder="ex.: 128.520" />
+              </label>
+              <label class="trade-journal-field">
+                <span>Resultado (lucro + / prejuízo −)</span>
+                <input type="text" id="trade-exec-pnl" name="pnl" autocomplete="off" placeholder="ex.: 150 ou -80 ou 1.234,50" />
+              </label>
+            </div>
+            <div class="trade-journal-actions">
+              <button type="submit" class="btn" id="trade-journal-save">Salvar registro</button>
+              <button type="button" class="btn btn-ghost" id="trade-journal-clear">Remover registro</button>
+            </div>
+            <p class="trade-journal-status" id="trade-journal-status" hidden></p>
+          </form>
+        </div>
+
         <details class="trade-raw">
           <summary>JSON bruto dos agentes</summary>
           <div class="raw-inner">
@@ -181,6 +257,7 @@
                 <th>Decisão</th>
                 <th>Score</th>
                 <th>Permitir</th>
+                <th>Meu trade</th>
                 <th></th>
               </tr>
             </thead>
@@ -210,6 +287,7 @@
                     <span class="badge neutral">—</span>
                   {% endif %}
                 </td>
+                <td class="td-journal">{% if t.exec_recorded %}<span class="badge ok" title="Registrado">✓</span>{% else %}<span class="muted">—</span>{% endif %}</td>
                 <td><button type="button" class="btn btn-ghost js-detail" data-id="{{ t.id }}">Detalhes</button></td>
               </tr>
               {% endfor %}
@@ -344,6 +422,35 @@
             </div>
             <div class="trade-risk-strip" id="modal-trade-risk-strip"></div>
 
+            <div class="trade-journal" id="modal-trade-journal-wrap" hidden>
+              <h4>Meu trade (execução real)</h4>
+              <p class="trade-journal__hint">
+                Preencha após operar. O resultado pode ser em reais, pontos ou outra unidade — use o mesmo critério sempre para comparar.
+              </p>
+              <form class="trade-journal-form" id="modal-trade-journal-form" data-journal-scope="modal" onsubmit="return false;">
+                <input type="hidden" id="modal-trade-journal-analysis-id" value="" />
+                <div class="trade-journal-grid">
+                  <label class="trade-journal-field">
+                    <span>Entrada (preço executado)</span>
+                    <input type="text" id="modal-trade-exec-entry" name="entry" autocomplete="off" placeholder="ex.: 128.450" />
+                  </label>
+                  <label class="trade-journal-field">
+                    <span>Saída (preço executado)</span>
+                    <input type="text" id="modal-trade-exec-exit" name="exit" autocomplete="off" placeholder="ex.: 128.520" />
+                  </label>
+                  <label class="trade-journal-field">
+                    <span>Resultado (lucro + / prejuízo −)</span>
+                    <input type="text" id="modal-trade-exec-pnl" name="pnl" autocomplete="off" placeholder="ex.: 150 ou -80" />
+                  </label>
+                </div>
+                <div class="trade-journal-actions">
+                  <button type="submit" class="btn" id="modal-trade-journal-save">Salvar registro</button>
+                  <button type="button" class="btn btn-ghost" id="modal-trade-journal-clear">Remover registro</button>
+                </div>
+                <p class="trade-journal-status" id="modal-trade-journal-status" hidden></p>
+              </form>
+            </div>
+
             <details class="trade-raw">
               <summary>JSON bruto dos agentes</summary>
               <div class="raw-inner">
@@ -362,9 +469,10 @@
     window.__TRADE_AI__ = {
       analyzeUrl: {{ url_for('analyze')|tojson }},
       historyUrl: {{ url_for('api_history')|tojson }},
+      statsUrl: {{ url_for('api_stats')|tojson }},
       apiAnalysisPrefix: "/api/analysis"
     };
   </script>
-  <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=6" defer></script>
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=8" defer></script>
 </body>
 </html>

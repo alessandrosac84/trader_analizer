@@ -40,6 +40,7 @@ Analise o gráfico fornecido e siga rigorosamente este processo:
 - Classificação: baixo, médio ou alto
 
 5. Confiança (campo "confianca"):
+- Se o ativo OU timeframe não forem identificados com clareza na imagem, reduza automaticamente a confiança final em pelo menos 20 pontos.
 - Valor de 0 a 100% sobre a qualidade e clareza da sua LEITURA do gráfico (contexto, padrão, níveis).
 - Pode ser ALTA mesmo quando a conclusão for NÃO OPERAR — por exemplo: você tem alta certeza de que o cenário é lateral ou arriscado, e por isso recomenda ficar fora.
 - Não confunda com "probabilidade de lucrar" nem com vontade de operar; preserve capital quando o setup não for limpo.
