@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Trade AI — Dashboard WIN</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/trade-view.css') }}" />
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <h1>Trade AI</h1>
+        <p>Mini índice WIN — Trader → Validator → Risk Manager. Cole o print do gráfico ou envie arquivo.</p>
+      </div>
+      <div class="status-pills">
+        {% if llm_mode == 'openai' %}
+          <span class="pill live"><span class="dot"></span> IA real{% if use_azure %} (Azure){% endif %}</span>
+        {% else %}
+          <span class="pill mock"><span class="dot"></span> Modo mock</span>
+        {% endif %}
+        {% if not ia_real_pronta and llm_mode != 'openai' %}
+          <span class="pill warn">Configure chave + <code style="font-size:0.85em">LLM_MODE=openai</code> (OpenAI ou Azure — ver .env.example)</span>
+        {% endif %}
+        <a class="btn btn-ghost" href="{{ url_for('home') }}">API /</a>
+      </div>
+    </header>
+
+    <section class="card" id="upload-section">
+      <h2>Nova análise</h2>
+      <form id="analyze-form" novalidate onsubmit="return false;">
+        <div
+          class="upload-zone"
+          id="dropzone"
+          role="button"
+          tabindex="0"
+          aria-label="Arraste o gráfico, clique para escolher arquivo ou cole com Cmd+V"
+        >
+          <input
+            type="file"
+            id="file-input"
+            name="image"
+            class="upload-file-input"
+            accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+          />
+          <div class="upload-zone__inner">
+            <span class="icon" aria-hidden="true">📊</span>
+            <strong>Arraste o gráfico ou clique para escolher</strong>
+            <p>PNG, JPG, WebP ou GIF — até 6&nbsp;MB</p>
+            <p class="paste-hint">
+              Ou <kbd>Cmd</kbd> + <kbd>V</kbd> (Mac) / <kbd>Ctrl</kbd> + <kbd>V</kbd> (Windows) para colar o print.
+              <span class="paste-hint-tip">Clique na página antes de colar.</span>
+            </p>
+          </div>
+        </div>
+        <p id="file-status" class="file-status" aria-live="polite"></p>
+        <button type="submit" class="btn" id="submit-btn">Analisar com agentes</button>
+      </form>
+    </section>
+
+    <div class="trade-result" id="trade-result">
+      <div class="trade-result__toolbar">
+        <p class="trade-result__time">Processado em <strong><span id="trade-proc-time">—</span></strong></p>
+        <button type="button" class="btn-nova" id="btn-new-analysis">Nova análise</button>
+      </div>
+
+      <div class="trade-signal-card trade-signal-card--neutral" id="trade-signal-card">
+        <div class="trade-signal-head">
+          <div class="trade-signal-ico" id="trade-signal-ico" aria-hidden="true">◌</div>
+          <div class="trade-signal-label">
+            <span class="muted" id="trade-signal-title">Sinal identificado</span>
+            <span class="trade-acao-badge trade-acao-badge--hold" id="trade-acao-badge">—</span>
+          </div>
+          <div class="trade-conf-wrap">
+            <span class="trade-conf-caption" title="Quão claras e coerentes são tendência, padrão e níveis — não indica que deva operar.">
+              Leitura do gráfico
+            </span>
+            <div class="trade-conf-row">
+              <div class="trade-conf-bar"><div class="trade-conf-fill" id="trade-conf-fill"></div></div>
+              <span class="trade-conf-pct" id="trade-conf-pct">0%</span>
+            </div>
+          </div>
+          <div class="trade-ativo-block">
+            <div class="trade-ativo" id="trade-ativo">WIN</div>
+            <div class="trade-tf-pill" id="trade-timeframe" title="">TF —</div>
+          </div>
+        </div>
+
+        <div class="trade-body-grid">
+          <div class="trade-chart-slot">
+            <img id="trade-chart-img" alt="Gráfico analisado" />
+            <div class="trade-pattern-row">
+              <span>PADRÕES</span>
+              <span class="trade-pill-pattern" id="trade-padrao-pill">—</span>
+            </div>
+            <p class="trade-tf-note" id="trade-tf-note" hidden></p>
+          </div>
+          <div class="trade-metrics">
+            <div class="trade-metric">
+              <label>Entrada</label>
+              <div class="val">
+                <span id="trade-entrada">—</span>
+                <button type="button" class="btn-icon-copy" id="copy-entrada" title="Copiar">⎘</button>
+              </div>
+            </div>
+            <div class="trade-metric trade-metric--stop">
+              <label>Stop loss</label>
+              <div class="val" id="trade-stop">—</div>
+            </div>
+            <div class="trade-metric trade-metric--tp">
+              <label>TP principal</label>
+              <div class="val" id="trade-tp1">—</div>
+            </div>
+            <div class="trade-metric trade-metric--rr">
+              <label>R/R</label>
+              <div class="val" id="trade-rr-main">—</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="trade-agents-row">
+          <div class="trade-agent-chip">
+            <strong>Confluência</strong>
+            <span id="trade-confluencia">—</span>
+          </div>
+          <div class="trade-agent-chip">
+            <strong>Tendência</strong>
+            <span id="trade-tendencia">—</span>
+          </div>
+          <div class="trade-agent-chip">
+            <strong>Técnico</strong>
+            <span id="trade-tecnico">—</span>
+          </div>
+        </div>
+
+        <div class="trade-tp-section">
+          <h4>Alvos &amp; probabilidade</h4>
+          <div id="trade-tp-body"></div>
+        </div>
+
+        <div class="trade-sr-grid">
+          <div class="trade-sr-box trade-sr-box--sup">
+            <h5>Suporte</h5>
+            <ul id="trade-suporte-list"><li>—</li></ul>
+          </div>
+          <div class="trade-sr-box trade-sr-box--res">
+            <h5>Resistência</h5>
+            <ul id="trade-resistencia-list"><li>—</li></ul>
+          </div>
+        </div>
+
+        <div class="trade-narrative">
+          <h4>Análise</h4>
+          <p id="trade-narrative-text">—</p>
+        </div>
+        <div class="trade-risk-strip" id="trade-risk-strip"></div>
+
+        <details class="trade-raw">
+          <summary>JSON bruto dos agentes</summary>
+          <div class="raw-inner">
+            <div><strong>Trader</strong><pre id="raw-trader"></pre></div>
+            <div><strong>Validator</strong><pre id="raw-validator"></pre></div>
+            <div><strong>Risk manager</strong><pre id="raw-risk"></pre></div>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <section class="card" style="margin-top:1.5rem" id="history-section">
+      <h2>Histórico</h2>
+      {% if trades|length == 0 %}
+        <div class="empty-state" id="history-empty">Nenhuma análise ainda.</div>
+      {% else %}
+        <div class="table-wrap">
+          <table class="data" id="history-table">
+            <thead>
+              <tr>
+                <th>Data (UTC)</th>
+                <th>Imagem</th>
+                <th>Decisão</th>
+                <th>Score</th>
+                <th>Permitir</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="history-body">
+              {% for t in trades %}
+              <tr data-id="{{ t.id }}">
+                <td>{{ t.created_at[:19]|replace('T', ' ') }}</td>
+                <td class="thumb">
+                  <img class="thumb" src="{{ t.image_url }}" alt="" loading="lazy" width="56" height="56" />
+                </td>
+                <td>
+                  {% if t.decisao and 'EXECUTAR' in t.decisao %}
+                    <span class="badge ok">{{ t.decisao }}</span>
+                  {% elif t.decisao %}
+                    <span class="badge no">{{ t.decisao }}</span>
+                  {% else %}
+                    <span class="badge neutral">—</span>
+                  {% endif %}
+                </td>
+                <td>{{ t.score_final if t.score_final is not none else '—' }}</td>
+                <td>
+                  {% if t.permitir_trade == 1 %}
+                    <span class="badge ok">Sim</span>
+                  {% elif t.permitir_trade == 0 %}
+                    <span class="badge no">Não</span>
+                  {% else %}
+                    <span class="badge neutral">—</span>
+                  {% endif %}
+                </td>
+                <td><button type="button" class="btn btn-ghost js-detail" data-id="{{ t.id }}">Detalhes</button></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% endif %}
+    </section>
+
+    <p class="footer-note">
+      Aviso: apoio à decisão, sem garantia de resultado. Evitar trades ruins é prioridade sobre “achar o trade perfeito”.
+    </p>
+  </div>
+
+  <div class="progress-overlay" id="progress-overlay" aria-hidden="true">
+    <div class="progress-modal" role="dialog" aria-modal="true" aria-labelledby="progress-title">
+      <header>
+        <h2 id="progress-title">Print &amp; Trade</h2>
+        <button type="button" class="progress-close" id="progress-close" aria-label="Cancelar análise">×</button>
+      </header>
+      <ol class="progress-steps">
+        <li class="progress-step is-active" data-step="0"><span class="progress-step__icon"></span> Enviando arquivo</li>
+        <li class="progress-step is-pending" data-step="1"><span class="progress-step__icon"></span> Extraindo dados</li>
+        <li class="progress-step is-pending" data-step="2"><span class="progress-step__icon"></span> Analisando contexto</li>
+        <li class="progress-step is-pending" data-step="3"><span class="progress-step__icon"></span> Determinando a melhor posição</li>
+        <li class="progress-step is-pending" data-step="4"><span class="progress-step__icon"></span> Preparando relatório</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal">
+      <header>
+        <h3 id="modal-title">Detalhes da análise</h3>
+        <button type="button" class="btn btn-ghost" id="modal-close" aria-label="Fechar">Fechar</button>
+      </header>
+      <div class="body">
+        <pre id="modal-content"></pre>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.__TRADE_AI__ = {
+      analyzeUrl: {{ url_for('analyze')|tojson }},
+      historyUrl: {{ url_for('api_history')|tojson }},
+      apiAnalysisPrefix: "/api/analysis"
+    };
+  </script>
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=4" defer></script>
+</body>
+</html>
