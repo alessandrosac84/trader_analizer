@@ -473,6 +473,30 @@ table.data img.thumb {
   box-shadow: var(--shadow);
 }
 
+.modal--detail {
+  /* Largura confortável para gráfico + métricas lado a lado */
+  max-width: min(1280px, calc(100vw - 1.25rem));
+  width: 100%;
+}
+
+.modal-detail-body {
+  padding-top: 0.75rem;
+}
+
+.modal-loading-msg {
+  margin: 0 0 1rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.modal-detail-root[hidden] {
+  display: none !important;
+}
+
+.modal-detail-toolbar {
+  margin-bottom: 1rem;
+}
+
 .modal header {
   padding: 1rem 1.25rem;
   border-bottom: 1px solid var(--border);

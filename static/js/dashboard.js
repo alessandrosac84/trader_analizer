@@ -61,13 +61,27 @@
     });
   }
 
-  function renderTradeView(data, elapsedSec) {
+  /**
+   * @param {object} data - trader, validator, risk_manager, image_url, resumo
+   * @param {object} opts - target: 'main' | 'modal', elapsedSec, createdAt (ISO, para histórico)
+   */
+  function renderTradeView(data, opts) {
+    opts = opts || {};
+    const isModal = opts.target === "modal";
+    const P = isModal ? "modal-" : "";
+
+    function $(id) {
+      return document.getElementById(P + id);
+    }
+
     const T = parseJson(data.trader);
     const V = parseJson(data.validator);
     const R = parseJson(data.risk_manager);
     const resumo = data.resumo || {};
 
-    const card = document.getElementById("trade-signal-card");
+    const card = $("trade-signal-card");
+    if (!card) return;
+
     const acaoRaw = T && T.acao ? String(T.acao).toUpperCase() : "";
     const isBuy = acaoRaw.indexOf("COMPRA") >= 0;
     const isSell = acaoRaw.indexOf("VENDA") >= 0;
@@ -81,35 +95,41 @@
     else if (isSell) card.classList.add("trade-signal-card--sell");
     else card.classList.add("trade-signal-card--neutral");
 
-    const ico = document.getElementById("trade-signal-ico");
-    ico.textContent = isBuy ? "↑" : isSell ? "↓" : "◌";
+    const ico = $("trade-signal-ico");
+    if (ico) ico.textContent = isBuy ? "↑" : isSell ? "↓" : "◌";
 
-    const labelTop = document.getElementById("trade-signal-title");
-    if (isHold) {
-      labelTop.textContent = "Aguardar — sem setup claro";
-    } else {
-      labelTop.textContent = "Sinal identificado";
+    const labelTop = $("trade-signal-title");
+    if (labelTop) {
+      if (isHold) {
+        labelTop.textContent = "Aguardar — sem setup claro";
+      } else {
+        labelTop.textContent = "Sinal identificado";
+      }
     }
 
-    const badge = document.getElementById("trade-acao-badge");
-    badge.classList.remove("trade-acao-badge--buy", "trade-acao-badge--sell", "trade-acao-badge--hold");
-    if (isBuy) {
-      badge.textContent = "COMPRA";
-      badge.classList.add("trade-acao-badge--buy");
-    } else if (isSell) {
-      badge.textContent = "VENDA";
-      badge.classList.add("trade-acao-badge--sell");
-    } else {
-      badge.textContent = acaoRaw.replace(/_/g, " ") || "NÃO OPERAR";
-      badge.classList.add("trade-acao-badge--hold");
+    const badge = $("trade-acao-badge");
+    if (badge) {
+      badge.classList.remove("trade-acao-badge--buy", "trade-acao-badge--sell", "trade-acao-badge--hold");
+      if (isBuy) {
+        badge.textContent = "COMPRA";
+        badge.classList.add("trade-acao-badge--buy");
+      } else if (isSell) {
+        badge.textContent = "VENDA";
+        badge.classList.add("trade-acao-badge--sell");
+      } else {
+        badge.textContent = acaoRaw.replace(/_/g, " ") || "NÃO OPERAR";
+        badge.classList.add("trade-acao-badge--hold");
+      }
     }
 
     const conf = T && T.confianca != null ? Number(T.confianca) : 0;
     const c = Math.max(0, Math.min(100, conf));
-    document.getElementById("trade-conf-fill").style.width = c + "%";
-    document.getElementById("trade-conf-pct").textContent = Math.round(c) + "%";
+    const confFill = $("trade-conf-fill");
+    const confPct = $("trade-conf-pct");
+    if (confFill) confFill.style.width = c + "%";
+    if (confPct) confPct.textContent = Math.round(c) + "%";
 
-    const ativoEl = document.getElementById("trade-ativo");
+    const ativoEl = $("trade-ativo");
     if (ativoEl) {
       const sym = T && T.ativo ? String(T.ativo).trim() : "";
       const symHow = T && T.ativo_como_detectado ? String(T.ativo_como_detectado).trim() : "";
@@ -117,14 +137,14 @@
       ativoEl.title = symHow || "Ticker não informado — o modelo deve ler o símbolo visível no print.";
     }
 
-    const tfEl = document.getElementById("trade-timeframe");
+    const tfEl = $("trade-timeframe");
     if (tfEl) {
       const tfRaw = T && T.timeframe ? String(T.timeframe).trim() : "";
       const tfDetect = T && T.timeframe_como_detectado ? String(T.timeframe_como_detectado).trim() : "";
       tfEl.textContent = tfRaw ? "TF " + tfRaw : "TF ?";
       tfEl.title = tfDetect || "Timeframe não informado pelo modelo — inclua o intervalo visível no print.";
     }
-    const tfNote = document.getElementById("trade-tf-note");
+    const tfNote = $("trade-tf-note");
     if (tfNote) {
       const obs = T && T.timeframe_observacao ? String(T.timeframe_observacao).trim() : "";
       if (obs) {
@@ -136,108 +156,146 @@
       }
     }
 
-    const img = document.getElementById("trade-chart-img");
-    img.src = data.image_url || "";
-    img.alt = "Gráfico analisado";
+    const img = $("trade-chart-img");
+    if (img) {
+      img.src = data.image_url || "";
+      img.alt = "Gráfico analisado";
+    }
 
-    document.getElementById("trade-padrao-pill").textContent = (T && T.padrao) ? T.padrao : "—";
+    const padraoPill = $("trade-padrao-pill");
+    if (padraoPill) padraoPill.textContent = T && T.padrao ? T.padrao : "—";
 
-    document.getElementById("trade-entrada").textContent = (T && T.entrada) ? T.entrada : "—";
-    const stopTxt = (T && (T.stop_em_pontos || T.stop)) ? (T.stop_em_pontos || T.stop) : "—";
-    document.getElementById("trade-stop").textContent = stopTxt;
+    const entradaEl = $("trade-entrada");
+    if (entradaEl) entradaEl.textContent = T && T.entrada ? T.entrada : "—";
+    const stopTxt = T && (T.stop_em_pontos || T.stop) ? T.stop_em_pontos || T.stop : "—";
+    const stopEl = $("trade-stop");
+    if (stopEl) stopEl.textContent = stopTxt;
     const alvos = getAlvos(T);
     const tp1 = alvos[0];
-    document.getElementById("trade-tp1").textContent = tp1 ? tp1.distancia : (T && T.alvo) ? T.alvo : "—";
-    document.getElementById("trade-rr-main").textContent = (T && T.rr) ? T.rr : "—";
+    const tp1El = $("trade-tp1");
+    if (tp1El) tp1El.textContent = tp1 ? tp1.distancia : T && T.alvo ? T.alvo : "—";
+    const rrEl = $("trade-rr-main");
+    if (rrEl) rrEl.textContent = T && T.rr ? T.rr : "—";
 
-    document.getElementById("trade-confluencia").innerHTML = esc((V && V.nota_confluencia) ? V.nota_confluencia : "—");
-    const tend = (T && T.tendencia) ? String(T.tendencia).toUpperCase() : "—";
-    const tendEl = document.getElementById("trade-tendencia");
-    tendEl.textContent = tend;
-    tendEl.style.color = tend.indexOf("BAIXA") >= 0 ? "#f87171" : tend.indexOf("ALTA") >= 0 ? "#4ade80" : "";
-
-    document.getElementById("trade-tecnico").textContent = (T && T.acao) ? T.acao : "—";
-
-    const tpBody = document.getElementById("trade-tp-body");
-    tpBody.innerHTML = "";
-    const showAlvos = alvos.length ? alvos.slice(0, 3) : [];
-    if (showAlvos.length === 0) {
-      const tr = document.createElement("div");
-      tr.className = "trade-tp-row";
-      tr.innerHTML =
-        '<span class="trade-tp-name">—</span><span>—</span><div class="trade-tp-barwrap"><div class="trade-tp-bar" style="width:0%"></div></div><span>—</span><span>—</span>';
-      tpBody.appendChild(tr);
-    } else {
-      showAlvos.forEach(function (a) {
-        const prob = Math.max(0, Math.min(100, Number(a.probabilidade) || 0));
-        const row = document.createElement("div");
-        row.className = "trade-tp-row";
-        row.innerHTML =
-          '<span class="trade-tp-name">' +
-          esc(a.nome || "TP") +
-          '</span><span>' +
-          esc(a.distancia) +
-          '</span><div class="trade-tp-barwrap"><div class="trade-tp-bar" style="width:' +
-          prob +
-          '%"></div></div><span>' +
-          prob +
-          '%</span><span style="color:#7dd3fc">' +
-          esc(a.rr || "—") +
-          "</span>";
-        tpBody.appendChild(row);
-      });
+    const confLu = $("trade-confluencia");
+    if (confLu) confLu.innerHTML = esc(V && V.nota_confluencia ? V.nota_confluencia : "—");
+    const tend = T && T.tendencia ? String(T.tendencia).toUpperCase() : "—";
+    const tendEl = $("trade-tendencia");
+    if (tendEl) {
+      tendEl.textContent = tend;
+      tendEl.style.color = tend.indexOf("BAIXA") >= 0 ? "#f87171" : tend.indexOf("ALTA") >= 0 ? "#4ade80" : "";
     }
 
-    const ulS = document.getElementById("trade-suporte-list");
-    const ulR = document.getElementById("trade-resistencia-list");
-    ulS.innerHTML = "";
-    ulR.innerHTML = "";
-    if (T && Array.isArray(T.suporte) && T.suporte.length) {
-      T.suporte.forEach(function (x) {
-        const li = document.createElement("li");
-        li.textContent = x;
-        ulS.appendChild(li);
-      });
-    } else {
-      ulS.innerHTML = "<li>—</li>";
+    const tecEl = $("trade-tecnico");
+    if (tecEl) tecEl.textContent = T && T.acao ? T.acao : "—";
+
+    const tpBody = $("trade-tp-body");
+    if (tpBody) {
+      tpBody.innerHTML = "";
+      const showAlvos = alvos.length ? alvos.slice(0, 3) : [];
+      if (showAlvos.length === 0) {
+        const tr = document.createElement("div");
+        tr.className = "trade-tp-row";
+        tr.innerHTML =
+          '<span class="trade-tp-name">—</span><span>—</span><div class="trade-tp-barwrap"><div class="trade-tp-bar" style="width:0%"></div></div><span>—</span><span>—</span>';
+        tpBody.appendChild(tr);
+      } else {
+        showAlvos.forEach(function (a) {
+          const prob = Math.max(0, Math.min(100, Number(a.probabilidade) || 0));
+          const row = document.createElement("div");
+          row.className = "trade-tp-row";
+          row.innerHTML =
+            '<span class="trade-tp-name">' +
+            esc(a.nome || "TP") +
+            '</span><span>' +
+            esc(a.distancia) +
+            '</span><div class="trade-tp-barwrap"><div class="trade-tp-bar" style="width:' +
+            prob +
+            '%"></div></div><span>' +
+            prob +
+            '%</span><span style="color:#7dd3fc">' +
+            esc(a.rr || "—") +
+            "</span>";
+          tpBody.appendChild(row);
+        });
+      }
     }
-    if (T && Array.isArray(T.resistencia) && T.resistencia.length) {
-      T.resistencia.forEach(function (x) {
-        const li = document.createElement("li");
-        li.textContent = x;
-        ulR.appendChild(li);
-      });
-    } else {
-      ulR.innerHTML = "<li>—</li>";
+
+    const ulS = $("trade-suporte-list");
+    const ulR = $("trade-resistencia-list");
+    if (ulS) {
+      ulS.innerHTML = "";
+      if (T && Array.isArray(T.suporte) && T.suporte.length) {
+        T.suporte.forEach(function (x) {
+          const li = document.createElement("li");
+          li.textContent = x;
+          ulS.appendChild(li);
+        });
+      } else {
+        ulS.innerHTML = "<li>—</li>";
+      }
+    }
+    if (ulR) {
+      ulR.innerHTML = "";
+      if (T && Array.isArray(T.resistencia) && T.resistencia.length) {
+        T.resistencia.forEach(function (x) {
+          const li = document.createElement("li");
+          li.textContent = x;
+          ulR.appendChild(li);
+        });
+      } else {
+        ulR.innerHTML = "<li>—</li>";
+      }
     }
 
     const parts = [];
     if (T && T.justificativa) parts.push(T.justificativa);
     if (R && R.motivo) parts.push("Risk manager: " + R.motivo);
-    document.getElementById("trade-narrative-text").textContent = parts.length ? parts.join("\n\n") : "—";
+    const narr = $("trade-narrative-text");
+    if (narr) narr.textContent = parts.length ? parts.join("\n\n") : "—";
 
-    const rs = document.getElementById("trade-risk-strip");
-    const d = resumo.decisao || (R && R.decisao) || "—";
-    const sc = resumo.score_final != null ? resumo.score_final : "—";
-    const pt =
-      resumo.permitir_trade === true ? "sim" : resumo.permitir_trade === false ? "não" : "—";
-    rs.innerHTML =
-      "<strong>Decisão final:</strong> " +
-      esc(d) +
-      " &nbsp;|&nbsp; <strong>Score:</strong> " +
-      esc(sc) +
-      " &nbsp;|&nbsp; <strong>Permitir trade:</strong> " +
-      esc(pt);
+    const rs = $("trade-risk-strip");
+    if (rs) {
+      const d = resumo.decisao || (R && R.decisao) || "—";
+      const sc = resumo.score_final != null ? resumo.score_final : "—";
+      const pt =
+        resumo.permitir_trade === true ? "sim" : resumo.permitir_trade === false ? "não" : "—";
+      rs.innerHTML =
+        "<strong>Decisão final:</strong> " +
+        esc(d) +
+        " &nbsp;|&nbsp; <strong>Score:</strong> " +
+        esc(sc) +
+        " &nbsp;|&nbsp; <strong>Permitir trade:</strong> " +
+        esc(pt);
+    }
 
-    document.getElementById("raw-trader").textContent = prettifyJson(data.trader);
-    document.getElementById("raw-validator").textContent = prettifyJson(data.validator);
-    document.getElementById("raw-risk").textContent = prettifyJson(data.risk_manager);
+    const rawT = $("raw-trader");
+    const rawV = $("raw-validator");
+    const rawR = $("raw-risk");
+    if (rawT) rawT.textContent = prettifyJson(data.trader);
+    if (rawV) rawV.textContent = prettifyJson(data.validator);
+    if (rawR) rawR.textContent = prettifyJson(data.risk_manager);
 
-    document.getElementById("trade-proc-time").textContent =
-      elapsedSec != null ? elapsedSec.toFixed(1) + "s" : "—";
+    const procEl = $("trade-proc-time");
+    if (procEl) {
+      if (isModal && opts.createdAt) {
+        procEl.textContent = String(opts.createdAt).slice(0, 19).replace("T", " ") + " UTC";
+      } else if (opts.elapsedSec != null) {
+        procEl.textContent = opts.elapsedSec.toFixed(1) + "s";
+      } else {
+        procEl.textContent = "—";
+      }
+    }
 
-    document.getElementById("trade-result").classList.add("is-visible");
-    document.getElementById("trade-result").scrollIntoView({ behavior: "smooth", block: "start" });
+    if (!isModal) {
+      document.getElementById("trade-result").classList.add("is-visible");
+      document.getElementById("trade-result").scrollIntoView({ behavior: "smooth", block: "start" });
+    } else {
+      const loading = document.getElementById("modal-loading");
+      const root = document.getElementById("modal-detail-root");
+      if (loading) loading.hidden = true;
+      if (root) root.hidden = false;
+    }
   }
 
   const form = document.getElementById("analyze-form");
@@ -397,6 +455,13 @@
     if (t && t !== "—") navigator.clipboard.writeText(t);
   });
 
+  document.getElementById("modal")?.addEventListener("click", function (e) {
+    const bt = e.target.closest("#modal-copy-entrada");
+    if (!bt) return;
+    const t = document.getElementById("modal-trade-entrada");
+    if (t && t.textContent && t.textContent !== "—") navigator.clipboard.writeText(t.textContent);
+  });
+
   form.addEventListener("submit", async function (e) {
     e.preventDefault();
     e.stopPropagation();
@@ -451,7 +516,7 @@
       const elapsed = (performance.now() - t0) / 1000;
       setTimeout(function () {
         setProgressOpen(false);
-        renderTradeView(data, elapsed);
+        renderTradeView(data, { target: "main", elapsedSec: elapsed });
         setLoading(false);
       }, 480);
 
@@ -604,12 +669,21 @@
   }
 
   const modal = document.getElementById("modal");
-  const modalContent = document.getElementById("modal-content");
   const modalClose = document.getElementById("modal-close");
 
   function analysisDetailUrl(id) {
     const base = (cfg.apiAnalysisPrefix || "/api/analysis").replace(/\/$/, "");
     return base + "/" + id;
+  }
+
+  function openModalDetailLoading() {
+    const loading = document.getElementById("modal-loading");
+    const root = document.getElementById("modal-detail-root");
+    if (loading) {
+      loading.hidden = false;
+      loading.textContent = "Carregando…";
+    }
+    if (root) root.hidden = true;
   }
 
   if (modalClose && modal) {
@@ -621,37 +695,44 @@
     });
   }
 
-  if (modal && modalContent) {
-    document.getElementById("history-section")?.addEventListener("click", function (e) {
-      const bt = e.target.closest(".js-detail");
-      if (!bt) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const id = Number(bt.getAttribute("data-id"));
-      if (!id) return;
+  document.getElementById("history-section")?.addEventListener("click", function (e) {
+    const bt = e.target.closest(".js-detail");
+    if (!bt) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const id = Number(bt.getAttribute("data-id"));
+    if (!id) return;
 
-      modalContent.textContent = "Carregando…";
-      modal.classList.add("open");
+    modal.classList.add("open");
+    openModalDetailLoading();
 
-      fetch(analysisDetailUrl(id), { credentials: "same-origin" })
-        .then(function (r) {
-          if (!r.ok) throw new Error("fetch");
-          return r.json();
-        })
-        .then(function (row) {
-          const text =
-            "=== TRADER ===\n" +
-            (row.trader_json != null ? row.trader_json : "") +
-            "\n\n=== VALIDATOR ===\n" +
-            (row.validator_json != null ? row.validator_json : "") +
-            "\n\n=== RISK MANAGER ===\n" +
-            (row.risk_json != null ? row.risk_json : "");
-          modalContent.textContent = text;
-        })
-        .catch(function () {
-          modalContent.textContent =
-            "Não foi possível carregar os detalhes. Tente atualizar a página.";
-        });
-    });
-  }
+    fetch(analysisDetailUrl(id), { credentials: "same-origin" })
+      .then(function (r) {
+        if (!r.ok) throw new Error("fetch");
+        return r.json();
+      })
+      .then(function (row) {
+        const permitir =
+          row.permitir_trade === 1 ? true : row.permitir_trade === 0 ? false : null;
+        const viewData = {
+          trader: row.trader_json,
+          validator: row.validator_json,
+          risk_manager: row.risk_json,
+          image_url: row.image_url,
+          resumo: {
+            decisao: row.decisao,
+            score_final: row.score_final,
+            permitir_trade: permitir,
+          },
+        };
+        renderTradeView(viewData, { target: "modal", createdAt: row.created_at });
+      })
+      .catch(function () {
+        const loading = document.getElementById("modal-loading");
+        if (loading) {
+          loading.hidden = false;
+          loading.textContent = "Não foi possível carregar os detalhes. Tente atualizar a página.";
+        }
+      });
+  });
 })();

@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Trade AI — Dashboard B3</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=2" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/trade-view.css') }}" />
 </head>
 <body>
@@ -241,13 +241,119 @@
   </div>
 
   <div class="modal-overlay" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-    <div class="modal">
+    <div class="modal modal--detail">
       <header>
         <h3 id="modal-title">Detalhes da análise</h3>
         <button type="button" class="btn btn-ghost" id="modal-close" aria-label="Fechar">Fechar</button>
       </header>
-      <div class="body">
-        <pre id="modal-content"></pre>
+      <div class="body modal-detail-body">
+        <p id="modal-loading" class="modal-loading-msg">Carregando…</p>
+        <div id="modal-detail-root" class="modal-detail-root" hidden>
+          <div class="trade-result__toolbar modal-detail-toolbar">
+            <p>Analisada em <strong id="modal-trade-proc-time">—</strong></p>
+          </div>
+
+          <div class="trade-signal-card trade-signal-card--neutral" id="modal-trade-signal-card">
+            <div class="trade-signal-head">
+              <div class="trade-signal-ico" id="modal-trade-signal-ico" aria-hidden="true">◌</div>
+              <div class="trade-signal-label">
+                <span class="muted" id="modal-trade-signal-title">Sinal identificado</span>
+                <span class="trade-acao-badge trade-acao-badge--hold" id="modal-trade-acao-badge">—</span>
+              </div>
+              <div class="trade-conf-wrap">
+                <span class="trade-conf-caption" title="Quão claras e coerentes são tendência, padrão e níveis — não indica que deva operar.">
+                  Leitura do gráfico
+                </span>
+                <div class="trade-conf-row">
+                  <div class="trade-conf-bar"><div class="trade-conf-fill" id="modal-trade-conf-fill"></div></div>
+                  <span class="trade-conf-pct" id="modal-trade-conf-pct">0%</span>
+                </div>
+              </div>
+              <div class="trade-ativo-block">
+                <div class="trade-ativo" id="modal-trade-ativo" title="">—</div>
+                <div class="trade-tf-pill" id="modal-trade-timeframe" title="">TF —</div>
+              </div>
+            </div>
+
+            <div class="trade-body-grid">
+              <div class="trade-chart-slot">
+                <img id="modal-trade-chart-img" alt="Gráfico analisado" />
+                <div class="trade-pattern-row">
+                  <span>PADRÕES</span>
+                  <span class="trade-pill-pattern" id="modal-trade-padrao-pill">—</span>
+                </div>
+                <p class="trade-tf-note" id="modal-trade-tf-note" hidden></p>
+              </div>
+              <div class="trade-metrics">
+                <div class="trade-metric">
+                  <label>Entrada</label>
+                  <div class="val">
+                    <span id="modal-trade-entrada">—</span>
+                    <button type="button" class="btn-icon-copy" id="modal-copy-entrada" title="Copiar">⎘</button>
+                  </div>
+                </div>
+                <div class="trade-metric trade-metric--stop">
+                  <label>Stop loss</label>
+                  <div class="val" id="modal-trade-stop">—</div>
+                </div>
+                <div class="trade-metric trade-metric--tp">
+                  <label>TP principal</label>
+                  <div class="val" id="modal-trade-tp1">—</div>
+                </div>
+                <div class="trade-metric trade-metric--rr">
+                  <label>R/R</label>
+                  <div class="val" id="modal-trade-rr-main">—</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="trade-agents-row">
+              <div class="trade-agent-chip">
+                <strong>Confluência</strong>
+                <span id="modal-trade-confluencia">—</span>
+              </div>
+              <div class="trade-agent-chip">
+                <strong>Tendência</strong>
+                <span id="modal-trade-tendencia">—</span>
+              </div>
+              <div class="trade-agent-chip">
+                <strong>Técnico</strong>
+                <span id="modal-trade-tecnico">—</span>
+              </div>
+            </div>
+
+            <div class="trade-tp-section">
+              <h4>Alvos &amp; probabilidade</h4>
+              <div id="modal-trade-tp-body"></div>
+            </div>
+
+            <div class="trade-sr-grid">
+              <div class="trade-sr-box trade-sr-box--sup">
+                <h5>Suporte</h5>
+                <ul id="modal-trade-suporte-list"><li>—</li></ul>
+              </div>
+              <div class="trade-sr-box trade-sr-box--res">
+                <h5>Resistência</h5>
+                <ul id="modal-trade-resistencia-list"><li>—</li></ul>
+              </div>
+            </div>
+
+            <div class="trade-narrative">
+              <h4>Análise</h4>
+              <p id="modal-trade-narrative-text">—</p>
+            </div>
+            <div class="trade-risk-strip" id="modal-trade-risk-strip"></div>
+
+            <details class="trade-raw">
+              <summary>JSON bruto dos agentes</summary>
+              <div class="raw-inner">
+                <div><strong>Trader</strong><pre id="modal-raw-trader"></pre></div>
+                <div><strong>Validator</strong><pre id="modal-raw-validator"></pre></div>
+                <div><strong>Risk manager</strong><pre id="modal-raw-risk"></pre></div>
+              </div>
+            </details>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -259,6 +365,6 @@
       apiAnalysisPrefix: "/api/analysis"
     };
   </script>
-  <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=5" defer></script>
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=6" defer></script>
 </body>
 </html>
