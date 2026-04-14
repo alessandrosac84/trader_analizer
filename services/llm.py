@@ -7,6 +7,19 @@ from services.config import Config
 
 Role = Literal["trader", "validator", "risk_manager"]
 
+_SYSTEM_BY_ROLE: dict[Role, str] = {
+    "trader": (
+        "Você é um especialista em análise técnica de ativos da B3. "
+        "Identifique ticker e timeframe a partir da imagem do gráfico quando visíveis."
+    ),
+    "validator": (
+        "Você valida leituras de gráfico de ativos B3: coerência de ticker, timeframe e plano de trade."
+    ),
+    "risk_manager": (
+        "Você é gestor de risco para operações em ativos listados na B3."
+    ),
+}
+
 
 def _variant_index(image_path: str) -> int:
     try:
@@ -19,6 +32,7 @@ def _mock_trader(v: int) -> str:
     samples = [
         """{
   "ativo": "WINJ26",
+  "ativo_como_detectado": "Legenda superior: símbolo WINJ26 visível ao lado do preço",
   "timeframe": "15m",
   "timeframe_como_detectado": "Legenda superior do gráfico mostra intervalo 15m",
   "tendencia": "alta",
@@ -43,7 +57,8 @@ def _mock_trader(v: int) -> str:
   "timeframe_observacao": "Em 15m o ruído é menor que em 5m; stops podem ser um pouco mais largos em pontos."
 }""",
         """{
-  "ativo": "WIN",
+  "ativo": "PETR4",
+  "ativo_como_detectado": "Cabeçalho do gráfico mostra ticker PETR4 (ação)",
   "timeframe": "5m",
   "timeframe_como_detectado": "Seletor de tempo visível: 5 minutos",
   "tendencia": "lateral",
@@ -67,6 +82,7 @@ def _mock_trader(v: int) -> str:
 }""",
         """{
   "ativo": "WINJ26",
+  "ativo_como_detectado": "Mesmo símbolo WINJ26 na barra de título do gráfico",
   "timeframe": "1m",
   "timeframe_como_detectado": "Canto superior: 1m (scalp)",
   "tendencia": "baixa",
@@ -98,6 +114,7 @@ def _mock_validator(v: int) -> str:
     samples = [
         """{
   "aprovado": true,
+  "ativo_ok": true,
   "timeframe_ok": true,
   "nota_confluencia": "4/5",
   "confianca_validacao": 78,
@@ -108,6 +125,7 @@ def _mock_validator(v: int) -> str:
 }""",
         """{
   "aprovado": false,
+  "ativo_ok": true,
   "timeframe_ok": true,
   "nota_confluencia": "2/5",
   "confianca_validacao": 42,
@@ -118,6 +136,7 @@ def _mock_validator(v: int) -> str:
 }""",
         """{
   "aprovado": true,
+  "ativo_ok": true,
   "timeframe_ok": true,
   "nota_confluencia": "4/5",
   "confianca_validacao": 73,
@@ -183,11 +202,11 @@ def _image_mime(image_path: str) -> str:
     }.get(ext, "image/png")
 
 
-def _chat_messages_payload(prompt: str, data_url: str) -> list:
+def _chat_messages_payload(prompt: str, data_url: str, *, role: Role) -> list:
     return [
         {
             "role": "system",
-            "content": "Você é um especialista em trading do mini índice WIN.",
+            "content": _SYSTEM_BY_ROLE[role],
         },
         {
             "role": "user",
@@ -199,7 +218,7 @@ def _chat_messages_payload(prompt: str, data_url: str) -> list:
     ]
 
 
-def _call_azure_openai(prompt: str, image_path: str) -> str:
+def _call_azure_openai(prompt: str, image_path: str, *, role: Role) -> str:
     if not Config.AZURE_OPENAI_ENDPOINT or not Config.AZURE_OPENAI_API_KEY:
         raise RuntimeError(
             "Azure OpenAI: defina AZURE_OPENAI_ENDPOINT e AZURE_OPENAI_API_KEY no .env "
@@ -226,7 +245,7 @@ def _call_azure_openai(prompt: str, image_path: str) -> str:
 
         response = client.chat.completions.create(
             model=deployment,
-            messages=_chat_messages_payload(prompt, data_url),
+            messages=_chat_messages_payload(prompt, data_url, role=role),
             temperature=0.3,
         )
         content = response.choices[0].message.content
@@ -241,7 +260,7 @@ def _call_azure_openai(prompt: str, image_path: str) -> str:
         ) from e
 
 
-def _call_openai_public(prompt: str, image_path: str) -> str:
+def _call_openai_public(prompt: str, image_path: str, *, role: Role) -> str:
     api_key = Config.OPENAI_API_KEY
     if not api_key:
         raise RuntimeError(
@@ -258,7 +277,7 @@ def _call_openai_public(prompt: str, image_path: str) -> str:
 
         response = client.chat.completions.create(
             model=Config.OPENAI_MODEL,
-            messages=_chat_messages_payload(prompt, data_url),
+            messages=_chat_messages_payload(prompt, data_url, role=role),
             temperature=0.3,
         )
         content = response.choices[0].message.content
@@ -272,16 +291,16 @@ def _call_openai_public(prompt: str, image_path: str) -> str:
         ) from e
 
 
-def _call_openai(prompt: str, image_path: str) -> str:
+def _call_openai(prompt: str, image_path: str, *, role: Role) -> str:
     if Config.use_azure_openai():
-        return _call_azure_openai(prompt, image_path)
-    return _call_openai_public(prompt, image_path)
+        return _call_azure_openai(prompt, image_path, role=role)
+    return _call_openai_public(prompt, image_path, role=role)
 
 
 def call_llm(prompt: str, image_path: str, *, role: Role) -> str:
     mode = Config.LLM_MODE
     if mode == "openai":
-        return _call_openai(prompt, image_path)
+        return _call_openai(prompt, image_path, role=role)
     if mode == "mock":
         return _mock_response(role, image_path)
     raise ValueError(f"LLM_MODE inválido: {mode!r}. Use 'mock' ou 'openai'.")

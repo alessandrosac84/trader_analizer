@@ -51,7 +51,7 @@ def home():
     return jsonify(
         {
             "status": "ok",
-            "service": "Trade AI — WIN",
+            "service": "Trade AI — B3",
             "llm_mode": Config.LLM_MODE,
             "dashboard": url_for("dashboard", _external=False),
         }

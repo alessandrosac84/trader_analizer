@@ -1,6 +1,6 @@
-# Trade AI — MVP (mini índice WIN)
+# Trade AI — MVP (ativos B3)
 
-Aplicação web em **Flask** que analisa **prints de gráficos** do mini índice (WIN) com um pipeline de **três agentes** (trader → validador → gestor de risco), usando **visão + texto** quando o modo LLM real está ativo, ou **respostas mock** para desenvolvimento sem custo de API.
+Aplicação web em **Flask** que analisa **prints de gráficos** de ativos negociados na **B3** (o modelo deve **ler o ticker e o timeframe na imagem** — ex.: WINJ26, PETR4, WDO, ETFs). O pipeline usa **três agentes** (trader → validador → gestor de risco), com **visão + texto** quando o modo LLM real está ativo, ou **respostas mock** para desenvolvimento sem custo de API.
 
 ---
 

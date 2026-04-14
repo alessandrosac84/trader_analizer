@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Trade AI — Dashboard WIN</title>
+  <title>Trade AI — Dashboard B3</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/trade-view.css') }}" />
 </head>
@@ -12,7 +12,7 @@
     <header class="topbar">
       <div class="brand">
         <h1>Trade AI</h1>
-        <p>Mini índice WIN — Trader → Validator → Risk Manager. Cole o print do gráfico ou envie arquivo.</p>
+        <p>Ativos B3 (ticker lido no print) — Trader → Validator → Risk Manager. Cole o print do gráfico ou envie arquivo.</p>
       </div>
       <div class="status-pills">
         {% if llm_mode == 'openai' %}
@@ -82,7 +82,7 @@
             </div>
           </div>
           <div class="trade-ativo-block">
-            <div class="trade-ativo" id="trade-ativo">WIN</div>
+            <div class="trade-ativo" id="trade-ativo" title="">—</div>
             <div class="trade-tf-pill" id="trade-timeframe" title="">TF —</div>
           </div>
         </div>
@@ -259,6 +259,6 @@
       apiAnalysisPrefix: "/api/analysis"
     };
   </script>
-  <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=4" defer></script>
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=5" defer></script>
 </body>
 </html>

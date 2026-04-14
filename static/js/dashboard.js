@@ -109,7 +109,13 @@
     document.getElementById("trade-conf-fill").style.width = c + "%";
     document.getElementById("trade-conf-pct").textContent = Math.round(c) + "%";
 
-    document.getElementById("trade-ativo").textContent = (T && T.ativo) ? T.ativo : "WIN";
+    const ativoEl = document.getElementById("trade-ativo");
+    if (ativoEl) {
+      const sym = T && T.ativo ? String(T.ativo).trim() : "";
+      const symHow = T && T.ativo_como_detectado ? String(T.ativo_como_detectado).trim() : "";
+      ativoEl.textContent = sym || "—";
+      ativoEl.title = symHow || "Ticker não informado — o modelo deve ler o símbolo visível no print.";
+    }
 
     const tfEl = document.getElementById("trade-timeframe");
     if (tfEl) {
