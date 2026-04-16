@@ -536,14 +536,43 @@
   text-transform: uppercase;
 }
 
+.trade-tp-sub {
+  margin: -0.35rem 0 0.85rem;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: rgba(226, 232, 240, 0.65);
+}
+
 .trade-tp-row {
   display: grid;
-  grid-template-columns: auto auto minmax(60px, 1fr) auto auto;
+  grid-template-columns: auto minmax(100px, 1.15fr) minmax(50px, 1fr) auto auto;
   gap: 0.65rem;
   align-items: center;
   padding: 0.55rem 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   font-size: 0.88rem;
+}
+
+.trade-tp-col-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.trade-tp-pts {
+  font-weight: 600;
+}
+
+.trade-tp-exit {
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: rgba(186, 230, 253, 0.92);
+  word-break: break-word;
+}
+
+.trade-tp-rr {
+  color: #7dd3fc;
 }
 
 .trade-tp-row:last-child {
@@ -631,6 +660,60 @@
   letter-spacing: 0.1em;
   color: var(--text-muted);
   text-transform: uppercase;
+}
+
+.trade-decision-why {
+  margin-top: 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: 12px;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.08), rgba(245, 158, 11, 0.04));
+}
+
+.trade-decision-why--conflict {
+  border-color: rgba(251, 113, 133, 0.45);
+  background: linear-gradient(135deg, rgba(251, 113, 133, 0.1), rgba(251, 191, 36, 0.06));
+}
+
+.trade-decision-why__head {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.trade-decision-why__tag {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #fcd34d;
+  padding: 0.2rem 0.45rem;
+  border-radius: 6px;
+  background: rgba(251, 191, 36, 0.15);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.trade-decision-why__head h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #fef3c7;
+}
+
+.trade-decision-why__body {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: rgba(254, 243, 199, 0.95);
+}
+
+.trade-decision-why__hint {
+  margin: 0.75rem 0 0;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: rgba(226, 232, 240, 0.65);
 }
 
 .trade-risk-strip {

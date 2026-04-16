@@ -36,7 +36,7 @@ Analise o gráfico fornecido e siga rigorosamente este processo:
 - Take profit (obrigatório)
 
 4. Avalie o risco:
-- Relação risco/retorno (RR)
+- Relação risco/retorno (RR). Se recomendar **COMPRA** ou **VENDA**, declare RR **explicitamente** no campo "rr" (ex.: "1:2" ou "1:2.5") de forma **honesta** com entrada/stop/alvo — isso alimenta o validador; RR **abaixo de ~1:2** tende a bloquear a execução no pipeline.
 - Classificação: baixo, médio ou alto
 
 5. Confiança (campo "confianca"):
@@ -52,6 +52,11 @@ REGRAS IMPORTANTES:
 - Seja objetivo e técnico
 - Priorize preservação de capital
 
+FORMATAÇÃO DE PREÇOS E NÍVEIS (obrigatório — alinhado ao eixo do gráfico):
+- Sempre que citar **preço ou nível de cotação** (entrada, stop em preço, suporte, resistência, alvos em preço, texto da justificativa), use **exatamente 3 casas decimais**, como no gráfico (TradingView / Profit): ex. **202.350**, **102.215**, **24.260**.
+- Não escreva **202.35** nem **24.26** — use sempre o terceiro dígito decimal (mesmo que seja zero).
+- Texto que for só em **pontos** (ex.: "30 pts") ou **RR** (ex.: "1:2") não precisa desse formato.
+
 Formato da resposta (OBRIGATÓRIO JSON):
 
 {
@@ -63,8 +68,8 @@ Formato da resposta (OBRIGATÓRIO JSON):
   "contexto": "",
   "padrao": "",
   "acao": "COMPRA | VENDA | NÃO OPERAR",
-  "entrada": "",
-  "stop": "preço ou pontos (ex.: 30 pts)",
+  "entrada": "texto; preços sempre xxx.xxx (3 decimais) quando for cotação",
+  "stop": "preço com 3 decimais ou pontos (ex.: 30 pts)",
   "stop_em_pontos": "opcional, ex.: 30 pts",
   "alvo": "take profit principal (preço ou pontos)",
   "alvos": [

@@ -119,6 +119,7 @@ def _mock_validator(v: int) -> str:
   "nota_confluencia": "4/5",
   "confianca_validacao": 78,
   "erro_encontrado": "",
+  "motivo_reprovacao_critico": "",
   "ajustes_sugeridos": "Considerar entrada escalonada se o preço retestar a região.",
   "veredito_final": "APROVADO",
   "justificativa": "RR coerente com mínimo 1:2; stop abaixo da estrutura; contexto não lateral."
@@ -130,6 +131,7 @@ def _mock_validator(v: int) -> str:
   "nota_confluencia": "2/5",
   "confianca_validacao": 42,
   "erro_encontrado": "Mercado lateral com RR insuficiente para o ruído observado.",
+  "motivo_reprovacao_critico": "Lateralização + RR abaixo do mínimo operável para o TF.",
   "ajustes_sugeridos": "Aguardar rompimento ou redução de volatilidade.",
   "veredito_final": "REPROVADO",
   "justificativa": "Critérios de reprovação: lateralização e RR abaixo de 1:2."
@@ -141,6 +143,7 @@ def _mock_validator(v: int) -> str:
   "nota_confluencia": "4/5",
   "confianca_validacao": 73,
   "erro_encontrado": "",
+  "motivo_reprovacao_critico": "",
   "ajustes_sugeridos": "Monitorar spread e horário de baixa liquidez.",
   "veredito_final": "APROVADO",
   "justificativa": "Entrada alinhada ao fluxo; stop posicionado além da microestrutura."
@@ -168,11 +171,11 @@ def _mock_risk(v: int) -> str:
   "alertas": ["Evitar forçar entrada até haver rompimento claro."]
 }""",
         """{
-  "permitir_trade": false,
+  "permitir_trade": true,
   "score_final": 58,
   "nivel_risco": "médio",
-  "decisao": "NAO_OPERAR",
-  "motivo": "Score final abaixo do patamar operacional recomendado (70+); confluência parcial apenas.",
+  "decisao": "EXECUTAR",
+  "motivo": "Ativo/TF ok; score no limiar mínimo (≥58); RR aceitável; validador aprovou com ressalvas gerenciáveis.",
   "alertas": ["Reavaliar após próximo fechamento de 15m."]
 }""",
     ]

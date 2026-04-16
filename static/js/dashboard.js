@@ -18,11 +18,40 @@
     }
   }
 
+  function ativoLabelFromRow(row) {
+    if (row.ativo_label != null && String(row.ativo_label).trim() !== "") {
+      return String(row.ativo_label).trim();
+    }
+    var T = parseJson(row.trader_json);
+    var s = T && T.ativo != null ? String(T.ativo).trim() : "";
+    return s || "—";
+  }
+
+  function ativoHintFromRow(row) {
+    if (row.ativo_hint != null && String(row.ativo_hint).trim() !== "") {
+      return String(row.ativo_hint).trim();
+    }
+    var T = parseJson(row.trader_json);
+    return T && T.ativo_como_detectado ? String(T.ativo_como_detectado).trim() : "";
+  }
+
   function esc(s) {
     if (s == null || s === "") return "—";
     const d = document.createElement("div");
     d.textContent = String(s);
     return d.innerHTML;
+  }
+
+  /**
+   * Completa preços tipo 202.35 → 202.350 para bater com a escala do gráfico.
+   * Evita alterar razões após ":" (ex.: 1:2.5) via lookbehind.
+   */
+  function padPrecosTresDecimais(s) {
+    if (s == null || s === "") return s;
+    return String(s).replace(/(?<![:\/])(\d+)\.(\d{1,2})(?!\d)/g, function (_m, intPart, dec) {
+      if (dec.length >= 3) return intPart + "." + dec;
+      return intPart + "." + dec.padEnd(3, "0");
+    });
   }
 
   function prettifyJson(str) {
@@ -36,6 +65,268 @@
     return base + "/" + id + "/exec";
   }
 
+  /** Número pt-BR / US: vírgula decimal, milhar com ponto. */
+  function parseBrazilianNumber(raw) {
+    if (raw == null) return null;
+    var s = String(raw).trim();
+    if (s === "") return null;
+    var neg = false;
+    if (/^-/.test(s)) {
+      neg = true;
+      s = s.replace(/^-/, "").trim();
+    }
+    if (s.indexOf(",") >= 0 && s.indexOf(".") >= 0) {
+      if (s.lastIndexOf(",") > s.lastIndexOf(".")) {
+        s = s.replace(/\./g, "").replace(",", ".");
+      } else {
+        s = s.replace(/,/g, "");
+      }
+    } else if (s.indexOf(",") >= 0) {
+      s = s.replace(",", ".");
+    }
+    var n = parseFloat(s);
+    if (isNaN(n)) return null;
+    return neg ? -n : n;
+  }
+
+  function assetClassFromTicker(sym) {
+    var s = String(sym || "").trim().toUpperCase();
+    if (s.indexOf("WIN") === 0) return "WIN";
+    if (s.indexOf("WDO") === 0) return "WDO";
+    return "OTHER";
+  }
+
+  /**
+   * Pontos de índice WIN a partir de dois preços no eixo (ex.: 201,635 vs 201,590 → 45).
+   * Só aplica fator ×1000 quando a diferença é pequena (< 1), típico de cotação xxx.xxx (0,045 ≈ 45 pts).
+   * Se a diferença for grande (ex.: erro digitando 21,590 em vez de 201,590), não multiplica — evita centenas de mil pontos fantasmas.
+   */
+  function winIndexPointsFromPrices(e, x) {
+    var abs = Math.abs(e - x);
+    var maxP = Math.max(Math.abs(e), Math.abs(x));
+    if (maxP >= 50000) return Math.round(abs);
+    if (maxP < 10000 && abs < 1) return Math.round(abs * 1000);
+    return Math.round(abs);
+  }
+
+  /** Lucro/prejuízo em R$ para mini WIN (R$ 0,20 por ponto) e mini WDO (≈ R$ 50 por ponto de cotação). */
+  function computeExecPnlBrl(entryStr, exitStr, isBuy, ativo) {
+    var e = parseBrazilianNumber(entryStr);
+    var x = parseBrazilianNumber(exitStr);
+    if (e == null || x == null) return null;
+    var ac = assetClassFromTicker(ativo);
+    var signed = isBuy ? x - e : e - x;
+    if (ac === "WIN") {
+      var pts = winIndexPointsFromPrices(e, x);
+      var absPx = Math.abs(e - x);
+      var maxP = Math.max(Math.abs(e), Math.abs(x));
+      var brl = (signed >= 0 ? 1 : -1) * pts * 0.2;
+      var sgn = signed >= 0 ? "+" : "−";
+      var hintExtra =
+        absPx >= 1 && maxP < 500 && maxP > 50
+          ? " — Confira entradas/saídas (diferença grande para WIN nesta faixa)."
+          : "";
+      return {
+        brl: brl,
+        hint:
+          "WIN: " +
+          pts +
+          " pts × R$ 0,20 = " +
+          sgn +
+          "R$ " +
+          fmtPnlDisplay(Math.abs(brl)) +
+          hintExtra,
+      };
+    }
+    if (ac === "WDO") {
+      var ptsW = winIndexPointsFromPrices(e, x);
+      var brlW = (signed >= 0 ? 1 : -1) * ptsW * 50;
+      var sgnW = signed >= 0 ? "+" : "−";
+      return {
+        brl: brlW,
+        hint:
+          "WDO (aprox.): " +
+          ptsW +
+          " pts × R$ 50,00 = " +
+          sgnW +
+          "R$ " +
+          fmtPnlDisplay(Math.abs(brlW)),
+      };
+    }
+    return {
+      brl: signed,
+      hint:
+        "Δ cotação: " +
+        padPrecosTresDecimais(signed.toFixed(3)) +
+        " (R$ por unidade — ajuste pelo lote se ação/futuro)",
+    };
+  }
+
+  /**
+   * Quando o trader não disse COMPRA/VENDA, infere pelo movimento: saída > entrada → lucro de long;
+   * saída < entrada → lucro de short (venda). Empate usa COMPRA. Assim o P/L em R$ ainda é sugerido.
+   */
+  function resolveJournalDirection(ctx, entryStr, exitStr) {
+    ctx = ctx || {};
+    if (ctx.isBuy) return { isBuy: true, inferred: false };
+    if (ctx.isSell) return { isBuy: false, inferred: false };
+    var e = parseBrazilianNumber(entryStr);
+    var x = parseBrazilianNumber(exitStr);
+    if (e == null || x == null) return null;
+    if (x > e) return { isBuy: true, inferred: true };
+    if (e > x) return { isBuy: false, inferred: true };
+    return { isBuy: true, inferred: true };
+  }
+
+  function extractEntradaPrice(T) {
+    if (!T || T.entrada == null) return null;
+    var s = String(T.entrada);
+    var m = s.match(/\b(\d{1,6}[.,]\d{1,4})\b/);
+    if (m) return parseBrazilianNumber(m[1]);
+    m = s.match(/\b(\d{5,9})\b/);
+    if (m) return parseBrazilianNumber(m[1]);
+    return null;
+  }
+
+  function parsePontosAlvo(dist) {
+    if (dist == null) return null;
+    var s = String(dist).toLowerCase();
+    var m = s.match(/(\d+(?:[.,]\d+)?)\s*pts?/);
+    if (m) return parseBrazilianNumber(m[1].replace(",", "."));
+    return null;
+  }
+
+  function looksLikePriceToken(dist) {
+    return /\d{2,4}[.,]\d{3}/.test(String(dist || ""));
+  }
+
+  /** Preço alvo a partir da entrada + distância em pontos (WIN/WDO/outros). */
+  function targetExitPrice(base, pts, ac, isBuy) {
+    if (base == null || pts == null || pts <= 0) return null;
+    var delta;
+    if (ac === "WIN") delta = pts * 0.001;
+    else if (ac === "WDO") delta = pts * 0.0005;
+    else delta = pts * 0.01;
+    var p = isBuy ? base + delta : base - delta;
+    return p;
+  }
+
+  function formatPrice3Num(n) {
+    if (n == null || isNaN(n)) return "—";
+    return padPrecosTresDecimais(Number(n).toFixed(3));
+  }
+
+  function buildAlvoExitLine(T, a, isBuy, isSell) {
+    if (!isBuy && !isSell) return "";
+    var base = extractEntradaPrice(T);
+    if (base == null) return "";
+    var dist = a && a.distancia != null ? a.distancia : "";
+    if (looksLikePriceToken(dist)) {
+      return "Saída em " + padPrecosTresDecimais(String(dist).trim());
+    }
+    var pts = parsePontosAlvo(dist);
+    if (pts == null || pts <= 0) return "";
+    var ac = assetClassFromTicker(T && T.ativo ? T.ativo : "");
+    var px = targetExitPrice(base, pts, ac, isBuy);
+    if (px == null) return "";
+    return "Saída em " + formatPrice3Num(px);
+  }
+
+  var journalPnlBound = { main: null, modal: null };
+
+  function attachJournalPnlAuto(prefix, ctx) {
+    ctx = ctx || {};
+    var scope = prefix.indexOf("modal") >= 0 ? "modal" : "main";
+    var entryEl = document.getElementById(prefix + "trade-exec-entry");
+    var exitEl = document.getElementById(prefix + "trade-exec-exit");
+    var pnlEl = document.getElementById(prefix + "trade-exec-pnl");
+    var hintEl = document.getElementById(prefix + "trade-exec-pnl-hint");
+    if (!entryEl || !exitEl || !pnlEl) return;
+
+    var prev = journalPnlBound[scope];
+    if (prev && prev.recalc) {
+      ["input", "change", "blur"].forEach(function (ev) {
+        prev.entry.removeEventListener(ev, prev.recalc);
+        prev.exit.removeEventListener(ev, prev.recalc);
+      });
+    }
+
+    function recalc() {
+      var en = entryEl.value;
+      var ex = exitEl.value;
+      if (!String(en).trim() || !String(ex).trim()) {
+        if (hintEl) hintEl.textContent = "";
+        return;
+      }
+      var dir = resolveJournalDirection(ctx, en, ex);
+      if (!dir) {
+        if (hintEl) hintEl.textContent = "";
+        return;
+      }
+      var out = computeExecPnlBrl(en, ex, dir.isBuy, ctx.ativo);
+      if (!out) {
+        if (hintEl) hintEl.textContent = "";
+        return;
+      }
+      pnlEl.value = fmtPnlDisplay(out.brl);
+      if (hintEl) {
+        var base = out.hint || "";
+        hintEl.textContent = dir.inferred
+          ? base +
+            " — Direção inferida pelo preço (saída vs entrada); ajuste se operou o lado oposto."
+          : base;
+      }
+    }
+
+    ["input", "change", "blur"].forEach(function (ev) {
+      entryEl.addEventListener(ev, recalc);
+      exitEl.addEventListener(ev, recalc);
+    });
+    journalPnlBound[scope] = { entry: entryEl, exit: exitEl, recalc: recalc };
+    recalc();
+  }
+
+  function fillDecisionWhy(getEl, T, R, V, resumo) {
+    var whyWrap = getEl("trade-decision-why");
+    var whyText = getEl("trade-decision-why-text");
+    if (!whyWrap || !whyText) return;
+
+    var rawDec = resumo.decisao != null ? resumo.decisao : R && R.decisao ? R.decisao : "";
+    var decisaoNorm = String(rawDec)
+      .toUpperCase()
+      .replace(/\s/g, "_");
+    var naoOperar =
+      decisaoNorm.indexOf("NAO_OPERAR") >= 0 || decisaoNorm.indexOf("NÃO_OPERAR") >= 0;
+    var permitir = resumo.permitir_trade;
+    var mostrar = naoOperar || permitir === false;
+
+    if (!mostrar) {
+      whyWrap.hidden = true;
+      whyWrap.classList.remove("trade-decision-why--conflict");
+      return;
+    }
+
+    var acaoRaw = T && T.acao ? String(T.acao).toUpperCase() : "";
+    var sinalCV = acaoRaw.indexOf("COMPRA") >= 0 || acaoRaw.indexOf("VENDA") >= 0;
+    whyWrap.classList.toggle("trade-decision-why--conflict", sinalCV);
+
+    var chunks = [];
+    if (R && R.motivo) chunks.push(String(R.motivo).trim());
+    if (V && V.aprovado === false && V.erro_encontrado) {
+      var err = String(V.erro_encontrado).trim();
+      var rm = R && R.motivo ? String(R.motivo) : "";
+      if (err && rm.indexOf(err) < 0) {
+        chunks.push("Validação: " + err);
+      }
+    }
+    whyText.textContent = padPrecosTresDecimais(
+      chunks.length > 0
+        ? chunks.join(" ")
+        : "O gestor de risco não autorizou a execução. Consulte score, confluência e regras no JSON dos agentes."
+    );
+    whyWrap.hidden = false;
+  }
+
   function fmtPnlDisplay(v) {
     if (v == null || v === "") return "";
     var n = Number(v);
@@ -46,7 +337,9 @@
   function renderJournalPanel(prefix, data, isBuy, isSell) {
     var wrap = document.getElementById(prefix + "trade-journal-wrap");
     if (!wrap) return;
-    if (!isBuy && !isSell) {
+    var isModal = prefix.indexOf("modal") >= 0;
+    // Na tela principal, só mostra o journal para COMPRA/VENDA. No modal de detalhe, sempre (execução real).
+    if (!isBuy && !isSell && !isModal) {
       wrap.hidden = true;
       return;
     }
@@ -198,7 +491,7 @@
       const obs = T && T.timeframe_observacao ? String(T.timeframe_observacao).trim() : "";
       if (obs) {
         tfNote.hidden = false;
-        tfNote.textContent = obs;
+        tfNote.textContent = padPrecosTresDecimais(obs);
       } else {
         tfNote.hidden = true;
         tfNote.textContent = "";
@@ -212,17 +505,24 @@
     }
 
     const padraoPill = $("trade-padrao-pill");
-    if (padraoPill) padraoPill.textContent = T && T.padrao ? T.padrao : "—";
+    if (padraoPill) {
+      padraoPill.textContent = T && T.padrao ? padPrecosTresDecimais(T.padrao) : "—";
+    }
 
     const entradaEl = $("trade-entrada");
-    if (entradaEl) entradaEl.textContent = T && T.entrada ? T.entrada : "—";
+    if (entradaEl) {
+      entradaEl.textContent = T && T.entrada ? padPrecosTresDecimais(T.entrada) : "—";
+    }
     const stopTxt = T && (T.stop_em_pontos || T.stop) ? T.stop_em_pontos || T.stop : "—";
     const stopEl = $("trade-stop");
-    if (stopEl) stopEl.textContent = stopTxt;
+    if (stopEl) stopEl.textContent = padPrecosTresDecimais(stopTxt);
     const alvos = getAlvos(T);
     const tp1 = alvos[0];
     const tp1El = $("trade-tp1");
-    if (tp1El) tp1El.textContent = tp1 ? tp1.distancia : T && T.alvo ? T.alvo : "—";
+    if (tp1El) {
+      const tp1raw = tp1 ? tp1.distancia : T && T.alvo ? T.alvo : "—";
+      tp1El.textContent = padPrecosTresDecimais(tp1raw);
+    }
     const rrEl = $("trade-rr-main");
     if (rrEl) rrEl.textContent = T && T.rr ? T.rr : "—";
 
@@ -246,23 +546,26 @@
         const tr = document.createElement("div");
         tr.className = "trade-tp-row";
         tr.innerHTML =
-          '<span class="trade-tp-name">—</span><span>—</span><div class="trade-tp-barwrap"><div class="trade-tp-bar" style="width:0%"></div></div><span>—</span><span>—</span>';
+          '<span class="trade-tp-name">—</span><div class="trade-tp-col-metric"><span class="trade-tp-pts">—</span></div><div class="trade-tp-barwrap"><div class="trade-tp-bar" style="width:0%"></div></div><span>—</span><span class="trade-tp-rr">—</span>';
         tpBody.appendChild(tr);
       } else {
         showAlvos.forEach(function (a) {
           const prob = Math.max(0, Math.min(100, Number(a.probabilidade) || 0));
           const row = document.createElement("div");
           row.className = "trade-tp-row";
+          var exitLn = buildAlvoExitLine(T, a, isBuy, isSell);
           row.innerHTML =
             '<span class="trade-tp-name">' +
             esc(a.nome || "TP") +
-            '</span><span>' +
-            esc(a.distancia) +
-            '</span><div class="trade-tp-barwrap"><div class="trade-tp-bar" style="width:' +
+            '</span><div class="trade-tp-col-metric"><span class="trade-tp-pts">' +
+            esc(padPrecosTresDecimais(a.distancia || "")) +
+            "</span>" +
+            (exitLn ? '<span class="trade-tp-exit">' + esc(exitLn) + "</span>" : "") +
+            '</div><div class="trade-tp-barwrap"><div class="trade-tp-bar" style="width:' +
             prob +
             '%"></div></div><span>' +
             prob +
-            '%</span><span style="color:#7dd3fc">' +
+            '%</span><span class="trade-tp-rr">' +
             esc(a.rr || "—") +
             "</span>";
           tpBody.appendChild(row);
@@ -277,7 +580,7 @@
       if (T && Array.isArray(T.suporte) && T.suporte.length) {
         T.suporte.forEach(function (x) {
           const li = document.createElement("li");
-          li.textContent = x;
+          li.textContent = padPrecosTresDecimais(x);
           ulS.appendChild(li);
         });
       } else {
@@ -289,7 +592,7 @@
       if (T && Array.isArray(T.resistencia) && T.resistencia.length) {
         T.resistencia.forEach(function (x) {
           const li = document.createElement("li");
-          li.textContent = x;
+          li.textContent = padPrecosTresDecimais(x);
           ulR.appendChild(li);
         });
       } else {
@@ -299,9 +602,12 @@
 
     const parts = [];
     if (T && T.justificativa) parts.push(T.justificativa);
-    if (R && R.motivo) parts.push("Risk manager: " + R.motivo);
     const narr = $("trade-narrative-text");
-    if (narr) narr.textContent = parts.length ? parts.join("\n\n") : "—";
+    if (narr) {
+      narr.textContent = parts.length ? padPrecosTresDecimais(parts.join("\n\n")) : "—";
+    }
+
+    fillDecisionWhy($, T, R, V, resumo);
 
     const rs = $("trade-risk-strip");
     if (rs) {
@@ -337,6 +643,26 @@
     }
 
     renderJournalPanel(isModal ? "modal-" : "", data, isBuy, isSell);
+    (function bindJournalMeta() {
+      var jw = document.getElementById(P + "trade-journal-wrap");
+      if (!jw) return;
+      jw.dataset.journalAtivo = T && T.ativo ? String(T.ativo).trim() : "";
+      jw.dataset.journalBuy = isBuy ? "1" : "";
+      jw.dataset.journalSell = isSell ? "1" : "";
+    })();
+    if (isModal) {
+      attachJournalPnlAuto("modal-", {
+        ativo: T && T.ativo ? String(T.ativo) : "",
+        isBuy: isBuy,
+        isSell: isSell,
+      });
+    } else if (isBuy || isSell) {
+      attachJournalPnlAuto("", {
+        ativo: T && T.ativo ? String(T.ativo) : "",
+        isBuy: isBuy,
+        isSell: isSell,
+      });
+    }
 
     if (!isModal) {
       document.getElementById("trade-result").classList.add("is-visible");
@@ -391,12 +717,36 @@
     var ex = document.getElementById(prefix + "trade-exec-exit");
     var pnlRaw = document.getElementById(prefix + "trade-exec-pnl");
     var pv = pnlRaw && pnlRaw.value ? pnlRaw.value.trim() : "";
+    var pnlNum = null;
+    if (pv !== "") {
+      pnlNum = parseBrazilianNumber(pv);
+      if (pnlNum == null || isNaN(pnlNum)) pnlNum = null;
+    }
     return {
       recorded: true,
       entry: en && en.value ? en.value.trim() : "",
       exit: ex && ex.value ? ex.value.trim() : "",
-      pnl: pv === "" ? null : pv,
+      pnl: pnlNum,
     };
+  }
+
+  function enrichJournalPayloadFromPrices(prefix, payload) {
+    if (!payload || !payload.recorded) return payload;
+    var entryOk = payload.entry && String(payload.entry).trim().length > 0;
+    var exitOk = payload.exit && String(payload.exit).trim().length > 0;
+    if (!entryOk || !exitOk || payload.pnl != null) return payload;
+    var wrap = document.getElementById(prefix + "trade-journal-wrap");
+    if (!wrap || !wrap.dataset) return payload;
+    var jctx = {
+      isBuy: wrap.dataset.journalBuy === "1",
+      isSell: wrap.dataset.journalSell === "1",
+      ativo: wrap.dataset.journalAtivo || "",
+    };
+    var dir = resolveJournalDirection(jctx, payload.entry, payload.exit);
+    if (!dir) return payload;
+    var auto = computeExecPnlBrl(payload.entry, payload.exit, dir.isBuy, jctx.ativo);
+    if (auto && auto.brl != null && !isNaN(auto.brl)) payload.pnl = auto.brl;
+    return payload;
   }
 
   function saveJournal(prefix) {
@@ -404,7 +754,7 @@
     var statusEl = document.getElementById(prefix + "trade-journal-status");
     if (!idEl || !idEl.value) return;
     var id = Number(idEl.value);
-    var payload = readJournalPayload(prefix);
+    var payload = enrichJournalPayloadFromPrices(prefix, readJournalPayload(prefix));
     fetch(execPatchUrl(id), {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -423,6 +773,21 @@
         var isBuy = acaoRaw.indexOf("COMPRA") >= 0;
         var isSell = acaoRaw.indexOf("VENDA") >= 0;
         renderJournalPanel(prefix, out, isBuy, isSell);
+        (function () {
+          var jw = document.getElementById(prefix + "trade-journal-wrap");
+          if (jw) {
+            jw.dataset.journalAtivo = T && T.ativo ? String(T.ativo).trim() : "";
+            jw.dataset.journalBuy = isBuy ? "1" : "";
+            jw.dataset.journalSell = isSell ? "1" : "";
+          }
+        })();
+        if (prefix.indexOf("modal") >= 0 || isBuy || isSell) {
+          attachJournalPnlAuto(prefix, {
+            ativo: T && T.ativo ? String(T.ativo) : "",
+            isBuy: isBuy,
+            isSell: isSell,
+          });
+        }
         if (statusEl) {
           statusEl.hidden = false;
           statusEl.className = "trade-journal-status";
@@ -463,6 +828,21 @@
         var isBuy = acaoRaw.indexOf("COMPRA") >= 0;
         var isSell = acaoRaw.indexOf("VENDA") >= 0;
         renderJournalPanel(prefix, out, isBuy, isSell);
+        (function () {
+          var jw = document.getElementById(prefix + "trade-journal-wrap");
+          if (jw) {
+            jw.dataset.journalAtivo = T && T.ativo ? String(T.ativo).trim() : "";
+            jw.dataset.journalBuy = isBuy ? "1" : "";
+            jw.dataset.journalSell = isSell ? "1" : "";
+          }
+        })();
+        if (prefix.indexOf("modal") >= 0 || isBuy || isSell) {
+          attachJournalPnlAuto(prefix, {
+            ativo: T && T.ativo ? String(T.ativo) : "",
+            isBuy: isBuy,
+            isSell: isSell,
+          });
+        }
         if (statusEl) {
           statusEl.hidden = false;
           statusEl.className = "trade-journal-status";
@@ -501,6 +881,8 @@
         el("stat-wins", s.wins);
         el("stat-losses", s.losses);
         el("stat-breakeven", s.breakeven);
+        el("stat-rec-compra", s.recomendacoes_compra);
+        el("stat-rec-venda", s.recomendacoes_venda);
         var pnl = s.pnl_total;
         var pnlEl = document.getElementById("stat-pnl-total");
         if (pnlEl) {
@@ -792,6 +1174,13 @@
         setLoading(false);
       }, 480);
 
+      var T0 = parseJson(data.trader);
+      var al0 =
+        T0 && T0.ativo != null && String(T0.ativo).trim()
+          ? String(T0.ativo).trim()
+          : "—";
+      var ah0 =
+        T0 && T0.ativo_como_detectado ? String(T0.ativo_como_detectado).trim() : "";
       const rowPayload = {
         id: data.id,
         created_at: data.created_at,
@@ -813,6 +1202,8 @@
         exec_exit: data.exec_exit,
         exec_pnl: data.exec_pnl,
         exec_logged_at: data.exec_logged_at,
+        ativo_label: al0,
+        ativo_hint: ah0,
       };
       trades.unshift(rowPayload);
       prependHistoryRow(rowPayload);
@@ -932,12 +1323,22 @@
         : '<span class="muted">—</span>';
     const tr = document.createElement("tr");
     tr.setAttribute("data-id", String(row.id));
+    var atv = ativoLabelFromRow(row);
+    var atvHint = ativoHintFromRow(row);
+    var atvTd =
+      '<td class="td-ativo"' +
+      (atvHint ? ' title="' + escapeHtml(atvHint) + '"' : "") +
+      ">" +
+      escapeHtml(atv) +
+      "</td>";
     tr.innerHTML =
       "<td>" +
       escapeHtml((row.created_at || "").slice(0, 19).replace("T", " ")) +
       '</td><td class="thumb"><img class="thumb" src="' +
       escapeHtml(row.image_url || "") +
-      '" alt="" width="56" height="56" loading="lazy" /></td><td>' +
+      '" alt="" width="56" height="56" loading="lazy" /></td>' +
+      atvTd +
+      "<td>" +
       decHtml +
       "</td><td>" +
       escapeHtml(row.score_final != null ? String(row.score_final) : "—") +

@@ -27,7 +27,7 @@ from services.db import (
     parse_pnl_value,
     update_execution,
 )
-from services.json_utils import extract_json_object, risk_summary
+from services.json_utils import extract_json_object, risk_summary, trader_ativo_hint, trader_ativo_label
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -71,6 +71,8 @@ def dashboard():
     trades = list_analyses(200)
     for t in trades:
         t["image_url"] = url_for("serve_upload", name=t["stored_filename"])
+        t["ativo_label"] = trader_ativo_label(t.get("trader_json"))
+        t["ativo_hint"] = trader_ativo_hint(t.get("trader_json"))
     ia_ok = bool(Config.OPENAI_API_KEY) or (
         Config.use_azure_openai()
         and bool(Config.AZURE_OPENAI_API_KEY)
@@ -98,6 +100,8 @@ def api_history():
     for t in rows:
         t["image_url"] = url_for("serve_upload", name=t["stored_filename"])
         t["exec_recorded"] = bool(t.get("exec_recorded"))
+        t["ativo_label"] = trader_ativo_label(t.get("trader_json"))
+        t["ativo_hint"] = trader_ativo_hint(t.get("trader_json"))
     return jsonify({"items": rows})
 
 

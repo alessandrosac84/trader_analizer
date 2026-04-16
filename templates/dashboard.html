@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Trade AI — Dashboard B3</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=4" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/trade-view.css') }}?v=2" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=6" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/trade-view.css') }}?v=4" />
 </head>
 <body>
   <div class="shell">
@@ -31,7 +31,8 @@
       <h2>Meu desempenho</h2>
       <p class="stats-dashboard__note">
         Registre entradas e saídas reais quando a análise for <strong>COMPRA</strong> ou <strong>VENDA</strong>.
-        O resumo considera apenas trades que você marcou. Filtros usam a <strong>data UTC</strong> do salvamento (alinhado ao histórico).
+        O resumo de P/L considera apenas trades que você marcou (data UTC do salvamento).
+        Os contadores de <strong>recomendação</strong> usam o sinal do trader na análise (data UTC de criação do registro).
       </p>
       <div class="stats-filters">
         <div class="stats-filters__period" role="tablist" aria-label="Período dos indicadores">
@@ -69,6 +70,14 @@
         <div class="stat-tile stat-tile--accent">
           <span class="stat-tile__val" id="stat-pnl-total">—</span>
           <span class="stat-tile__lbl">P/L acumulado</span>
+        </div>
+        <div class="stat-tile stat-tile--signal-buy">
+          <span class="stat-tile__val" id="stat-rec-compra">—</span>
+          <span class="stat-tile__lbl">Recom. compra</span>
+        </div>
+        <div class="stat-tile stat-tile--signal-sell">
+          <span class="stat-tile__val" id="stat-rec-venda">—</span>
+          <span class="stat-tile__lbl">Recom. venda</span>
         </div>
       </div>
       <div class="stats-hoje" id="stats-hoje" aria-live="polite"></div>
@@ -183,6 +192,9 @@
 
         <div class="trade-tp-section">
           <h4>Alvos &amp; probabilidade</h4>
+          <p class="trade-tp-sub">
+            Preço de saída <strong>estimado</strong> a partir da entrada do plano e dos pontos (WIN: 1 pt ≈ 0,001 no eixo; ações: referência em centavos por “pt”).
+          </p>
           <div id="trade-tp-body"></div>
         </div>
 
@@ -201,29 +213,42 @@
           <h4>Análise</h4>
           <p id="trade-narrative-text">—</p>
         </div>
+
+        <div class="trade-decision-why" id="trade-decision-why" hidden>
+          <div class="trade-decision-why__head">
+            <span class="trade-decision-why__tag">Gestão de risco</span>
+            <h4>Por que não operar?</h4>
+          </div>
+          <p id="trade-decision-why-text" class="trade-decision-why__body"></p>
+          <p class="trade-decision-why__hint">
+            O trader descreve o <strong>setup</strong>; o validador e o gestor aplicam regras (RR, confluência, risco). Por isso o sinal pode ser COMPRA/VENDA e a decisão final ser não operar.
+          </p>
+        </div>
+
         <div class="trade-risk-strip" id="trade-risk-strip"></div>
 
         <div class="trade-journal" id="trade-journal-wrap" hidden>
           <h4>Meu trade (execução real)</h4>
           <p class="trade-journal__hint">
-            Preencha após operar. O resultado pode ser em reais, pontos ou outra unidade — use o mesmo critério sempre para comparar.
+            Preencha após operar. Com <strong>entrada</strong> e <strong>saída</strong>, o resultado em <strong>R$</strong> é calculado (WIN/WDO); ao sair dos campos o valor atualiza. Sem sinal COMPRA/VENDA, a direção é inferida pelo preço — ajuste se precisar.
           </p>
           <form class="trade-journal-form" id="trade-journal-form" data-journal-scope="main" onsubmit="return false;">
             <input type="hidden" id="trade-journal-analysis-id" value="" />
             <div class="trade-journal-grid">
               <label class="trade-journal-field">
                 <span>Entrada (preço executado)</span>
-                <input type="text" id="trade-exec-entry" name="entry" autocomplete="off" placeholder="ex.: 128.450" />
+                <input type="text" id="trade-exec-entry" name="entry" autocomplete="off" placeholder="ex.: 201,635" />
               </label>
               <label class="trade-journal-field">
                 <span>Saída (preço executado)</span>
-                <input type="text" id="trade-exec-exit" name="exit" autocomplete="off" placeholder="ex.: 128.520" />
+                <input type="text" id="trade-exec-exit" name="exit" autocomplete="off" placeholder="ex.: 201,590" />
               </label>
               <label class="trade-journal-field">
-                <span>Resultado (lucro + / prejuízo −)</span>
-                <input type="text" id="trade-exec-pnl" name="pnl" autocomplete="off" placeholder="ex.: 150 ou -80 ou 1.234,50" />
+                <span>Resultado (lucro + / prejuízo −) em R$</span>
+                <input type="text" id="trade-exec-pnl" name="pnl" autocomplete="off" placeholder="Ex.: 9,00 ou −15,50" />
               </label>
             </div>
+            <p class="trade-journal-pnl-hint" id="trade-exec-pnl-hint" aria-live="polite"></p>
             <div class="trade-journal-actions">
               <button type="submit" class="btn" id="trade-journal-save">Salvar registro</button>
               <button type="button" class="btn btn-ghost" id="trade-journal-clear">Remover registro</button>
@@ -254,6 +279,7 @@
               <tr>
                 <th>Data (UTC)</th>
                 <th>Imagem</th>
+                <th>Ativo</th>
                 <th>Decisão</th>
                 <th>Score</th>
                 <th>Permitir</th>
@@ -268,6 +294,7 @@
                 <td class="thumb">
                   <img class="thumb" src="{{ t.image_url }}" alt="" loading="lazy" width="56" height="56" />
                 </td>
+                <td class="td-ativo" {% if t.ativo_hint %}title="{{ t.ativo_hint|e }}"{% endif %}>{{ t.ativo_label|e }}</td>
                 <td>
                   {% if t.decisao and 'EXECUTAR' in t.decisao %}
                     <span class="badge ok">{{ t.decisao }}</span>
@@ -402,6 +429,9 @@
 
             <div class="trade-tp-section">
               <h4>Alvos &amp; probabilidade</h4>
+              <p class="trade-tp-sub">
+                Preço de saída <strong>estimado</strong> a partir da entrada do plano e dos pontos (WIN: 1 pt ≈ 0,001 no eixo; ações: referência em centavos por “pt”).
+              </p>
               <div id="modal-trade-tp-body"></div>
             </div>
 
@@ -420,29 +450,42 @@
               <h4>Análise</h4>
               <p id="modal-trade-narrative-text">—</p>
             </div>
+
+            <div class="trade-decision-why" id="modal-trade-decision-why" hidden>
+              <div class="trade-decision-why__head">
+                <span class="trade-decision-why__tag">Gestão de risco</span>
+                <h4>Por que não operar?</h4>
+              </div>
+              <p id="modal-trade-decision-why-text" class="trade-decision-why__body"></p>
+              <p class="trade-decision-why__hint">
+                O trader descreve o <strong>setup</strong>; o validador e o gestor aplicam regras (RR, confluência, risco). Por isso o sinal pode ser COMPRA/VENDA e a decisão final ser não operar.
+              </p>
+            </div>
+
             <div class="trade-risk-strip" id="modal-trade-risk-strip"></div>
 
             <div class="trade-journal" id="modal-trade-journal-wrap" hidden>
               <h4>Meu trade (execução real)</h4>
               <p class="trade-journal__hint">
-                Preencha após operar. O resultado pode ser em reais, pontos ou outra unidade — use o mesmo critério sempre para comparar.
+                Informe se você <strong>operou de fato</strong> esta análise: preencha <strong>entrada</strong> e <strong>saída</strong> executadas. O resultado em <strong>R$</strong> é calculado ao sair dos campos (funciona bem no celular). Se o sinal não for COMPRA/VENDA, a direção é <strong>inferida</strong> pelo movimento do preço — confira e ajuste se precisar.
               </p>
               <form class="trade-journal-form" id="modal-trade-journal-form" data-journal-scope="modal" onsubmit="return false;">
                 <input type="hidden" id="modal-trade-journal-analysis-id" value="" />
                 <div class="trade-journal-grid">
                   <label class="trade-journal-field">
                     <span>Entrada (preço executado)</span>
-                    <input type="text" id="modal-trade-exec-entry" name="entry" autocomplete="off" placeholder="ex.: 128.450" />
+                    <input type="text" id="modal-trade-exec-entry" name="entry" autocomplete="off" placeholder="ex.: 201,635" />
                   </label>
                   <label class="trade-journal-field">
                     <span>Saída (preço executado)</span>
-                    <input type="text" id="modal-trade-exec-exit" name="exit" autocomplete="off" placeholder="ex.: 128.520" />
+                    <input type="text" id="modal-trade-exec-exit" name="exit" autocomplete="off" placeholder="ex.: 201,590" />
                   </label>
                   <label class="trade-journal-field">
-                    <span>Resultado (lucro + / prejuízo −)</span>
-                    <input type="text" id="modal-trade-exec-pnl" name="pnl" autocomplete="off" placeholder="ex.: 150 ou -80" />
+                    <span>Resultado (lucro + / prejuízo −) em R$</span>
+                    <input type="text" id="modal-trade-exec-pnl" name="pnl" autocomplete="off" placeholder="Ex.: 9,00 ou −15,50" />
                   </label>
                 </div>
+                <p class="trade-journal-pnl-hint" id="modal-trade-exec-pnl-hint" aria-live="polite"></p>
                 <div class="trade-journal-actions">
                   <button type="submit" class="btn" id="modal-trade-journal-save">Salvar registro</button>
                   <button type="button" class="btn btn-ghost" id="modal-trade-journal-clear">Remover registro</button>
@@ -473,6 +516,6 @@
       apiAnalysisPrefix: "/api/analysis"
     };
   </script>
-  <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=8" defer></script>
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=11" defer></script>
 </body>
 </html>

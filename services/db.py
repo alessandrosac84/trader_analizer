@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -116,23 +117,104 @@ def list_analyses(limit: int = 100) -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
+def delete_all_analyses() -> int:
+    """Remove todas as análises gravadas. Retorna a quantidade de registros removidos."""
+    with _conn() as conn:
+        n = int(conn.execute("SELECT COUNT(*) FROM analyses").fetchone()[0])
+        conn.execute("DELETE FROM analyses")
+    return n
+
+
+def _acao_from_trader_json(trader_json: str | None) -> str:
+    if not trader_json:
+        return ""
+    try:
+        d = json.loads(trader_json)
+        if not isinstance(d, dict):
+            return ""
+        a = d.get("acao")
+        return str(a or "").strip().upper()
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return ""
+
+
+def _recommendation_counts(
+    conn: sqlite3.Connection,
+    period: str,
+    ref_date: date,
+    today: date,
+) -> dict[str, int]:
+    """Conta sinais COMPRA/VENDA no trader_json, filtrando por data UTC de `created_at`."""
+    period = (period or "all").strip().lower()
+    if period == "all":
+        rows = conn.execute("SELECT trader_json FROM analyses").fetchall()
+    elif period == "day":
+        d = ref_date.isoformat()
+        rows = conn.execute(
+            """
+            SELECT trader_json FROM analyses
+            WHERE date(created_at) = date(?)
+            """,
+            (d,),
+        ).fetchall()
+    else:
+        bounds = _month_bounds(ref_date, today)
+        if bounds is None:
+            return {"recomendacoes_compra": 0, "recomendacoes_venda": 0}
+        mstart, mend = bounds
+        i0, i1 = mstart.isoformat(), mend.isoformat()
+        rows = conn.execute(
+            """
+            SELECT trader_json FROM analyses
+            WHERE date(created_at) >= date(?) AND date(created_at) <= date(?)
+            """,
+            (i0, i1),
+        ).fetchall()
+    compra = venda = 0
+    for r in rows:
+        acao = _acao_from_trader_json(r["trader_json"])
+        if "COMPRA" in acao:
+            compra += 1
+        if "VENDA" in acao:
+            venda += 1
+    return {"recomendacoes_compra": compra, "recomendacoes_venda": venda}
+
+
 def parse_pnl_value(raw: Any) -> float | None:
-    """Aceita número JSON ou string pt-BR (ex.: 1.234,56 ou -50)."""
+    """Aceita número JSON ou string pt-BR (ex.: 1.234,56, -50, 36.009 como milhar)."""
     if raw is None or raw == "":
         return None
     if isinstance(raw, bool):
         return None
     if isinstance(raw, (int, float)):
         return float(raw)
-    s = str(raw).strip()
+    s = str(raw).strip().replace("\u00a0", " ").replace(" ", "")
     if not s:
         return None
     neg = s.startswith("-")
     s = s.replace("-", "").strip()
     if "," in s and "." in s:
-        s = s.replace(".", "").replace(",", ".")
+        if s.rfind(",") > s.rfind("."):
+            s = s.replace(".", "").replace(",", ".")
+        else:
+            s = s.replace(",", "")
     elif "," in s:
         s = s.replace(",", ".")
+    elif "." in s and s.count(".") >= 1:
+        parts = s.split(".")
+        if all(p.isdigit() for p in parts) and len(parts) >= 2:
+            if parts[0] == "0" and len(parts) == 2:
+                try:
+                    v = float(s)
+                    return -v if neg else v
+                except ValueError:
+                    return None
+            if len(parts) >= 2 and all(len(p) == 3 for p in parts[1:]):
+                try:
+                    v = float("".join(parts))
+                    return -v if neg else v
+                except ValueError:
+                    return None
     try:
         v = float(s)
         return -v if neg else v
@@ -277,7 +359,11 @@ def _snapshot_dia_utc(conn, dia: str) -> dict[str, Any]:
 
 
 def journal_stats(period: str = "all", ref: str | None = None) -> dict[str, Any]:
-    """Agrega trades com exec_recorded=1. Filtros: all | day | month (datas em UTC)."""
+    """Agrega trades com exec_recorded=1 e contagem de sinais COMPRA/VENDA no trader.
+
+    P/L: filtro por data UTC de exec_logged_at. Recomendações: por data UTC de created_at.
+    Períodos: all | day | month.
+    """
     today = datetime.now(timezone.utc).date()
     ref_date = today
     if ref:
@@ -306,6 +392,7 @@ def journal_stats(period: str = "all", ref: str | None = None) -> dict[str, Any]
             out["intervalo"] = None
             out["contexto"] = "Visão geral — todos os trades registrados (datas em UTC)."
             out["hoje_utc"] = _snapshot_dia_utc(conn, today_iso)
+            out.update(_recommendation_counts(conn, period, ref_date, today))
             return out
 
         if period == "day":
@@ -342,6 +429,7 @@ def journal_stats(period: str = "all", ref: str | None = None) -> dict[str, Any]
                 "pnl": pnl,
                 "status": st,
             }
+            out.update(_recommendation_counts(conn, period, ref_date, today))
             return out
 
         # month
@@ -358,6 +446,8 @@ def journal_stats(period: str = "all", ref: str | None = None) -> dict[str, Any]
                 "losses": 0,
                 "breakeven": 0,
                 "pnl_total": 0.0,
+                "recomendacoes_compra": 0,
+                "recomendacoes_venda": 0,
                 "hoje_utc": {
                     "data": today.isoformat(),
                     "trades_registrados_hoje": 0,
@@ -408,4 +498,5 @@ def journal_stats(period: str = "all", ref: str | None = None) -> dict[str, Any]
             "pnl": pnl,
             "status": st,
         }
+        out.update(_recommendation_counts(conn, period, ref_date, today))
         return out

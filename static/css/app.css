@@ -390,6 +390,17 @@ table.data img.thumb {
   border: 1px solid var(--border);
 }
 
+table.data td.td-ativo {
+  white-space: nowrap;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+  max-width: 8.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .badge {
   display: inline-block;
   padding: 0.2rem 0.55rem;
@@ -643,6 +654,14 @@ table.data img.thumb {
   background: rgba(59, 130, 246, 0.08);
 }
 
+.stat-tile--signal-buy .stat-tile__val {
+  color: #4ade80;
+}
+
+.stat-tile--signal-sell .stat-tile__val {
+  color: #fb923c;
+}
+
 .stats-hoje {
   font-size: 0.9rem;
   line-height: 1.5;
@@ -663,6 +682,14 @@ table.data img.thumb {
 .trade-journal h4 {
   margin: 0 0 0.35rem;
   font-size: 0.95rem;
+}
+
+.trade-journal-pnl-hint {
+  margin: 0.35rem 0 0.75rem;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: rgba(148, 163, 184, 0.95);
+  min-height: 1.2em;
 }
 
 .trade-journal__hint {
