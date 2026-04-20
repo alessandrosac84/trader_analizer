@@ -10,7 +10,8 @@ Role = Literal["trader", "validator", "risk_manager"]
 _SYSTEM_BY_ROLE: dict[Role, str] = {
     "trader": (
         "Você é um especialista em análise técnica de ativos da B3. "
-        "Identifique ticker e timeframe a partir da imagem do gráfico quando visíveis."
+        "Leia ticker, timeframe e o preço visível no print; proponha trades acionáveis nesse instante, "
+        "sem gatilhos já ultrapassados na própria imagem."
     ),
     "validator": (
         "Você valida leituras de gráfico de ativos B3: coerência de ticker, timeframe e plano de trade."
@@ -31,6 +32,9 @@ def _variant_index(image_path: str) -> int:
 def _mock_trader(v: int) -> str:
     samples = [
         """{
+  "preco_referencia_print": "128.450",
+  "preco_referencia_como_detectado": "Última cotação na régua do eixo direito",
+  "gatilho_ja_ocorreu_no_print": false,
   "ativo": "WINJ26",
   "ativo_como_detectado": "Legenda superior: símbolo WINJ26 visível ao lado do preço",
   "timeframe": "15m",
@@ -57,6 +61,9 @@ def _mock_trader(v: int) -> str:
   "timeframe_observacao": "Em 15m o ruído é menor que em 5m; stops podem ser um pouco mais largos em pontos."
 }""",
         """{
+  "preco_referencia_print": "24.260",
+  "preco_referencia_como_detectado": "Eixo de preços à direita",
+  "gatilho_ja_ocorreu_no_print": false,
   "ativo": "PETR4",
   "ativo_como_detectado": "Cabeçalho do gráfico mostra ticker PETR4 (ação)",
   "timeframe": "5m",
@@ -81,6 +88,9 @@ def _mock_trader(v: int) -> str:
   "timeframe_observacao": "Em 5m a consolidação gera muitos falsos rompimentos; preferir aguardar."
 }""",
         """{
+  "preco_referencia_print": "198.135",
+  "preco_referencia_como_detectado": "Último preço visível no eixo",
+  "gatilho_ja_ocorreu_no_print": false,
   "ativo": "WINJ26",
   "ativo_como_detectado": "Mesmo símbolo WINJ26 na barra de título do gráfico",
   "timeframe": "1m",

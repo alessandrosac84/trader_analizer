@@ -16,6 +16,16 @@ PASSO OBRIGATÓRIO — TIMEFRAME:
 - Se o timeframe NÃO estiver legível na imagem, declare explicitamente e use "timeframe": "não identificado" + explique em "timeframe_observacao" (ex.: inferência fraca pelo espaçamento das velas).
 - Nunca assuma silenciosamente um TF (ex.: 5m) se outro estiver visível no print.
 
+PASSO OBRIGATÓRIO — MOMENTO DO GRÁFICO (O PRINT É UM INSTANTE CONGELADO):
+- A imagem é uma **fotografia**: o preço “agora” é o que aparece **no último candle / na régua do eixo / na linha de cotação / na boleta** visível no print. Leia esse valor com honestidade (ex.: **202.877**) antes de propor entrada.
+- O trade deve ser pensado **a partir desse momento**, não como se o gráfico ainda estivesse “antes” de um rompimento que **já está desenhado** nas velas à direita.
+- **Nunca** sugira como principal plano algo do tipo “comprar só se romper 202.000” se, **no próprio print**, o preço **já estiver acima de 202.000** (o rompimento/gatilho **já ocorreu**). Isso torna o sinal **inatendível** e confunde o usuário.
+- Se o gatilho **já foi atingido** no print:
+  - Prefira **reformular**: entrada **a mercado** ou **limite próximo ao último preço visível**, **pullback** para zona X **se** o preço recuar, ou **NÃO OPERAR** se não houver edge (ex.: compra só faz sentido em recuo e o preço já está esticado).
+  - Deixe explícito no texto: “No print, cotação já em XXX — rompimento de YYY já realizado; plano ajustado para …”
+- Se recomendar **COMPRA** ou **VENDA**, a entrada (preço ou zona) deve ser **logicamente compatível** com onde o preço está **no print**: ou é executável **na hora**, ou é uma ordem pendente **clara** (ex.: “só comprar se voltar a testar 202.100”) com preço atual citado.
+- Campo **"gatilho_ja_ocorreu_no_print"** no JSON: **true** se o nível-chave da tese **já foi rompido/testado** no momento da imagem; **false** caso contrário. Se **true**, a **"entrada"** não pode depender daquele mesmo rompimento como se ainda fosse futuro.
+
 Analise o gráfico fornecido e siga rigorosamente este processo:
 
 1. Identifique o contexto:
@@ -60,6 +70,9 @@ FORMATAÇÃO DE PREÇOS E NÍVEIS (obrigatório — alinhado ao eixo do gráfico
 Formato da resposta (OBRIGATÓRIO JSON):
 
 {
+  "preco_referencia_print": "última cotação ou preço lido no eixo/boleta no formato xxx.xxx — ou \"não visível\"",
+  "preco_referencia_como_detectado": "onde leu (ex.: régua direita, topo da boleta, último número do eixo)",
+  "gatilho_ja_ocorreu_no_print": false,
   "ativo": "ex.: WINJ26 | PETR4 | WDOF26 | BOVA11 — exatamente como no print, ou \"não identificado\"",
   "ativo_como_detectado": "ex.: legenda superior mostra PETR4 | canto esquerdo WINJ26 | não visível",
   "timeframe": "ex.: 5m | 15m | 1m | 1h | não identificado — use o que estiver visível no print",

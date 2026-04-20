@@ -11,7 +11,8 @@ Analise o gráfico novamente e avalie:
 0. O **ticker (ativo)** declarado pelo trader corresponde ao símbolo visível no print (ou foi marcado como não identificado de forma honesta)?
 1. O timeframe declarado pelo trader bate com o que está visível na imagem (ou foi honestamente marcado como não identificado)?
 2. A análise faz sentido técnico **para esse timeframe e para esse tipo de ativo**?
-3. O ponto de entrada é plausível (não precisa ser “perfeito”)?
+2b. **Momento do print:** comparando o **preço visível agora** no gráfico (eixo/cotação) com o plano do trader — o gatilho de entrada **ainda está à frente** ou **já foi ultrapassado**? Se o trader descreve “comprar acima de X” / “vender abaixo de Y” mas o preço **já passou** desse nível no próprio print, o plano está **defasado**; exija reformulação (mercado, pullback, nova zona) ou **reprove** se continuar sendo um setup “do passado” inoperável.
+3. O ponto de entrada é plausível **no instante da imagem** (não precisa ser “perfeito”, mas precisa ser **executável ou claramente pendente**)?
 4. O stop está aceitável em relação à estrutura?
 5. O risco/retorno declarado pelo trader é **pelo menos ~1:2** (aceite leve variação de redação, ex.: “1:1.8” só reprove se for claramente abaixo de 1:1.5)?
 6. O mercado está **inoperável** (caótico/lateral sem gatilho) ou ainda há leitura utilizável?
