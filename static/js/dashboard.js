@@ -1425,4 +1425,733 @@
         }
       });
   });
+
+  // =========================================================================
+  // MONITOR AO VIVO — Tab switching + TradingView + Sinais + Notícias
+  // =========================================================================
+
+  // ---- Tab switching ----
+  var tvWidget = null;   // instância TradingView
+
+  function showTab(tabName) {
+    document.querySelectorAll(".tab-pane").forEach(function (pane) {
+      pane.classList.toggle("tab-active", pane.id === "tab-" + tabName);
+    });
+    document.querySelectorAll(".main-tab-btn").forEach(function (btn) {
+      var active = btn.getAttribute("data-tab") === tabName;
+      btn.classList.toggle("is-active", active);
+      btn.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    if (tabName === "monitor" && !tvWidget) {
+      initTradingViewWidget();
+    }
+  }
+
+  document.querySelectorAll(".main-tab-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      showTab(btn.getAttribute("data-tab") || "dashboard");
+    });
+  });
+
+  // ---- TradingView Widget ----
+  function getTvSymbol() {
+    var sel = document.getElementById("mon-instrument");
+    if (!sel) return "BMFBOVESPA:WIN1!";
+    var val = sel.value;
+    if (val === "__custom__") {
+      var custom = document.getElementById("mon-custom-tv");
+      return (custom && custom.value.trim()) || "BMFBOVESPA:WIN1!";
+    }
+    return val;
+  }
+
+  function getTvInterval() {
+    var sel = document.getElementById("mon-interval");
+    return (sel && sel.value) || "15";
+  }
+
+  function initTradingViewWidget(symbol, interval) {
+    symbol   = symbol   || getTvSymbol();
+    interval = interval || getTvInterval();
+
+    var container = document.getElementById("tradingview_chart");
+    if (!container) return;
+    container.innerHTML = "";
+
+    if (typeof TradingView === "undefined") {
+      container.innerHTML = '<p style="padding:1rem;color:var(--text-muted)">TradingView não carregou. Verifique sua conexão.</p>';
+      return;
+    }
+
+    try {
+      tvWidget = new TradingView.widget({
+        width:  "100%",
+        height: 520,
+        symbol: symbol,
+        interval: interval,
+        timezone: "America/Sao_Paulo",
+        theme: "dark",
+        style: "1",
+        locale: "br",
+        toolbar_bg: "#151d28",
+        enable_publishing: false,
+        allow_symbol_change: true,
+        hide_top_toolbar: false,
+        hide_legend: false,
+        save_image: false,
+        container_id: "tradingview_chart",
+        studies: ["MAExp@tv-basicstudies", "RSI@tv-basicstudies", "MACD@tv-basicstudies"],
+      });
+    } catch (e) {
+      console.warn("TradingView widget error:", e);
+      container.innerHTML = '<p style="padding:2rem;color:var(--danger);text-align:center">Erro ao carregar TradingView: ' + e.message + '</p>';
+    }
+  }
+
+  // ---- Instrument selector ----
+  var monInstrumentSel = document.getElementById("mon-instrument");
+  var monCustomWrap    = document.getElementById("mon-custom-wrap");
+
+  if (monInstrumentSel) {
+    monInstrumentSel.addEventListener("change", function () {
+      if (monCustomWrap) monCustomWrap.hidden = this.value !== "__custom__";
+    });
+  }
+
+  // ---- Notificações do browser ----
+  var notifEnabled      = false;
+  var lastNotifiedAcao  = null;   // rastreia último sinal notificado para evitar spam
+
+  function updateNotifStatus() {
+    var el      = document.getElementById("mon-notif-status");
+    var testBtn = document.getElementById("mon-notif-test-btn");
+    if (!el) return;
+    if (!("Notification" in window)) {
+      el.textContent = "🔕 Notificações não suportadas";
+      el.className = "mon-notif-status mon-notif-status--off";
+      return;
+    }
+    if (Notification.permission === "granted" && notifEnabled) {
+      el.textContent = "🔔 Notificações ativas";
+      el.className = "mon-notif-status mon-notif-status--on";
+      if (testBtn) testBtn.style.display = "";
+    } else if (Notification.permission === "denied") {
+      el.textContent = "🔕 Bloqueadas pelo browser";
+      el.className = "mon-notif-status mon-notif-status--off";
+      if (testBtn) testBtn.style.display = "none";
+    } else {
+      el.textContent = "🔕 Clique em 🔔 Notificações para ativar";
+      el.className = "mon-notif-status mon-notif-status--off";
+      if (testBtn) testBtn.style.display = "none";
+    }
+  }
+
+  function showNotifHelp(show) {
+    var el = document.getElementById("mon-notif-help");
+    if (el) el.style.display = show ? "" : "none";
+  }
+
+  async function requestNotifications() {
+    if (!("Notification" in window)) {
+      alert("Seu browser não suporta notificações.");
+      return;
+    }
+    if (Notification.permission === "denied") {
+      alert("Notificações bloqueadas. Clique no cadeado (🔒) na barra de endereços e permita notificações para este site.");
+      return;
+    }
+    var perm = Notification.permission === "granted"
+      ? "granted"
+      : await Notification.requestPermission();
+
+    notifEnabled = perm === "granted";
+    updateNotifStatus();
+    if (notifEnabled) {
+      // Notificação de confirmação — se aparecer, o macOS está configurado corretamente
+      fireOsNotification(
+        "🔔 Trade AI — Notificações ativas!",
+        "Você verá alertas de COMPRA e VENDA mesmo com o browser minimizado.",
+        "trade-ai-test",
+        false   // requireInteraction = false para a de teste
+      );
+      // Mostra painel de ajuda caso o usuário não veja nada
+      showNotifHelp(true);
+    }
+  }
+
+  function fireOsNotification(title, body, tag, sticky) {
+    // Envia notificação nativa do SO. sticky=true → fica na tela até dispensar.
+    try {
+      var n = new Notification(title, {
+        body:               body,
+        tag:                tag || "trade-ai",
+        requireInteraction: !!sticky,
+        silent:             false,
+      });
+      n.onclick = function () { window.focus(); n.close(); };
+      return true;
+    } catch (e) {
+      console.warn("Notification error:", e);
+      return false;
+    }
+  }
+
+  function sendTestNotification() {
+    if (!notifEnabled || Notification.permission !== "granted") {
+      updateNotifStatus();
+      return;
+    }
+    fireOsNotification(
+      "🟢 COMPRA — Teste Trade AI",
+      "Entrada: 128.350 | Stop: 127.900 | TP1: 129.200 | Score: +5",
+      "trade-ai-test-signal",
+      true   // sticky — fica até você dispensar
+    );
+    showNotifHelp(true);
+  }
+
+  function sendTradeNotification(data) {
+    if (!notifEnabled || Notification.permission !== "granted") return false;
+    var acao = (data.acao || "").toUpperCase();
+    if (acao === "NEUTRO" || !acao) return false;
+
+    var emoji = acao === "COMPRA" ? "🟢" : "🔴";
+    var sym   = data.tv_symbol || data.yf_symbol || "—";
+    var title = emoji + " " + acao + " — " + sym;
+    var body  = [
+      "Entrada: " + (data.entrada != null ? fmtPreco(data.entrada) : "—"),
+      "Stop: "    + (data.stop    != null ? fmtPreco(data.stop)    : "—"),
+      "TP1: "     + (data.tp1     != null ? fmtPreco(data.tp1)     : "—"),
+      "Score: "   + (data.score   != null ? (data.score > 0 ? "+" + data.score : data.score) : "—"),
+    ].join(" | ");
+
+    // requireInteraction: true → notificação fica na tela até o usuário dispensar
+    return fireOsNotification(title, body, "trade-signal-" + acao, true);
+  }
+
+  // ---- In-page toast notification (sempre visível, sem depender do SO) ----
+  function showInPageToast(acao, data) {
+    // Garante container
+    var container = document.getElementById("trade-toast-container");
+    if (!container) {
+      container = document.createElement("div");
+      container.id = "trade-toast-container";
+      document.body.appendChild(container);
+    }
+
+    var isCompra = acao === "COMPRA";
+    var emoji = isCompra ? "🟢" : "🔴";
+    var sym = data.tv_symbol || data.yf_symbol || "";
+    var entradaStr = data.entrada != null ? fmtPreco(data.entrada) : "—";
+    var stopStr    = data.stop    != null ? fmtPreco(data.stop)    : "—";
+    var tp1Str     = data.tp1     != null ? fmtPreco(data.tp1)     : "—";
+    var scoreStr   = data.score   != null ? (data.score > 0 ? "+" + data.score : data.score) : "—";
+
+    var toast = document.createElement("div");
+    toast.className = "trade-toast trade-toast--" + acao.toLowerCase();
+    toast.innerHTML =
+      '<div class="trade-toast__icon">' + emoji + '</div>' +
+      '<div class="trade-toast__body">' +
+        '<div class="trade-toast__title">' + acao + (sym ? " — " + sym : "") + '</div>' +
+        '<div class="trade-toast__details">' +
+          "Entrada: " + entradaStr + " &nbsp;|&nbsp; Stop: " + stopStr + "<br>" +
+          "TP1: " + tp1Str + " &nbsp;|&nbsp; Score: " + scoreStr +
+        '</div>' +
+      '</div>' +
+      '<button class="trade-toast__close" title="Fechar">✕</button>';
+
+    // Fechar ao clicar
+    toast.addEventListener("click", function () { removeToast(toast); });
+
+    container.appendChild(toast);
+
+    // Auto-remove após 12 segundos
+    var autoTimer = setTimeout(function () { removeToast(toast); }, 12000);
+    toast._autoTimer = autoTimer;
+  }
+
+  function removeToast(toast) {
+    if (toast._autoTimer) clearTimeout(toast._autoTimer);
+    toast.classList.add("trade-toast--hiding");
+    setTimeout(function () {
+      if (toast.parentNode) toast.parentNode.removeChild(toast);
+    }, 450);
+  }
+
+  // ---- Alerta visual: pisca o título da aba ----
+  var _titleTimer   = null;
+  var _originalTitle = document.title;
+
+  function flashPageTitle(acao, symbol) {
+    if (_titleTimer) { clearInterval(_titleTimer); _titleTimer = null; }
+    var emoji  = acao === "COMPRA" ? "🟢" : "🔴";
+    var alert  = emoji + " " + acao + " " + (symbol || "") + " — Trade AI";
+    var toggle = false;
+    var count  = 0;
+    _titleTimer = setInterval(function () {
+      document.title = toggle ? alert : _originalTitle;
+      toggle = !toggle;
+      count++;
+      if (count >= 20) {           // pisca 10x (20 trocas) e para
+        clearInterval(_titleTimer);
+        _titleTimer = null;
+        document.title = _originalTitle;
+      }
+    }, 700);
+  }
+
+  // Restaura título ao mudar de aba ou fechar monitor
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden && _titleTimer) {
+      clearInterval(_titleTimer);
+      _titleTimer = null;
+      document.title = _originalTitle;
+    }
+  });
+
+  // ---- Alerta sonoro via Web Audio API ----
+  function playAlertBeep(acao) {
+    try {
+      var ctx  = new (window.AudioContext || window.webkitAudioContext)();
+      // COMPRA: dois beeps subindo; VENDA: dois beeps descendo
+      var freqs = acao === "COMPRA" ? [440, 660] : [660, 440];
+      freqs.forEach(function (freq, i) {
+        var osc  = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type      = "sine";
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.35, ctx.currentTime + i * 0.22);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.22 + 0.35);
+        osc.start(ctx.currentTime + i * 0.22);
+        osc.stop(ctx.currentTime  + i * 0.22 + 0.35);
+      });
+      setTimeout(function () { ctx.close(); }, 1500);
+    } catch (e) {
+      // Web Audio não disponível — ignora silenciosamente
+    }
+  }
+
+  document.getElementById("mon-notif-btn")?.addEventListener("click", requestNotifications);
+  document.getElementById("mon-notif-test-btn")?.addEventListener("click", sendTestNotification);
+  document.getElementById("mon-notif-help-close")?.addEventListener("click", function () { showNotifHelp(false); });
+  updateNotifStatus();
+
+  // ---- Monitor state ----
+  var monitorActive    = false;
+  var monitorTimer     = null;
+  var monitorAlerts    = [];
+
+  function monSetStatus(text) {
+    var el = document.getElementById("mon-status-text");
+    if (el) el.textContent = text;
+  }
+
+  function monSetLoading(loading) {
+    var loadEl  = document.getElementById("mon-loading");
+    var errEl   = document.getElementById("mon-error");
+    var sigEl   = document.getElementById("mon-signal-content");
+    var idleEl  = document.getElementById("mon-signal-idle");
+    if (loadEl) loadEl.hidden = !loading;
+    if (loading) {
+      if (errEl) errEl.hidden = true;
+      if (idleEl) idleEl.hidden = true;
+    }
+  }
+
+  function monShowError(msg) {
+    var loadEl    = document.getElementById("mon-loading");
+    var errEl     = document.getElementById("mon-error");
+    var errText   = document.getElementById("mon-error-text");
+    var errHint   = document.getElementById("mon-error-hint");
+    var idleEl    = document.getElementById("mon-signal-idle");
+    var sigEl     = document.getElementById("mon-signal-content");
+    if (loadEl) loadEl.hidden = true;
+    if (idleEl) idleEl.hidden = true;
+    if (sigEl)  sigEl.hidden  = true;
+    if (errEl)  errEl.hidden  = false;
+
+    var displayMsg = msg || "Erro desconhecido.";
+    var hint       = "";
+
+    // Detecta causas comuns e sugere solução
+    if (/yfinance|No module named/i.test(displayMsg)) {
+      displayMsg = "Biblioteca yfinance não instalada.";
+      hint = "Execute no terminal: pip install yfinance pandas numpy requests";
+    } else if (/ConnectionError|timeout|HTTPSConnection|RemoteDisconnected/i.test(displayMsg)) {
+      displayMsg = "Sem conexão com Yahoo Finance.";
+      hint = "Verifique sua conexão com a internet e tente novamente.";
+    } else if (/empty|no data|Dados não disponíveis/i.test(displayMsg)) {
+      displayMsg = "Dados não disponíveis para este instrumento/intervalo.";
+      hint = "Tente outro intervalo de tempo ou aguarde — Yahoo Finance pode ter delay.";
+    }
+
+    if (errText) errText.textContent = displayMsg;
+    if (errHint) {
+      errHint.textContent = hint;
+      errHint.style.display = hint ? "" : "none";
+    }
+  }
+
+  function monShowSignal(data) {
+    var loadEl  = document.getElementById("mon-loading");
+    var errEl   = document.getElementById("mon-error");
+    var sigEl   = document.getElementById("mon-signal-content");
+    var idleEl  = document.getElementById("mon-signal-idle");
+    if (loadEl) loadEl.hidden = true;
+    if (errEl)  errEl.hidden  = true;
+    if (idleEl) idleEl.hidden = true;
+    if (sigEl)  sigEl.hidden  = false;
+
+    function setText(id, val) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = (val != null && val !== "") ? String(val) : "—";
+    }
+
+    var acao = (data.acao || "NEUTRO").toUpperCase();
+
+    // Badge de sinal
+    var badge = document.getElementById("mon-signal-badge");
+    if (badge) {
+      badge.textContent = acao;
+      badge.className = "mon-signal-badge";
+      if (acao === "COMPRA") badge.classList.add("mon-signal-badge--buy");
+      else if (acao === "VENDA") badge.classList.add("mon-signal-badge--sell");
+      else badge.classList.add("mon-signal-badge--neutral");
+    }
+
+    setText("mon-score",       data.score != null ? (data.score > 0 ? "+" + data.score : data.score) : "—");
+    setText("mon-forca",       data.forca  || "—");
+    setText("mon-preco-atual", data.preco_atual != null ? fmtPreco(data.preco_atual) : "—");
+    setText("mon-entrada",     data.entrada    != null ? fmtPreco(data.entrada) : "—");
+    setText("mon-stop",        data.stop       != null ? fmtPreco(data.stop) : "—");
+    setText("mon-tp1",         data.tp1        != null ? fmtPreco(data.tp1) : "—");
+    setText("mon-tp2",         data.tp2        != null ? fmtPreco(data.tp2) : "—");
+    setText("mon-tp3",         data.tp3        != null ? fmtPreco(data.tp3) : "—");
+    setText("mon-rsi",         data.rsi       != null ? data.rsi + " / 100" : "—");
+    setText("mon-adx",         data.adx       != null ? data.adx + (data.adx_filtered ? " ⚠️" : "") : "—");
+    setText("mon-vwap",        data.vwap      != null ? fmtPreco(data.vwap) : "—");
+    setText("mon-atr",         data.atr       != null ? fmtPreco(data.atr) : "—");
+    setText("mon-ema9",        data.ema9      != null ? fmtPreco(data.ema9) : "—");
+    setText("mon-ema21",       data.ema21     != null ? fmtPreco(data.ema21) : "—");
+    setText("mon-ema50",       data.ema50     != null ? fmtPreco(data.ema50) : "—");
+    setText("mon-macd-hist",   data.macd_hist != null ? data.macd_hist : "—");
+    setText("mon-suporte",     data.suporte   != null ? fmtPreco(data.suporte) : "—");
+    setText("mon-resistencia", data.resistencia != null ? fmtPreco(data.resistencia) : "—");
+
+    // +DI / -DI
+    if (data.plus_di != null && data.minus_di != null) {
+      setText("mon-di", "+" + data.plus_di + " / −" + data.minus_di);
+    } else {
+      setText("mon-di", "—");
+    }
+
+    // Higher timeframe
+    var htfEl = document.getElementById("mon-htf");
+    if (htfEl) {
+      if (data.htf_trend === "alta") {
+        htfEl.textContent = "🟢 ALTA";
+        htfEl.style.color = "var(--success)";
+      } else if (data.htf_trend === "baixa") {
+        htfEl.textContent = "🔴 BAIXA";
+        htfEl.style.color = "var(--danger)";
+      } else {
+        htfEl.textContent = "—";
+        htfEl.style.color = "";
+      }
+    }
+
+    // Padrões de candle
+    var candleList = document.getElementById("mon-candles-list");
+    if (candleList) {
+      var patterns = Array.isArray(data.candle_patterns) ? data.candle_patterns : [];
+      if (patterns.length === 0) {
+        candleList.innerHTML = "<li class='muted'>Nenhum padrão identificado no candle atual.</li>";
+      } else {
+        candleList.innerHTML = "";
+        patterns.forEach(function (p) {
+          var li = document.createElement("li");
+          li.textContent = p;
+          candleList.appendChild(li);
+        });
+      }
+    }
+
+    // Lista de confluências — com colorização por score anotado
+    var sinaisList = document.getElementById("mon-sinais-list");
+    if (sinaisList) {
+      sinaisList.innerHTML = "";
+      var sinais = Array.isArray(data.sinais) ? data.sinais : [];
+      if (sinais.length === 0) {
+        sinaisList.innerHTML = "<li class='muted'>Nenhuma confluência detectada.</li>";
+      } else {
+        sinais.forEach(function (s) {
+          var li = document.createElement("li");
+          li.textContent = s;
+          // Coloriza baseado na anotação de score ou em palavras-chave
+          var hasBull = /\[\+\d/.test(s) || /🟢/.test(s);
+          var hasBear = /\[-\d/.test(s)  || /🔴/.test(s);
+          var isFilter = /\[filtro\]/.test(s) || /ADX/.test(s) || /⚠️/.test(s);
+          if (hasBull && !hasBear)   li.style.color = "var(--success)";
+          else if (hasBear && !hasBull) li.style.color = "var(--danger)";
+          else if (isFilter)         li.style.color = "var(--warning)";
+          else                       li.style.color = "var(--text-muted)";
+          sinaisList.appendChild(li);
+        });
+      }
+    }
+
+    // Timestamp
+    var ts = data.timestamp ? new Date(data.timestamp).toLocaleTimeString("pt-BR") : "—";
+    setText("mon-last-update", ts);
+    setText("mon-yf-symbol",   data.yf_symbol || "—");
+  }
+
+  function fmtPreco(v) {
+    if (v == null) return "—";
+    var n = parseFloat(v);
+    if (isNaN(n)) return String(v);
+    // Detecta se é preço grande (ex: Ibovespa ~128000) ou pequeno (ex: câmbio ~5.8)
+    if (n >= 1000) return n.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 3 });
+  }
+
+  function fetchSignals() {
+    var tvSym  = getTvSymbol();
+    var ivl    = getTvInterval();
+    var url    = (cfg.monitorSignalsUrl || "/api/monitor/signals")
+                 + "?tv_symbol=" + encodeURIComponent(tvSym)
+                 + "&interval=" + encodeURIComponent(ivl);
+
+    monSetLoading(true);
+    monSetStatus("Buscando dados para " + tvSym + "…");
+
+    fetch(url, { credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        monSetLoading(false);
+        if (!data.ok) {
+          monShowError(data.error || "Erro desconhecido.");
+          monSetStatus("⚠ " + (data.error || "Erro ao buscar sinal."));
+          return;
+        }
+        monShowSignal(data);
+        var now = new Date().toLocaleTimeString("pt-BR");
+        var adxNote = data.adx_filtered ? " · ADX fraco (range)" : "";
+        var htfNote = data.htf_trend ? " · 1h: " + data.htf_trend : "";
+        monSetStatus("✓ Atualizado às " + now + " · " + tvSym + adxNote + htfNote);
+        // Notificação: dispara quando o sinal MUDA para COMPRA ou VENDA.
+        // NEUTRO reseta o rastreador → próximo COMPRA/VENDA dispara novo alerta.
+        var acao = (data.acao || "").toUpperCase();
+        var isNotified = false;
+        if (acao === "NEUTRO" || !acao) {
+          lastNotifiedAcao = null;
+        } else if ((acao === "COMPRA" || acao === "VENDA") && acao !== lastNotifiedAcao) {
+          lastNotifiedAcao = acao;
+          isNotified = true;
+          showInPageToast(acao, data);
+          sendTradeNotification(data);
+          flashPageTitle(acao, data.tv_symbol || "");
+          playAlertBeep(acao);
+        }
+        addMonitorAlert(data, isNotified);
+      })
+      .catch(function (err) {
+        monSetLoading(false);
+        monShowError("Falha de rede: " + (err.message || "erro desconhecido."));
+        monSetStatus("⚠ Falha de rede.");
+      });
+  }
+
+  function addMonitorAlert(data, notified) {
+    var acao = (data.acao || "NEUTRO").toUpperCase();
+    if (acao === "NEUTRO") return;
+
+    var now = new Date().toLocaleTimeString("pt-BR");
+    var alert = {
+      hora:      now,
+      simbolo:   data.tv_symbol || "—",
+      sinal:     acao,
+      score:     data.score,
+      preco:     data.preco_atual,
+      entrada:   data.entrada,
+      stop:      data.stop,
+      tp1:       data.tp1,
+      notified:  !!notified,   // flag: este alerta gerou notificação
+    };
+    monitorAlerts.unshift(alert);
+    renderMonitorAlerts();
+  }
+
+  function renderMonitorAlerts() {
+    var empty = document.getElementById("mon-alerts-empty");
+    var wrap  = document.getElementById("mon-alerts-wrap");
+    var tbody = document.getElementById("mon-alerts-body");
+    if (!tbody) return;
+
+    if (monitorAlerts.length === 0) {
+      if (empty) empty.hidden = false;
+      if (wrap)  wrap.hidden  = true;
+      return;
+    }
+
+    if (empty) empty.hidden = true;
+    if (wrap)  wrap.hidden  = false;
+
+    tbody.innerHTML = "";
+    monitorAlerts.slice(0, 50).forEach(function (a) {
+      var tr = document.createElement("tr");
+      var badgeClass = a.sinal === "COMPRA" ? "badge ok" : "badge no";
+
+      // Linha destacada para alertas que geraram notificação
+      if (a.notified) {
+        tr.className = "mon-alert-row--notified";
+      }
+
+      // Coluna de hora: se notificou, adiciona ícone 🔔
+      var horaCell = escapeHtml(a.hora) + (a.notified ? " <span class='mon-alert-notif-badge' title='Gerou notificação'>🔔</span>" : "");
+
+      tr.innerHTML =
+        "<td>" + horaCell + "</td>" +
+        "<td>" + escapeHtml(a.simbolo) + "</td>" +
+        "<td><span class='" + badgeClass + "'>" + escapeHtml(a.sinal) + "</span></td>" +
+        "<td>" + (a.score != null ? (a.score > 0 ? "+" + a.score : a.score) : "—") + "</td>" +
+        "<td>" + (a.preco   != null ? fmtPreco(a.preco)   : "—") + "</td>" +
+        "<td>" + (a.entrada != null ? fmtPreco(a.entrada) : "—") + "</td>" +
+        "<td>" + (a.stop    != null ? fmtPreco(a.stop)    : "—") + "</td>" +
+        "<td>" + (a.tp1     != null ? fmtPreco(a.tp1)     : "—") + "</td>";
+      tbody.appendChild(tr);
+    });
+  }
+
+  function startMonitor() {
+    if (monitorActive) stopMonitor();
+
+    // Solicita permissão de notificação automaticamente ao iniciar
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission().then(function (perm) {
+        notifEnabled = perm === "granted";
+        updateNotifStatus();
+      });
+    } else if (Notification.permission === "granted") {
+      notifEnabled = true;
+      updateNotifStatus();
+    }
+
+    // Reinicia o widget TradingView com o novo símbolo
+    initTradingViewWidget();
+
+    // Atualiza label do gráfico
+    var tvSym  = getTvSymbol();
+    var label  = document.getElementById("mon-chart-label");
+    var selOpt = document.getElementById("mon-instrument");
+    var instrLabel = selOpt ? (selOpt.options[selOpt.selectedIndex]?.text || tvSym) : tvSym;
+    if (label) label.textContent = "Gráfico — " + instrLabel;
+
+    monitorActive = true;
+    fetchSignals();     // imediato
+
+    var refreshSec = parseInt(
+      (document.getElementById("mon-refresh") || {}).value || "300", 10
+    );
+    if (refreshSec > 0) {
+      monitorTimer = setInterval(fetchSignals, refreshSec * 1000);
+    }
+
+    var btn = document.getElementById("mon-start-btn");
+    if (btn) {
+      btn.textContent = "⏹ Parar";
+      btn.classList.add("btn--active");
+    }
+
+    // Busca notícias ao iniciar
+    fetchNews();
+  }
+
+  function stopMonitor() {
+    monitorActive    = false;
+    lastNotifiedAcao = null;   // reseta para notificar novamente ao reiniciar
+    if (monitorTimer) {
+      clearInterval(monitorTimer);
+      monitorTimer = null;
+    }
+    var btn = document.getElementById("mon-start-btn");
+    if (btn) {
+      btn.textContent = "▶ Iniciar";
+      btn.classList.remove("btn--active");
+    }
+    monSetStatus("Monitoramento pausado.");
+  }
+
+  document.getElementById("mon-start-btn")?.addEventListener("click", function () {
+    if (monitorActive) {
+      stopMonitor();
+    } else {
+      startMonitor();
+    }
+  });
+
+  document.getElementById("mon-clear-alerts")?.addEventListener("click", function () {
+    monitorAlerts = [];
+    renderMonitorAlerts();
+  });
+
+  // ---- Notícias Finnhub ----
+  function fetchNews() {
+    var newsUrl = (cfg.marketNewsUrl || "/api/market/news") + "?category=general";
+    fetch(newsUrl, { credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var statusEl = document.getElementById("mon-finnhub-status");
+        if (statusEl) {
+          if (data.finnhub_configured) {
+            statusEl.textContent = "Finnhub: ✓ ativo";
+            statusEl.className = "mon-finnhub-badge mon-finnhub-badge--ok";
+          } else {
+            statusEl.textContent = "Finnhub: sem chave de API";
+            statusEl.className = "mon-finnhub-badge mon-finnhub-badge--warn";
+          }
+        }
+        renderNews(data.items || [], data.error);
+      })
+      .catch(function () {});
+  }
+
+  function renderNews(items, error) {
+    var container = document.getElementById("mon-news-list");
+    if (!container) return;
+
+    if (!items || items.length === 0) {
+      container.innerHTML =
+        '<p class="muted" style="padding:1rem">' +
+        (error
+          ? "⚠ " + escapeHtml(error)
+          : "Nenhuma notícia disponível. Configure <code>FINNHUB_API_KEY</code> no <code>.env</code> para ativar.") +
+        "</p>";
+      return;
+    }
+
+    var html = "";
+    items.forEach(function (item) {
+      var ts    = item.datetime ? new Date(item.datetime * 1000).toLocaleString("pt-BR") : "";
+      var title = item.headline || item.title || "Sem título";
+      var src   = item.source || "";
+      var url   = item.url || "#";
+      html +=
+        '<div class="mon-news-item">' +
+          '<div class="mon-news-meta">' +
+            '<span class="mon-news-source">' + escapeHtml(src) + "</span>" +
+            '<span class="mon-news-time">' + escapeHtml(ts) + "</span>" +
+          "</div>" +
+          '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener" class="mon-news-title">' +
+            escapeHtml(title) +
+          "</a>" +
+        "</div>";
+    });
+    container.innerHTML = html;
+  }
+
+  document.getElementById("mon-news-refresh-btn")?.addEventListener("click", fetchNews);
+
 })();

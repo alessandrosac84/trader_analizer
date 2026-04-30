@@ -27,6 +27,19 @@
       </div>
     </header>
 
+    <!-- Navegação entre abas principais -->
+    <nav class="main-tabs" role="tablist" aria-label="Seções principais">
+      <button class="main-tab-btn is-active" data-tab="dashboard" role="tab" aria-selected="true">
+        📊 Dashboard
+      </button>
+      <button class="main-tab-btn" data-tab="monitor" role="tab" aria-selected="false">
+        🔴 Monitor ao vivo
+      </button>
+    </nav>
+
+    <!-- ===================== ABA DASHBOARD ===================== -->
+    <div id="tab-dashboard" class="tab-pane tab-active">
+
     <section class="card stats-dashboard" id="stats-dashboard">
       <h2>Meu desempenho</h2>
       <p class="stats-dashboard__note">
@@ -193,7 +206,7 @@
         <div class="trade-tp-section">
           <h4>Alvos &amp; probabilidade</h4>
           <p class="trade-tp-sub">
-            Preço de saída <strong>estimado</strong> a partir da entrada do plano e dos pontos (WIN: 1 pt ≈ 0,001 no eixo; ações: referência em centavos por “pt”).
+            Preço de saída <strong>estimado</strong> a partir da entrada do plano e dos pontos (WIN: 1 pt ≈ 0,001 no eixo; ações: referência em centavos por "pt").
           </p>
           <div id="trade-tp-body"></div>
         </div>
@@ -324,8 +337,245 @@
       {% endif %}
     </section>
 
+    </div><!-- /tab-pane #tab-dashboard -->
+
+    <!-- ===================== ABA MONITOR ===================== -->
+    <div id="tab-monitor" class="tab-pane">
+
+      <!-- Controles do Monitor -->
+      <section class="card monitor-controls">
+        <div class="monitor-controls__row">
+          <div class="monitor-field">
+            <label for="mon-instrument">Instrumento</label>
+            <select id="mon-instrument" class="mon-select">
+              <option value="BMFBOVESPA:WIN1!" data-yf="^BVSP">Mini Índice (WIN1!)</option>
+              <option value="BMFBOVESPA:WDO1!" data-yf="BRL=X">Mini Dólar (WDO1!)</option>
+              <option value="BMFBOVESPA:IBOV" data-yf="^BVSP">Ibovespa</option>
+              <option value="BMFBOVESPA:PETR4" data-yf="PETR4.SA">Petrobras (PETR4)</option>
+              <option value="BMFBOVESPA:VALE3" data-yf="VALE3.SA">Vale (VALE3)</option>
+              <option value="BMFBOVESPA:ITUB4" data-yf="ITUB4.SA">Itaú (ITUB4)</option>
+              <option value="BMFBOVESPA:BBDC4" data-yf="BBDC4.SA">Bradesco (BBDC4)</option>
+              <option value="BMFBOVESPA:BBAS3" data-yf="BBAS3.SA">Banco do Brasil (BBAS3)</option>
+              <option value="BMFBOVESPA:ABEV3" data-yf="ABEV3.SA">Ambev (ABEV3)</option>
+              <option value="BMFBOVESPA:WEGE3" data-yf="WEGE3.SA">WEG (WEGE3)</option>
+              <option value="__custom__">Personalizado…</option>
+            </select>
+          </div>
+          <div class="monitor-field" id="mon-custom-wrap" hidden>
+            <label for="mon-custom-tv">Símbolo TradingView</label>
+            <input type="text" id="mon-custom-tv" class="mon-input" placeholder="ex: BMFBOVESPA:PETR4" />
+          </div>
+          <div class="monitor-field">
+            <label for="mon-interval">Timeframe</label>
+            <select id="mon-interval" class="mon-select">
+              <option value="1">1 minuto</option>
+              <option value="5">5 minutos</option>
+              <option value="15" selected>15 minutos</option>
+              <option value="30">30 minutos</option>
+              <option value="60">1 hora</option>
+              <option value="D">Diário</option>
+            </select>
+          </div>
+          <div class="monitor-field">
+            <label for="mon-refresh">Atualizar a cada</label>
+            <select id="mon-refresh" class="mon-select">
+              <option value="60">1 minuto</option>
+              <option value="300" selected>5 minutos</option>
+              <option value="900">15 minutos</option>
+              <option value="0">Desligado</option>
+            </select>
+          </div>
+          <div class="monitor-field monitor-field--action">
+            <label>&nbsp;</label>
+            <div class="mon-action-row">
+              <button type="button" class="btn" id="mon-start-btn">▶ Iniciar</button>
+              <button type="button" class="btn btn-ghost" id="mon-notif-btn" title="Ativar notificações do sistema">🔔 Notificações</button>
+              <button type="button" class="btn btn-ghost" id="mon-notif-test-btn" title="Enviar notificação de teste agora" style="display:none">📣 Testar</button>
+            </div>
+          </div>
+        </div>
+        <div class="monitor-status-bar" id="mon-status-bar">
+          <span id="mon-status-text">Configure o instrumento e clique em Iniciar.</span>
+          <div class="monitor-status-right">
+            <span id="mon-notif-status" class="mon-notif-status mon-notif-status--off">🔕 Notificações desativadas</span>
+            <span class="monitor-delay-badge">⚠️ Dados com delay (Yahoo Finance / gratuito)</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Painel de ajuda: notificações macOS -->
+      <div id="mon-notif-help" class="mon-notif-help" style="display:none">
+        <div class="mon-notif-help__icon">🍎</div>
+        <div class="mon-notif-help__body">
+          <strong>Libere as notificações no macOS para receber alertas mesmo com o browser em segundo plano:</strong>
+          <ol>
+            <li>Abra <strong>Configurações do Sistema</strong> → <strong>Notificações</strong></li>
+            <li>Encontre seu browser (<strong>Chrome</strong>, <strong>Safari</strong> ou <strong>Firefox</strong>) na lista</li>
+            <li>Em "Estilo de alerta", escolha <strong>Alertas</strong> (ficam na tela até você dispensar)</li>
+            <li>Ative também <strong>"Mostrar na tela de bloqueio"</strong> se quiser ver com a tela travada</li>
+          </ol>
+          Depois clique em <strong>📣 Testar</strong> para confirmar que está funcionando.
+        </div>
+        <button class="mon-notif-help__close" id="mon-notif-help-close">✕</button>
+      </div>
+
+      <!-- Layout principal: gráfico + painel de sinal -->
+      <div class="monitor-main-grid">
+
+        <!-- TradingView Widget -->
+        <div class="monitor-chart-wrap card">
+          <div class="monitor-chart-header">
+            <span id="mon-chart-label">Gráfico — Mini Índice (WIN1!)</span>
+            <span class="monitor-tv-badge">TradingView (grátis · delay)</span>
+          </div>
+          <div id="tradingview-widget-container">
+            <div id="tradingview_chart" style="width:100%;height:520px;"></div>
+          </div>
+        </div>
+
+        <!-- Painel de sinal -->
+        <div class="monitor-signal-panel card" id="mon-signal-panel">
+          <div class="mon-signal-idle" id="mon-signal-idle">
+            <span class="mon-idle-icon">📡</span>
+            <p>Clique em <strong>Iniciar</strong> para<br>começar o monitoramento.</p>
+          </div>
+
+          <div id="mon-signal-content" hidden>
+            <!-- Sinal principal -->
+            <div class="mon-signal-badge-wrap">
+              <div class="mon-signal-badge" id="mon-signal-badge">—</div>
+              <div class="mon-signal-meta">
+                <span class="mon-score-label">Score: <strong id="mon-score">—</strong></span>
+                <span class="mon-forca" id="mon-forca">—</span>
+              </div>
+            </div>
+
+            <!-- Preços -->
+            <div class="mon-prices-grid">
+              <div class="mon-price-item">
+                <label>Preço atual</label>
+                <span id="mon-preco-atual">—</span>
+              </div>
+              <div class="mon-price-item mon-price-item--entry">
+                <label>Entrada sugerida</label>
+                <span id="mon-entrada">—</span>
+              </div>
+              <div class="mon-price-item mon-price-item--stop">
+                <label>Stop loss</label>
+                <span id="mon-stop">—</span>
+              </div>
+              <div class="mon-price-item mon-price-item--tp">
+                <label>TP1</label>
+                <span id="mon-tp1">—</span>
+              </div>
+              <div class="mon-price-item mon-price-item--tp">
+                <label>TP2</label>
+                <span id="mon-tp2">—</span>
+              </div>
+              <div class="mon-price-item mon-price-item--tp">
+                <label>TP3</label>
+                <span id="mon-tp3">—</span>
+              </div>
+            </div>
+
+            <!-- Indicadores -->
+            <div class="mon-indicators">
+              <h5>Indicadores</h5>
+              <div class="mon-ind-grid">
+                <div class="mon-ind-item"><label>RSI (14)</label><span id="mon-rsi">—</span></div>
+                <div class="mon-ind-item"><label>ADX (14)</label><span id="mon-adx">—</span></div>
+                <div class="mon-ind-item"><label>VWAP</label><span id="mon-vwap">—</span></div>
+                <div class="mon-ind-item"><label>ATR (14)</label><span id="mon-atr">—</span></div>
+                <div class="mon-ind-item"><label>EMA 9</label><span id="mon-ema9">—</span></div>
+                <div class="mon-ind-item"><label>EMA 21</label><span id="mon-ema21">—</span></div>
+                <div class="mon-ind-item"><label>EMA 50</label><span id="mon-ema50">—</span></div>
+                <div class="mon-ind-item"><label>MACD Hist.</label><span id="mon-macd-hist">—</span></div>
+                <div class="mon-ind-item"><label>+DI / -DI</label><span id="mon-di">—</span></div>
+                <div class="mon-ind-item"><label>1h Tendência</label><span id="mon-htf">—</span></div>
+                <div class="mon-ind-item"><label>Suporte</label><span id="mon-suporte">—</span></div>
+                <div class="mon-ind-item"><label>Resistência</label><span id="mon-resistencia">—</span></div>
+              </div>
+            </div>
+
+            <!-- Padrões de candle -->
+            <div class="mon-sinais-wrap" id="mon-candles-wrap">
+              <h5>Padrões de candle</h5>
+              <ul class="mon-sinais-list" id="mon-candles-list"></ul>
+            </div>
+
+            <!-- Confluências -->
+            <div class="mon-sinais-wrap">
+              <h5>Confluências detectadas</h5>
+              <ul class="mon-sinais-list" id="mon-sinais-list"></ul>
+            </div>
+
+            <p class="mon-update-time">Última atualização: <span id="mon-last-update">—</span></p>
+            <p class="mon-data-source">Fonte de dados: <span id="mon-yf-symbol">—</span> (Yahoo Finance)</p>
+          </div>
+
+          <!-- Loading state -->
+          <div class="mon-loading" id="mon-loading" hidden>
+            <div class="mon-spinner"></div>
+            <p>Buscando dados…</p>
+          </div>
+
+          <!-- Error state -->
+          <div class="mon-error" id="mon-error" hidden>
+            <span class="mon-error-icon">⚠️</span>
+            <p id="mon-error-text">Erro ao buscar dados.</p>
+            <p id="mon-error-hint" style="font-size:0.78rem;color:var(--text-muted);margin-top:0.4rem;display:none"></p>
+          </div>
+        </div>
+
+      </div><!-- /monitor-main-grid -->
+
+      <!-- Histórico de alertas -->
+      <section class="card monitor-alerts-section">
+        <div class="monitor-alerts-header">
+          <h3>Histórico de alertas</h3>
+          <button type="button" class="btn btn-ghost btn-sm" id="mon-clear-alerts">Limpar</button>
+        </div>
+        <div id="mon-alerts-empty" class="empty-state">Nenhum alerta ainda. Inicie o monitoramento.</div>
+        <div class="table-wrap" id="mon-alerts-wrap" hidden>
+          <table class="data" id="mon-alerts-table">
+            <thead>
+              <tr>
+                <th>Hora</th>
+                <th>Instrumento</th>
+                <th>Sinal</th>
+                <th>Score</th>
+                <th>Preço atual</th>
+                <th>Entrada</th>
+                <th>Stop</th>
+                <th>TP1</th>
+              </tr>
+            </thead>
+            <tbody id="mon-alerts-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Notícias Finnhub -->
+      <section class="card monitor-news-section">
+        <div class="monitor-news-header">
+          <h3>Manchetes do mercado</h3>
+          <div id="mon-finnhub-status" class="mon-finnhub-badge mon-finnhub-badge--warn">
+            Finnhub: aguardando...
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm" id="mon-news-refresh-btn">↺ Atualizar</button>
+        </div>
+        <div id="mon-news-list" class="mon-news-list">
+          <p class="muted" style="padding:1rem">
+            Configure <code>FINNHUB_API_KEY</code> no <code>.env</code> para ativar notícias em tempo real.
+            Sem a chave, apenas dados de preço (Yahoo Finance) ficam disponíveis.
+          </p>
+        </div>
+      </section>
+
+    </div><!-- /tab-pane #tab-monitor -->
+
     <p class="footer-note">
-      Aviso: apoio à decisão, sem garantia de resultado. Evitar trades ruins é prioridade sobre “achar o trade perfeito”.
+      Aviso: apoio à decisão, sem garantia de resultado. Evitar trades ruins é prioridade sobre "achar o trade perfeito".
     </p>
   </div>
 
@@ -430,7 +680,7 @@
             <div class="trade-tp-section">
               <h4>Alvos &amp; probabilidade</h4>
               <p class="trade-tp-sub">
-                Preço de saída <strong>estimado</strong> a partir da entrada do plano e dos pontos (WIN: 1 pt ≈ 0,001 no eixo; ações: referência em centavos por “pt”).
+                Preço de saída <strong>estimado</strong> a partir da entrada do plano e dos pontos (WIN: 1 pt ≈ 0,001 no eixo; ações: referência em centavos por "pt").
               </p>
               <div id="modal-trade-tp-body"></div>
             </div>
@@ -508,14 +758,19 @@
     </div>
   </div>
 
+  <!-- TradingView Charting Library (gratuita, com delay) -->
+  <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+
   <script>
     window.__TRADE_AI__ = {
-      analyzeUrl: {{ url_for('analyze')|tojson }},
-      historyUrl: {{ url_for('api_history')|tojson }},
-      statsUrl: {{ url_for('api_stats')|tojson }},
-      apiAnalysisPrefix: "/api/analysis"
+      analyzeUrl:         {{ url_for('analyze')|tojson }},
+      historyUrl:         {{ url_for('api_history')|tojson }},
+      statsUrl:           {{ url_for('api_stats')|tojson }},
+      apiAnalysisPrefix:  "/api/analysis",
+      monitorSignalsUrl:  "/api/monitor/signals",
+      marketNewsUrl:      "/api/market/news",
     };
   </script>
-  <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=11" defer></script>
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=21" defer></script>
 </body>
 </html>

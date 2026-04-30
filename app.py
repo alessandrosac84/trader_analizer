@@ -28,6 +28,15 @@ from services.db import (
     update_execution,
 )
 from services.json_utils import extract_json_object, risk_summary, trader_ativo_hint, trader_ativo_label
+from services.market_service import (
+    TV_TO_YF,
+    TV_INTERVAL_TO_YF,
+    tv_to_yf_symbol,
+    get_candles,
+    get_news,
+    get_sentiment,
+)
+from services.technical_analysis import generate_signal
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -216,6 +225,107 @@ def analyze():
         }
     )
 
+
+# ---------------------------------------------------------------------------
+# Monitor — Sinais de trading em tempo real (via Yahoo Finance + TA)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/monitor/signals")
+def api_monitor_signals():
+    """
+    GET /api/monitor/signals?tv_symbol=BMFBOVESPA:WIN1!&interval=15
+    Busca candles via Yahoo Finance, calcula indicadores técnicos e retorna
+    sinal de trading (COMPRA/VENDA/NEUTRO) com entrada, stop e alvos.
+    """
+    tv_symbol = request.args.get("tv_symbol", "BMFBOVESPA:WIN1!")
+    interval  = request.args.get("interval", "15")   # minutos ou D/W (TradingView format)
+
+    # Converte intervalo TradingView → Yahoo Finance (period, interval)
+    period_yf, interval_yf = TV_INTERVAL_TO_YF.get(interval, ("5d", "15m"))
+
+    # Converte símbolo TradingView → Yahoo Finance
+    yf_symbol = tv_to_yf_symbol(tv_symbol)
+
+    df, error = get_candles(yf_symbol, period=period_yf, interval=interval_yf)
+    if error or df is None:
+        return jsonify({
+            "ok": False,
+            "error": error or "Sem dados.",
+            "tv_symbol": tv_symbol,
+            "yf_symbol": yf_symbol,
+        }), 200   # 200 para o frontend exibir o erro sem quebrar
+
+    # Busca timeframe maior (1h) para confirmação multi-TF
+    # Não busca quando o próprio TF já é ≥ 1h
+    htf_df = None
+    if interval_yf not in ("60m", "1h", "1d", "1wk"):
+        htf_df, _ = get_candles(yf_symbol, period="1mo", interval="1h")
+
+    signal = generate_signal(df, htf_df=htf_df)
+    if signal is None:
+        return jsonify({
+            "ok": False,
+            "error": f"Dados insuficientes para análise técnica ({len(df)} candles).",
+            "tv_symbol": tv_symbol,
+            "yf_symbol": yf_symbol,
+        }), 200
+
+    return jsonify({
+        "ok": True,
+        "tv_symbol": tv_symbol,
+        "yf_symbol": yf_symbol,
+        "interval": interval,
+        "period": period_yf,
+        **signal,
+    })
+
+
+@app.route("/api/market/news")
+def api_market_news():
+    """
+    GET /api/market/news?finnhub_symbol=AAPL&category=general
+    Retorna notícias do Finnhub.
+    """
+    finnhub_symbol = request.args.get("finnhub_symbol") or None
+    category = request.args.get("category", "general")
+    news, error = get_news(finnhub_symbol=finnhub_symbol, category=category)
+    return jsonify({
+        "ok": error is None,
+        "items": news,
+        "error": error,
+        "finnhub_configured": bool(os.getenv("FINNHUB_API_KEY", "")),
+    })
+
+
+@app.route("/api/market/sentiment")
+def api_market_sentiment():
+    """GET /api/market/sentiment?finnhub_symbol=AAPL"""
+    finnhub_symbol = request.args.get("finnhub_symbol", "")
+    if not finnhub_symbol:
+        return jsonify({"ok": False, "error": "Parâmetro finnhub_symbol obrigatório."}), 400
+    sentiment, error = get_sentiment(finnhub_symbol)
+    return jsonify({"ok": error is None, "data": sentiment, "error": error})
+
+
+@app.route("/api/monitor/instruments")
+def api_monitor_instruments():
+    """Lista instrumentos disponíveis com seus símbolos TradingView e Yahoo Finance."""
+    instruments = [
+        {"label": "Mini Índice (WIN1!)",   "tv": "BMFBOVESPA:WIN1!", "yf": "^BVSP",     "finnhub": None},
+        {"label": "Mini Dólar (WDO1!)",    "tv": "BMFBOVESPA:WDO1!", "yf": "BRL=X",     "finnhub": None},
+        {"label": "Ibovespa",              "tv": "BMFBOVESPA:IBOV",  "yf": "^BVSP",     "finnhub": None},
+        {"label": "Petrobras (PETR4)",     "tv": "BMFBOVESPA:PETR4", "yf": "PETR4.SA",  "finnhub": "PBR"},
+        {"label": "Vale (VALE3)",          "tv": "BMFBOVESPA:VALE3", "yf": "VALE3.SA",  "finnhub": "VALE"},
+        {"label": "Itaú (ITUB4)",          "tv": "BMFBOVESPA:ITUB4", "yf": "ITUB4.SA",  "finnhub": "ITUB"},
+        {"label": "Bradesco (BBDC4)",      "tv": "BMFBOVESPA:BBDC4", "yf": "BBDC4.SA",  "finnhub": None},
+        {"label": "Banco do Brasil (BBAS3)","tv": "BMFBOVESPA:BBAS3","yf": "BBAS3.SA",  "finnhub": None},
+        {"label": "Ambev (ABEV3)",         "tv": "BMFBOVESPA:ABEV3", "yf": "ABEV3.SA",  "finnhub": "ABEV"},
+        {"label": "WEG (WEGE3)",           "tv": "BMFBOVESPA:WEGE3", "yf": "WEGE3.SA",  "finnhub": None},
+    ]
+    return jsonify({"items": instruments})
+
+
+# ---------------------------------------------------------------------------
 
 init_db()
 
