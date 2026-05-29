@@ -2155,3 +2155,1663 @@
   document.getElementById("mon-news-refresh-btn")?.addEventListener("click", fetchNews);
 
 })();
+
+
+// ============================================================
+// MONITOR MT5 AO VIVO
+// ============================================================
+(function () {
+  "use strict";
+
+  // ---- State ----
+  var chart        = null;
+  var candleSeries = null;
+  var ema9S        = null;
+  var ema21S       = null;
+  var ema50S       = null;
+  var vwapS        = null;
+  var bbUpS        = null;
+  var bbLoS        = null;
+  var priceLines   = [];  // keep refs for cleanup
+
+  var active     = false;
+  var timer      = null;
+  var tickTimer  = null;   // timer de tick (3s) para atualização em tempo real
+  var alerts     = [];
+  var lastSignal = null;  // track signal changes for audio
+  var lastCandle = null;  // último candle completo — atualizado pelo tick timer
+
+  // Audio context for beep
+  var audioCtx = null;
+  function playBeep(freq, dur, vol) {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      var osc  = audioCtx.createOscillator();
+      var gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.frequency.value = freq || 880;
+      gain.gain.value     = vol  || 0.3;
+      osc.start();
+      osc.stop(audioCtx.currentTime + (dur || 0.25));
+    } catch (e) {}
+  }
+  function beepBuy()  { playBeep(880, 0.2, 0.3); setTimeout(function(){ playBeep(1100, 0.3, 0.3); }, 250); }
+  function beepSell() { playBeep(440, 0.2, 0.3); setTimeout(function(){ playBeep(330,  0.3, 0.3); }, 250); }
+
+  // ---- Helpers ----
+  function el(id) { return document.getElementById(id); }
+  function fmt(v) { return v != null ? Number(v).toLocaleString("pt-BR") : "-"; }
+  function fmtPts(v) { return v != null ? Number(v).toLocaleString("pt-BR", {minimumFractionDigits:0, maximumFractionDigits:0}) : "-"; }
+
+  function getSym()  { var s = el("mt5-instrument"); return s ? s.value : "BMFBOVESPA:WIN1!"; }
+  function getIvl()  { var s = el("mt5-interval");   return s ? s.value : "15"; }
+  function getRefr() { var s = el("mt5-refresh");    return s ? parseInt(s.value, 10) : 60; }
+
+  function setStatus(msg) { var e = el("mt5-status-text"); if (e) e.textContent = msg; }
+
+  function showLoading(on) {
+    var ld = el("mt5-loading");
+    var er = el("mt5-error");
+    var ct = el("mt5-signal-content");
+    var id = el("mt5-signal-idle");
+    if (ld) ld.hidden = !on;
+    if (on) {
+      if (er) er.hidden = true;
+    }
+  }
+
+  function showError(msg) {
+    var er = el("mt5-error"); var et = el("mt5-error-text");
+    var ld = el("mt5-loading"); var ct = el("mt5-signal-content");
+    if (ld) ld.hidden = true;
+    if (ct) ct.hidden = true;
+    if (er) er.hidden = false;
+    if (et) et.textContent = msg || "Erro ao buscar dados.";
+  }
+
+  // ---- Chart init ----
+  function initChart() {
+    var container = el("mt5-chart");
+    if (!container) return;
+
+    // Remove placeholder
+    var ph = el("mt5-chart-placeholder");
+    if (ph) ph.style.display = "none";
+
+    // Destroy existing
+    if (chart) { try { chart.remove(); } catch(e){} chart = null; }
+
+    if (typeof LightweightCharts === "undefined") {
+      container.innerHTML = '<p style="padding:2rem;color:var(--danger);text-align:center">LightweightCharts nao carregou. Verifique conexao.</p>';
+      return;
+    }
+
+    chart = LightweightCharts.createChart(container, {
+      width:  container.clientWidth,
+      height: 480,
+      layout: { background: { type: "solid", color: "#0f1923" }, textColor: "#c8d4e0" },
+      grid:   { vertLines: { color: "#1e2a35" }, horzLines: { color: "#1e2a35" } },
+      crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+      rightPriceScale: { borderColor: "#2a3a4a" },
+      timeScale: { borderColor: "#2a3a4a", timeVisible: true, secondsVisible: false, rightOffset: 8 },
+    });
+
+    candleSeries = chart.addCandlestickSeries({
+      upColor: "#26a69a", downColor: "#ef5350",
+      borderVisible: false,
+      wickUpColor: "#26a69a", wickDownColor: "#ef5350",
+    });
+
+    bbUpS  = chart.addLineSeries({ color: "#455a64", lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
+    bbLoS  = chart.addLineSeries({ color: "#455a64", lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
+    ema50S = chart.addLineSeries({ color: "#9c27b0", lineWidth: 1, priceLineVisible: false, lastValueVisible: false, title: "EMA50" });
+    ema21S = chart.addLineSeries({ color: "#2196F3", lineWidth: 1, priceLineVisible: false, lastValueVisible: false, title: "EMA21" });
+    ema9S  = chart.addLineSeries({ color: "#f0c420", lineWidth: 2, priceLineVisible: false, lastValueVisible: false, title: "EMA9"  });
+    vwapS  = chart.addLineSeries({ color: "#ff9800", lineWidth: 2, lineStyle: 1, priceLineVisible: false, lastValueVisible: false, title: "VWAP" });
+
+    // Resize
+    var ro = new ResizeObserver(function () {
+      if (chart && container) chart.applyOptions({ width: container.clientWidth });
+    });
+    ro.observe(container);
+  }
+
+  // ---- Linhas de trade manual no grafico ----
+  // Marca o alert mais recente da mesma direção como bloqueado pela IA e re-renderiza
+  window._markAlertIABlocked = function (acao, motivo) {
+    for (var i = 0; i < alerts.length; i++) {
+      if (alerts[i].sinal === acao && !alerts[i].ia_blocked) {
+        alerts[i].ia_blocked = true;
+        alerts[i].ia_motivo  = motivo || "";
+        break;
+      }
+    }
+    renderAlerts();
+    // Mostra banner no painel de sinal
+    var banner = document.getElementById("mt5-ia-block-banner");
+    if (banner) {
+      banner.textContent = "🚫 IA bloqueou — " + (motivo ? String(motivo).slice(0, 120) : "trade não autorizado");
+      banner.hidden = false;
+    }
+  };
+
+  window._drawManualTradeLines = function (acao, execPrice, sl, tp1) {
+    if (!candleSeries) return;
+    clearPriceLines();
+    var isBuy    = acao === "COMPRA";
+    var entColor = isBuy ? "#26a69a" : "#ef5350";
+    var stpColor = isBuy ? "#ef5350" : "#26a69a";
+    var tpColor  = "#43a047";
+
+    function addLine(price, color, title, style) {
+      if (price == null || isNaN(price)) return;
+      try {
+        var pl = candleSeries.createPriceLine({
+          price: parseFloat(price), color: color, lineWidth: 2,
+          lineStyle: style || 0, axisLabelVisible: true, title: title
+        });
+        priceLines.push(pl);
+      } catch(e) {}
+    }
+
+    addLine(execPrice, entColor, "Entrada", 0);
+    addLine(sl,        stpColor, "Stop",    2);
+    addLine(tp1,       tpColor,  "TP1",     2);
+  };
+
+  // ---- Clear signal price lines ----
+  function clearPriceLines() {
+    if (!candleSeries) return;
+    priceLines.forEach(function (pl) { try { candleSeries.removePriceLine(pl); } catch(e){} });
+    priceLines = [];
+  }
+
+  // ---- Tick em tempo real (atualiza só o último candle, a cada 1s) ----
+  function fetchTick() {
+    if (!active || !candleSeries || !lastCandle) return;
+    var sym = getSym();
+    fetch("/api/monitor/tick?tv_symbol=" + encodeURIComponent(sym))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok || !d.price) return;
+        var price = d.price;
+        // Atualiza close do último candle; expande high/low se necessário
+        var updated = {
+          time:  lastCandle.time,
+          open:  lastCandle.open,
+          high:  Math.max(lastCandle.high, price),
+          low:   Math.min(lastCandle.low,  price),
+          close: price,
+        };
+        lastCandle = updated;
+        try { candleSeries.update(updated); } catch (e) {}
+        // Atualiza label de preço no painel de sinal
+        var precoEl = el("mt5-preco");
+        if (precoEl) precoEl.textContent = price.toLocaleString("pt-BR");
+      })
+      .catch(function () {});
+  }
+
+  function startTickTimer() {
+    if (tickTimer) clearInterval(tickTimer);
+    tickTimer = setInterval(fetchTick, 1000);
+  }
+
+  function stopTickTimer() {
+    if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+  }
+
+  // ---- Render chart data ----
+  // Verifica se o último candle é do dia atual (mercado aberto hoje)
+  function isSignalFromToday(candles) {
+    if (!candles || candles.length === 0) return false;
+    var lastTs   = candles[candles.length - 1].time;  // unix timestamp (segundos)
+    var lastDate = new Date(lastTs * 1000);
+    var today    = new Date();
+    return lastDate.getFullYear() === today.getFullYear() &&
+           lastDate.getMonth()    === today.getMonth()    &&
+           lastDate.getDate()     === today.getDate();
+  }
+
+  // Linhas do trade ativo — mantidas durante MANAGE mode
+  var _activeTradeLine = null;  // { entry, sl, tp1, acao }
+
+  // Expõe setter para que o IIFE de auto-trade possa setar _activeTradeLine
+  window._setActiveTradeLine = function (tl) { _activeTradeLine = tl; };
+
+  // Expõe função para redesenhar imediatamente as linhas do trade ativo
+  window._redrawTradeLines = function () {
+    clearPriceLines();
+    if (!_activeTradeLine || !candleSeries) return;
+    var tl = _activeTradeLine;
+    var isBuyT = tl.acao === "COMPRA";
+    var entC = isBuyT ? "#26a69a" : "#ef5350";
+    var stpC = isBuyT ? "#ef5350" : "#26a69a";
+    var tpC  = isBuyT ? "#43a047" : "#e53935";
+    function addTLW(price, color, title, style) {
+      if (price == null) return;
+      var pl = candleSeries.createPriceLine({ price: price, color: color, lineWidth: 2, lineStyle: style || 0, axisLabelVisible: true, title: title });
+      priceLines.push(pl);
+    }
+    addTLW(tl.entry, entC, "Entrada", 0);
+    addTLW(tl.sl,    stpC, "Stop",    2);
+    addTLW(tl.tp1,   tpC,  "TP1",     2);
+  };
+
+  function renderChart(data, skipSignalLines) {
+    if (!chart) initChart();
+    if (!candleSeries) return;
+
+    var candles = data.candles || [];
+    candleSeries.setData(candles);
+
+    // Guarda último candle para o tick timer atualizar em tempo real
+    if (candles.length > 0) lastCandle = Object.assign({}, candles[candles.length - 1]);
+
+    if (ema9S)  ema9S.setData(data.ema9   || []);
+    if (ema21S) ema21S.setData(data.ema21 || []);
+    if (ema50S) ema50S.setData(data.ema50 || []);
+    if (vwapS)  vwapS.setData(data.vwap   || []);
+    if (bbUpS)  bbUpS.setData(data.bb_upper || []);
+    if (bbLoS)  bbLoS.setData(data.bb_lower || []);
+
+    clearPriceLines();
+
+    // Em MANAGE mode: redesenha linhas do trade ativo (não do novo sinal)
+    if (skipSignalLines) {
+      if (_activeTradeLine) {
+        var tl = _activeTradeLine;
+        var isBuyT = tl.acao === "COMPRA";
+        var entC = isBuyT ? "#26a69a" : "#ef5350";
+        var stpC = isBuyT ? "#ef5350" : "#26a69a";
+        var tpC  = isBuyT ? "#43a047" : "#e53935";
+        function addTL(price, color, title, style) {
+          if (price == null) return;
+          var pl = candleSeries.createPriceLine({ price: price, color: color, lineWidth: 2, lineStyle: style || 0, axisLabelVisible: true, title: title });
+          priceLines.push(pl);
+        }
+        addTL(tl.entry, entC, "Entrada", 0);
+        addTL(tl.sl,    stpC, "Stop",    2);
+        addTL(tl.tp1,   tpC,  "TP1",     2);
+      }
+      return;
+    }
+
+    // Só desenha linhas de preço se o último candle for do dia atual
+    var sig = data.signal;
+    if (sig && sig.acao !== "NEUTRO" && isSignalFromToday(candles)) {
+      var isBuy = sig.acao === "COMPRA";
+      var entColor = isBuy ? "#26a69a" : "#ef5350";
+      var stpColor = isBuy ? "#ef5350" : "#26a69a";
+      var tpColor  = isBuy ? "#43a047" : "#e53935";
+
+      function addLine(price, color, title, style) {
+        if (price == null) return;
+        var pl = candleSeries.createPriceLine({ price: price, color: color, lineWidth: 2, lineStyle: style || 0, axisLabelVisible: true, title: title });
+        priceLines.push(pl);
+      }
+
+      addLine(sig.entrada, entColor, "Entrada", 0);
+      addLine(sig.stop,    stpColor, "Stop",    2);
+      addLine(sig.tp1,     tpColor,  "TP1",     2);
+      addLine(sig.tp2,     tpColor,  "TP2",     2);
+    }
+
+    // scrollToRealTime removido — rightOffset mantém espaço fixo à direita
+  }
+
+  // ---- Update signal panel ----
+  function renderSignal(sig, fonte) {
+    var idle    = el("mt5-signal-idle");
+    var content = el("mt5-signal-content");
+    var loading = el("mt5-loading");
+    var errDiv  = el("mt5-error");
+
+    if (idle)    idle.hidden    = true;
+    if (loading) loading.hidden = true;
+    // Esconde banner IA quando novo sinal chega
+    var iaBanner = el("mt5-ia-block-banner");
+    if (iaBanner) iaBanner.hidden = true;
+    if (errDiv)  errDiv.hidden  = true;
+    if (content) content.hidden = false;
+
+    var acao = sig.acao || "NEUTRO";
+    var badge = el("mt5-signal-badge");
+    if (badge) {
+      badge.textContent = acao;
+      badge.className = "mon-signal-badge mon-signal-badge--" + acao.toLowerCase();
+    }
+
+    function setTxt(id, v) { var e = el(id); if (e) e.textContent = v; }
+
+    setTxt("mt5-score",   sig.score != null ? sig.score : "-");
+    setTxt("mt5-forca",   sig.forca  || "-");
+    setTxt("mt5-preco",   fmtPts(sig.preco_atual));
+    setTxt("mt5-entrada", sig.entrada ? fmtPts(sig.entrada) : "-");
+    setTxt("mt5-stop",    sig.stop    ? fmtPts(sig.stop)    : "-");
+    setTxt("mt5-tp1",     sig.tp1     ? fmtPts(sig.tp1)     : "-");
+    setTxt("mt5-tp2",     sig.tp2     ? fmtPts(sig.tp2)     : "-");
+    setTxt("mt5-tp3",     sig.tp3     ? fmtPts(sig.tp3)     : "-");
+
+    setTxt("mt5-rsi",     sig.rsi     != null ? sig.rsi.toFixed(1) : "-");
+    setTxt("mt5-adx",     sig.adx     != null ? sig.adx.toFixed(1) : "-");
+    setTxt("mt5-vwap",    sig.vwap    ? fmtPts(sig.vwap)  : "-");
+    setTxt("mt5-atr",     sig.atr     ? fmtPts(sig.atr)   : "-");
+    setTxt("mt5-ema9",    sig.ema9    ? fmtPts(sig.ema9)  : "-");
+    setTxt("mt5-ema21",   sig.ema21   ? fmtPts(sig.ema21) : "-");
+    setTxt("mt5-ema50",   sig.ema50   ? fmtPts(sig.ema50) : "-");
+    setTxt("mt5-macd",    sig.macd_hist != null ? sig.macd_hist.toFixed(1) : "-");
+    setTxt("mt5-htf",     sig.htf_trend || "N/A");
+    setTxt("mt5-suporte", sig.suporte    ? fmtPts(sig.suporte)    : "-");
+    setTxt("mt5-resist",  sig.resistencia ? fmtPts(sig.resistencia) : "-");
+
+    // DI
+    var diEl = el("mt5-di");
+    if (diEl) diEl.textContent = (sig.plus_di != null && sig.minus_di != null)
+      ? "+" + sig.plus_di.toFixed(1) + " / -" + sig.minus_di.toFixed(1) : "-";
+
+    // Candle patterns
+    var candleList = el("mt5-candles-list");
+    var candleWrap = el("mt5-candles-wrap");
+    if (candleList) {
+      var patterns = sig.candle_patterns || [];
+      candleList.innerHTML = patterns.map(function(p){ return "<li>" + p + "</li>"; }).join("");
+      if (candleWrap) candleWrap.hidden = patterns.length === 0;
+    }
+
+    // Confluences
+    var sinaisList = el("mt5-sinais-list");
+    if (sinaisList) {
+      var sinais = sig.sinais || [];
+      sinaisList.innerHTML = sinais.map(function(s){ return "<li>" + s + "</li>"; }).join("");
+    }
+
+    // Fonte badge
+    var fonteBadge = el("mt5-fonte-badge");
+    if (fonteBadge) {
+      fonteBadge.style.display = "";
+      if (fonte === "mt5") {
+        fonteBadge.textContent = "MT5 | Tempo Real";
+        fonteBadge.style.background = "var(--success, #1a7a3a)";
+        fonteBadge.style.color = "#fff";
+        fonteBadge.style.border = "none";
+        fonteBadge.style.padding = "2px 8px";
+        fonteBadge.style.borderRadius = "4px";
+      } else {
+        fonteBadge.textContent = "Yahoo Finance (delay)";
+        fonteBadge.style.background = "";
+        fonteBadge.style.color = "";
+      }
+    }
+
+    // Last update
+    var lu = el("mt5-last-update");
+    if (lu) lu.textContent = "Atualizado: " + new Date().toLocaleTimeString("pt-BR");
+  }
+
+  // ---- Audio alert on signal change ----
+  function checkAudioAlert(sig) {
+    if (!sig) return;
+    var acao = sig.acao;
+    if (acao === "NEUTRO") return;
+    if (lastSignal && lastSignal === acao) return;
+    lastSignal = acao;
+    if (acao === "COMPRA") beepBuy();
+    else if (acao === "VENDA") beepSell();
+  }
+
+  // ---- Tentativas de Auto-Trade (histórico simplificado) ----
+  // Só registra quando o bot realmente tentou agir: executou, bloqueou ou falhou.
+
+  /**
+   * Cria uma entrada de tentativa de auto-trade e retorna o objeto entry
+   * para ser atualizado após o resultado da requisição.
+   */
+  function addTradeAttempt(data) {
+    var sig = data.signal || {};
+    var now = new Date();
+    var entry = {
+      hora:      now.toLocaleTimeString("pt-BR"),
+      simbolo:   (data.tv_symbol || "-").split(":").pop(),
+      sinal:     sig.acao || "-",
+      score:     sig.score != null ? sig.score : "-",
+      entrada:   sig.entrada ? fmtPts(sig.entrada) : "-",
+      stop:      sig.stop    ? fmtPts(sig.stop)    : "-",
+      tp1:       sig.tp1     ? fmtPts(sig.tp1)     : "-",
+      status:    "pending",   // "pending" | "executado" | "bloqueado" | "erro"
+      statusMsg: "⏳ Enviando...",
+      iaMotivoTip: "",
+    };
+    alerts.unshift(entry);
+    renderAlerts();
+    return entry;
+  }
+
+  /** Atualiza o status de uma entrada e re-renderiza. */
+  function updateTradeAttempt(entry, status, statusMsg, iaMotivoTip) {
+    entry.status    = status;
+    entry.statusMsg = statusMsg;
+    entry.iaMotivoTip = iaMotivoTip || "";
+    renderAlerts();
+  }
+
+  function renderAlerts() {
+    var empty = el("mt5-alerts-empty");
+    var wrap  = el("mt5-alerts-wrap");
+    var tbody = el("mt5-alerts-body");
+    if (!tbody) return;
+
+    if (alerts.length === 0) {
+      if (empty) empty.hidden = false;
+      if (wrap)  wrap.hidden  = true;
+      return;
+    }
+    if (empty) empty.hidden = true;
+    if (wrap)  wrap.hidden  = false;
+
+    var statusColors = {
+      "executado": "#22c55e",
+      "bloqueado": "#f87171",
+      "erro":      "#f59e0b",
+      "pending":   "var(--text-muted)",
+    };
+    var rowBg = {
+      "bloqueado": "background:rgba(127,29,29,.18)",
+      "erro":      "background:rgba(120,53,15,.18)",
+    };
+
+    tbody.innerHTML = alerts.slice(0, 50).map(function (a) {
+      var cls    = a.sinal === "COMPRA" ? "rec-buy" : a.sinal === "VENDA" ? "rec-sell" : "";
+      var color  = statusColors[a.status] || "var(--text-muted)";
+      var bg     = rowBg[a.status] ? ' style="' + rowBg[a.status] + '"' : '';
+      var tip    = a.iaMotivoTip ? ' title="' + a.iaMotivoTip.replace(/"/g, "'") + '"' : '';
+      var scoreAbs = a.score != null && a.score !== "-" ? "|" + Math.abs(a.score) + "|" : "—";
+      return "<tr" + bg + ">" +
+        "<td>" + a.hora + "</td>" +
+        "<td style='font-size:.78rem'>" + a.simbolo + "</td>" +
+        "<td><span class='" + cls + "'>" + a.sinal + "</span></td>" +
+        "<td style='text-align:center'>" + scoreAbs + "</td>" +
+        "<td>" + a.entrada + "</td>" +
+        "<td>" + a.stop + "</td>" +
+        "<td>" + a.tp1 + "</td>" +
+        "<td style='color:" + color + ";font-weight:600'" + tip + ">" + a.statusMsg + "</td>" +
+        "<td style='font-size:.72rem;color:var(--text-muted);max-width:180px;white-space:normal'>" +
+          (a.iaMotivoTip ? a.iaMotivoTip.slice(0, 100) : "—") + "</td>" +
+        "</tr>";
+    }).join("");
+  }
+
+  // Expõe funções para o IIFE de auto-trade registrar tentativas
+  window._addTradeAttempt    = addTradeAttempt;
+  window._updateTradeAttempt = updateTradeAttempt;
+
+  // Expõe markAlertIABlocked (agora só usado para banner no painel de sinal)
+  window._markAlertIABlocked = function (acao, motivo) {
+    var banner = document.getElementById("mt5-ia-block-banner");
+    if (banner) {
+      banner.textContent = "🚫 IA bloqueou — " + (motivo ? String(motivo).slice(0, 120) : "trade não autorizado");
+      banner.hidden = false;
+    }
+  };
+
+  // ---- Fetch ----
+  function fetchMt5() {
+    var sym = getSym();
+    var ivl = getIvl();
+    var url = "/api/monitor/mt5?tv_symbol=" + encodeURIComponent(sym) + "&interval=" + encodeURIComponent(ivl);
+
+    showLoading(true);
+    setStatus("Buscando dados do MT5...");
+
+    fetch(url)
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        showLoading(false);
+        if (!data.ok) {
+          showError(data.error || "Sem dados.");
+          setStatus("Erro: " + (data.error || "sem dados."));
+          return;
+        }
+        // Render chart (em MANAGE mode: só candles/indicadores, sem linhas de sinal)
+        var _tm = window._getTradeMode ? window._getTradeMode() : "SCAN";
+        renderChart(data, _tm === "MANAGE");
+
+        // Se o último candle não é de hoje (mercado fechado / virada de dia),
+        // exibe sinal neutro no painel e não processa auto-trade
+        var dadosHoje = isSignalFromToday(data.candles || []);
+        if (!dadosHoje && data.signal) {
+          if (tradeMode !== "MANAGE") {
+            var sigNeutro = Object.assign({}, data.signal, { acao: "NEUTRO" });
+            renderSignal(sigNeutro, data.fonte);
+            setStatus("Mercado fechado — aguardando abertura de hoje.");
+          }
+          return;
+        }
+
+        // Em MANAGE mode: não atualiza o painel de sinal nem as linhas do gráfico
+        // O painel de gestão é atualizado exclusivamente pelo fetchManage()
+        if (_tm === "MANAGE") {
+          // Só atualiza o sinal técnico dentro do painel MANAGE
+          var mgmtSigEl = el("mgmt-sig-acao");
+          var mgmtScEl  = el("mgmt-sig-score");
+          if (data.signal && mgmtSigEl) mgmtSigEl.textContent = data.signal.acao || "—";
+          if (data.signal && mgmtScEl)  mgmtScEl.textContent  = data.signal.score != null ? (data.signal.score > 0 ? "+" : "") + data.signal.score : "—";
+          return;
+        }
+
+        // Render signal panel
+        renderSignal(data.signal, data.fonte);
+        // Audio alert
+        checkAudioAlert(data.signal);
+        if (window._onNewMT5Signal && data.signal) window._onNewMT5Signal(data.signal);
+        // Auto-trade: dispara se sinal ativo + debounce de 15min (evita re-entradas imediatas)
+        if (data.signal && data.signal.acao !== "NEUTRO") {
+          var agora = Date.now();
+          var lastMs     = window._getLastTradeMs  ? window._getLastTradeMs()  : 0;
+          var debounceMs = window._getDebounceMs   ? window._getDebounceMs()   : 900000;
+          var dentroDebounce = (agora - lastMs) < debounceMs;
+          if (!dentroDebounce && window.autoTradeOnSignal) {
+            window.autoTradeOnSignal(data);
+          } else if (dentroDebounce && window._getAutoEnabled && window._getAutoEnabled()) {
+            var restante = Math.ceil((debounceMs - (agora - lastMs)) / 60000);
+            setStatus("⏳ Sinal " + data.signal.acao + " detectado — próxima entrada em ~" + restante + "min (debounce).");
+          }
+        }
+        // Update label
+        var lbl = el("mt5-chart-label");
+        if (lbl) lbl.textContent = "Grafico MT5 - " + (data.tv_symbol || sym) + " (" + ivl + "m)";
+        setStatus("Ativo. MT5 conectado. Proximo update em " + getRefr() + "s.");
+      })
+      .catch(function (err) {
+        showLoading(false);
+        showError("Erro de rede: " + err.message);
+        setStatus("Falha na requisicao.");
+      });
+  }
+
+  // ---- Start / Stop ----
+  function startMonitor() {
+    if (active) stopMonitor();
+    active = true;
+    initChart();
+    fetchMt5();
+    var refr = getRefr();
+    if (refr > 0) timer = setInterval(fetchMt5, refr * 1000);
+    startTickTimer();  // tick a cada 3s para o último candle em tempo real
+
+    var startBtn = el("mt5-start-btn");
+    var stopBtn  = el("mt5-stop-btn");
+    if (startBtn) startBtn.style.display = "none";
+    if (stopBtn)  stopBtn.style.display  = "";
+  }
+
+  function stopMonitor() {
+    active = false;
+    if (timer) { clearInterval(timer); timer = null; }
+    stopTickTimer();
+    lastCandle = null;
+    var startBtn = el("mt5-start-btn");
+    var stopBtn  = el("mt5-stop-btn");
+    if (startBtn) startBtn.style.display = "";
+    if (stopBtn)  stopBtn.style.display  = "none";
+    setStatus("Monitoramento pausado.");
+  }
+
+  // ---- Event listeners ----
+  var startBtn = el("mt5-start-btn");
+  if (startBtn) startBtn.addEventListener("click", startMonitor);
+
+  var stopBtn = el("mt5-stop-btn");
+  if (stopBtn) stopBtn.addEventListener("click", stopMonitor);
+
+  var clearBtn = el("mt5-clear-alerts");
+  if (clearBtn) clearBtn.addEventListener("click", function () {
+    alerts = [];
+    renderAlerts();
+  });
+
+  // Auto-start when tab is clicked
+  document.querySelectorAll(".main-tab-btn").forEach(function (btn) {
+    if (btn.getAttribute("data-tab") === "mt5") {
+      btn.addEventListener("click", function () {
+        if (!active) {
+          setTimeout(startMonitor, 200);
+        }
+      });
+    }
+  });
+
+}());
+
+// ============================================================
+// AUTO-TRADE — execução automática + gestão SCAN / MANAGE
+// ============================================================
+(function () {
+  var autoTradeEnabled   = false;
+  var tradeMode          = "SCAN";   // "SCAN" | "MANAGE"
+  var _lastAutoTradeMs   = 0;        // timestamp da última tentativa de auto-trade
+  var _AUTO_DEBOUNCE_MS  = 15 * 60 * 1000; // 15 min — evita re-entrada imediata
+  window._getTradeMode    = function () { return tradeMode; };
+  window._getAutoEnabled  = function () { return autoTradeEnabled; };
+  window._getLastTradeMs  = function () { return _lastAutoTradeMs; };
+  window._getDebounceMs   = function () { return _AUTO_DEBOUNCE_MS; };
+  var manageTimer      = null;
+  var el = function (id) { return document.getElementById(id); };
+
+  var toggleBtn = el("at-toggle");
+  var closeBtn  = el("at-close-btn");
+  var statusDiv = el("at-status");
+  var posDiv    = el("at-positions");
+
+  // ── helpers ────────────────────────────────────────────────────────────
+  function setStatus(msg, isError) {
+    if (!statusDiv) return;
+    statusDiv.textContent = msg;
+    statusDiv.style.color = isError ? "#ef4444" : "var(--text-muted)";
+  }
+
+  function getSym() {
+    return (window.mt5MonitorGetSym && window.mt5MonitorGetSym()) || "BMFBOVESPA:WIN1!";
+  }
+  function getIvl() {
+    var s = el("mt5-interval");
+    return s ? s.value : "15";
+  }
+
+  function fmtPnl(pts, brl) {
+    var color = pts >= 0 ? "#22c55e" : "#ef4444";
+    var sign  = pts >= 0 ? "+" : "";
+    return '<span style="color:' + color + '">' + sign + pts + ' pts | ' +
+           sign + 'R$' + Math.abs(brl).toFixed(2) + '</span>';
+  }
+
+  function updateToggleUI() {
+    if (!toggleBtn) return;
+    if (autoTradeEnabled) {
+      toggleBtn.textContent = "🟢 Auto-Trade ON";
+      toggleBtn.classList.add("at-on");
+    } else {
+      toggleBtn.textContent = "🔴 Auto-Trade OFF";
+      toggleBtn.classList.remove("at-on");
+    }
+  }
+
+  // ── Renderiza posições no painel AT (compacto) ─────────────────────────
+  function renderPositions(positions) {
+    if (!posDiv) return;
+    if (!positions || !positions.length) { posDiv.innerHTML = ""; return; }
+    posDiv.innerHTML = positions.map(function (p) {
+      var side = p.type === 0 ? "COMPRA" : "VENDA";
+      var cls  = p.type === 0 ? "rec-buy" : "rec-sell";
+      var pnlColor = p.profit >= 0 ? "#22c55e" : "#ef4444";
+      var pnlSign  = p.profit >= 0 ? "+" : "-";
+      return '<div class="at-pos">' +
+        '🎯 <strong>' + p.symbol + '</strong> &nbsp;' +
+        '<span class="' + cls + '">' + side + '</span> &nbsp;' +
+        'Vol: ' + p.volume + ' | ' +
+        'Abertura: ' + (p.price_open || 0).toFixed(0) + ' | ' +
+        'P&amp;L: <span style="color:' + pnlColor + '">' + pnlSign + 'R$' + Math.abs(p.profit || 0).toFixed(2) + '</span>' +
+        '</div>';
+    }).join('');
+  }
+
+  // ── Modo SCAN: exibe painel normal de sinal ────────────────────────────
+  function enterScanMode() {
+    if (tradeMode === "SCAN") return;
+    tradeMode = "SCAN";
+    if (window._setActiveTradeLine) window._setActiveTradeLine(null);  // limpa linhas do trade
+    if (window._redrawTradeLines)   window._redrawTradeLines();        // limpa linhas do gráfico
+    var managePanel  = el("mt5-manage-panel");
+    var signalContent = el("mt5-signal-content");
+    var signalIdle    = el("mt5-signal-idle");
+    if (managePanel)   managePanel.hidden   = true;
+    if (signalContent) signalContent.hidden = true;
+    if (signalIdle)    signalIdle.hidden    = false;   // mostra idle até próxima análise
+    if (autoTradeEnabled) {
+      setStatus("🔍 SCAN — aguardando próximo sinal (score ≥ " +
+        (el("at-score-min") ? el("at-score-min").value : "4") + ")");
+    }
+  }
+
+  // ── Modo MANAGE: exibe painel de gestão do trade ativo ─────────────────
+  window.enterManageMode = function enterManageMode() {
+    if (tradeMode === "MANAGE") return;
+    tradeMode = "MANAGE";
+    var managePanel   = el("mt5-manage-panel");
+    var signalContent = el("mt5-signal-content");
+    var signalIdle    = el("mt5-signal-idle");
+    if (managePanel)   managePanel.hidden   = false;
+    if (signalContent) signalContent.hidden = true;
+    if (signalIdle)    signalIdle.hidden    = true;
+    setStatus("🎯 MANAGE — gerenciando trade ativo...");
+  }
+
+  // ── Renderiza painel de gestão ─────────────────────────────────────────
+  var REC_COLORS = {
+    ok:      { border: "#22c55e", bg: "rgba(34,197,94,.1)"  },
+    success: { border: "#22c55e", bg: "rgba(34,197,94,.15)" },
+    warning: { border: "#f59e0b", bg: "rgba(245,158,11,.1)" },
+    danger:  { border: "#ef4444", bg: "rgba(239,68,68,.1)"  },
+  };
+
+  function renderManagePanel(analysis, position, tradeLog) {
+    _renderManagePanelInner(analysis, position, tradeLog);
+  }
+
+  function _renderManagePanelInner(analysis, position, tradeLog) {
+    if (!analysis) return;
+    renderManagePanelCore(analysis, position);
+
+    // Badge IA (do trade_log salvo)
+    var aiBadge = el("mgmt-ai-badge");
+    var aiText  = el("mgmt-ai-text");
+    if (tradeLog && tradeLog.ai_validated && aiBadge && aiText) {
+      var ver = tradeLog.ai_veredito || "—";
+      var conf = tradeLog.ai_confidence != null ? tradeLog.ai_confidence + "%" : "";
+      var mot  = tradeLog.ai_motivo || "";
+      aiText.textContent = "IA: " + ver + (conf ? " (" + conf + ")" : "") + (mot ? " — " + mot.slice(0, 60) : "");
+      aiBadge.hidden = false;
+    } else if (aiBadge) {
+      aiBadge.hidden = true;
+    }
+  }
+
+  // Renomeia a funcao interna para que renderManagePanel possa chamar a versao correta
+  var _origRenderManagePanel = renderManagePanelCore;
+  renderManagePanel = _renderManagePanelInner;
+  function renderManagePanelCore(analysis, position) {
+    if (!analysis) return;
+    function set(id, val) { var e = el(id); if (e) e.textContent = val; }
+    function setHtml(id, val) { var e = el(id); if (e) e.innerHTML = val; }
+
+    var sideBadge = el("mgmt-side-badge");
+    if (sideBadge) {
+      sideBadge.textContent = analysis.position_side || "-";
+      sideBadge.style.background = analysis.position_side === "COMPRA" ? "#22c55e" : "#ef4444";
+      sideBadge.style.color = "#fff";
+    }
+    var pnlPts = analysis.pnl_points != null ? analysis.pnl_points : 0;
+    var pnlBrl = analysis.pnl_brl    != null ? analysis.pnl_brl    : 0;
+    var pnlColor = pnlPts >= 0 ? "#22c55e" : "#ef4444";
+    var sign     = pnlPts >= 0 ? "+" : "";
+    var pnlPtsEl = el("mgmt-pnl-pts");
+    var pnlBrlEl = el("mgmt-pnl-brl");
+    if (pnlPtsEl) { pnlPtsEl.textContent = sign + pnlPts + " pts"; pnlPtsEl.style.color = pnlColor; }
+    if (pnlBrlEl) { pnlBrlEl.textContent = sign + "R$" + Math.abs(pnlBrl).toFixed(2); pnlBrlEl.style.color = pnlColor; }
+    set("mgmt-candles",    analysis.candles_open != null ? analysis.candles_open + " candles" : "—");
+    set("mgmt-entry",      analysis.entry_price   != null ? analysis.entry_price.toLocaleString("pt-BR")   : "—");
+    set("mgmt-current",    analysis.current_price  != null ? analysis.current_price.toLocaleString("pt-BR")  : "—");
+    set("mgmt-sl",         analysis.sl_current     != null ? analysis.sl_current.toLocaleString("pt-BR")     : "—");
+    set("mgmt-tp1",        analysis.tp1_current    != null ? analysis.tp1_current.toLocaleString("pt-BR")    : "—");
+    set("mgmt-dist-stop",  analysis.dist_stop_pts  != null ? analysis.dist_stop_pts + " pts" : "—");
+    set("mgmt-dist-tp1",   analysis.dist_tp1_pts   != null ? analysis.dist_tp1_pts  + " pts" : "—");
+    var recBox = el("mgmt-rec-box");
+    var style  = REC_COLORS[analysis.alert_level] || REC_COLORS.ok;
+    if (recBox) {
+      recBox.style.borderLeftColor  = style.border;
+      recBox.style.backgroundColor  = style.bg;
+    }
+    set("mgmt-rec-label",  analysis.recommendation || "—");
+    set("mgmt-rec-reason", analysis.reason         || "—");
+    var slWrap = el("mgmt-sl-suggestion-wrap");
+    if (slWrap) {
+      if (analysis.new_sl_suggestion != null) {
+        slWrap.hidden = false;
+        set("mgmt-sl-val", analysis.new_sl_suggestion.toLocaleString("pt-BR"));
+      } else {
+        slWrap.hidden = true;
+      }
+    }
+    set("mgmt-sig-acao",  analysis.signal_acao  || "—");
+    set("mgmt-sig-score", analysis.signal_score != null ? (analysis.signal_score > 0 ? "+" : "") + analysis.signal_score : "—");
+  }
+
+  // ── Polling do modo MANAGE ─────────────────────────────────────────────
+  function fetchManage() {
+    var sym = getSym();
+    var ivl = getIvl();
+    fetch("/api/autotrade/manage?tv_symbol=" + encodeURIComponent(sym) + "&interval=" + ivl)
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) return;
+        if (d.mode === "SCAN") {
+          // Posicao foi fechada — volta para SCAN
+          enterScanMode();
+          renderPositions([]);
+          if (d.closed_trade) {
+            // Registrou fechamento automatico
+            var ct = d.closed_trade;
+            var pnlMsg = ct.pnl_pts != null
+              ? " | P&L: " + (ct.pnl_pts >= 0 ? "+" : "") + ct.pnl_pts + " pts"
+              : "";
+            setStatus("✅ Trade fechado (" + (ct.close_reason || "MT5") + ")" + pnlMsg + " — 🔍 SCAN.");
+            setTimeout(loadAutoTradesHistory, 800);
+          } else if (autoTradeEnabled) {
+            setStatus("✅ Trade encerrado. 🔍 Voltando ao modo SCAN...");
+          }
+        } else {
+          // Ainda em MANAGE
+          enterManageMode();
+          // Salva linhas do trade ativo para o gráfico não sobrescrevê-las
+          if (d.trade_log && window._setActiveTradeLine) {
+            window._setActiveTradeLine({
+              acao:  d.trade_log.acao,
+              entry: d.trade_log.entry_price,
+              sl:    d.trade_log.sl_initial,
+              tp1:   d.trade_log.tp1_initial,
+            });
+            if (window._redrawTradeLines) window._redrawTradeLines();
+          }
+          renderManagePanel(d.analysis, d.position, d.trade_log);
+          if (d.position) renderPositions([d.position]);
+
+          // Auto-executa FECHAR no TP1 (1 contrato → fecha e garante lucro)
+          if (autoTradeEnabled && d.analysis && d.analysis.tp1_reached) {
+            var sym = getSym();
+            setStatus("🎯 TP1 atingido! Fechando trade automaticamente...");
+            fetch("/api/autotrade/apply-recommendation", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ tv_symbol: sym, action: "FECHAR", new_sl: null, close_reason: "TP1" }),
+            })
+              .then(function (r) { return r.json(); })
+              .then(function (rd) {
+                if (rd.ok) {
+                  var pnlMsg = rd.pnl_pts != null ? " | P&L: +" + rd.pnl_pts + " pts" : "";
+                  setStatus("✅ TP1 atingido! Trade fechado com lucro" + pnlMsg + " — 🔍 SCAN.");
+                  enterScanMode();
+                  setTimeout(loadAutoTradesHistory, 800);
+                } else {
+                  setStatus("⚠️ Falha ao fechar no TP1: " + (rd.error || "erro desconhecido"));
+                }
+              })
+              .catch(function () { setStatus("⚠️ Erro de rede ao tentar fechar no TP1."); });
+          }
+
+          // Auto-executa FECHAR se auto-trade ativo e recomendação for FECHAR (reversão de sinal)
+          else if (autoTradeEnabled && d.analysis && d.analysis.recommendation === "FECHAR") {
+            var sym = getSym();
+            setStatus("⚡ Reversão detectada — fechando trade automaticamente...");
+            fetch("/api/autotrade/apply-recommendation", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ tv_symbol: sym, action: "FECHAR", new_sl: null, close_reason: "REVERSAO" }),
+            })
+              .then(function (r) { return r.json(); })
+              .then(function (rd) {
+                if (rd.ok) {
+                  var pnlMsg = rd.pnl_pts != null ? " | P&L: " + (rd.pnl_pts >= 0 ? "+" : "") + rd.pnl_pts + " pts" : "";
+                  setStatus("✅ Trade fechado por reversão de sinal" + pnlMsg + " — 🔍 voltando ao SCAN.");
+                  enterScanMode();
+                  setTimeout(loadAutoTradesHistory, 800);
+                } else {
+                  setStatus("⚠️ Falha ao fechar automaticamente: " + (rd.error || "erro desconhecido"));
+                }
+              })
+              .catch(function () { setStatus("⚠️ Erro de rede ao tentar fechar por reversão."); });
+          }
+        }
+      })
+      .catch(function () {});
+  }
+
+  // ── Inicia polling MANAGE ──────────────────────────────────────────────
+  window.startManagePolling = function startManagePolling(intervalSec) {
+    if (manageTimer) clearInterval(manageTimer);
+    fetchManage();
+    manageTimer = setInterval(fetchManage, (intervalSec || 30) * 1000);
+  }
+
+  function stopManagePolling() {
+    if (manageTimer) { clearInterval(manageTimer); manageTimer = null; }
+  }
+
+  // ── Toggle Auto-Trade ON/OFF ───────────────────────────────────────────
+  if (toggleBtn) {
+    toggleBtn.addEventListener("click", function () {
+      autoTradeEnabled = !autoTradeEnabled;
+      updateToggleUI();
+      if (autoTradeEnabled) {
+        setStatus("✅ Auto-Trade ATIVO — aguardando próximo sinal (score ≥ " +
+          (el("at-score-min") ? el("at-score-min").value : "5") + ")");
+        // Verifica se já há posição aberta ao ligar
+        fetchManage();
+        startManagePolling(30);
+      } else {
+        setStatus("⏹ Auto-Trade desativado.");
+        stopManagePolling();
+        enterScanMode();
+        renderPositions([]);
+      }
+    });
+  }
+
+  // ── Fecha posições ─────────────────────────────────────────────────────
+  if (closeBtn) {
+    closeBtn.addEventListener("click", function () {
+      if (!confirm("Fechar TODAS as posições abertas pelo bot?")) return;
+      var sym = getSym();
+      closeBtn.disabled = true;
+      fetch("/api/autotrade/close", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tv_symbol: sym }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          closeBtn.disabled = false;
+          if (d.ok) {
+            setStatus("✅ Posições fechadas: " + (d.results || []).length);
+            renderPositions([]);
+            enterScanMode();
+          } else {
+            setStatus("❌ " + (d.error || "Erro ao fechar posições."), true);
+          }
+        })
+        .catch(function () { closeBtn.disabled = false; });
+    });
+  }
+
+  // ── Chamado pelo monitor MT5 quando detecta novo sinal ─────────────────
+  window.autoTradeOnSignal = function (data) {
+    if (!autoTradeEnabled) return;
+
+    // Em MANAGE: já há trade aberto, não abre outro
+    if (tradeMode === "MANAGE") {
+      setStatus("⏸ Trade ativo — aguardando encerramento antes de nova entrada.");
+      return;
+    }
+
+    var sig = data.signal || {};
+    if (sig.acao !== "COMPRA" && sig.acao !== "VENDA") return;
+
+    var scoreMin  = parseInt((el("at-score-min") && el("at-score-min").value) || "5");
+    var volume    = parseFloat((el("at-volume")  && el("at-volume").value)    || "1");
+    var scoreRaw  = sig.score || 0;
+    var scoreAbs  = Math.abs(scoreRaw);
+
+    // Bloqueia se |score| < mínimo
+    if (scoreAbs < scoreMin) {
+      setStatus("⏭ " + sig.acao + " ignorado — |score| " + scoreAbs + " < mínimo " + scoreMin + ".");
+      return;
+    }
+
+    // Marca timestamp da tentativa ANTES de enviar (evita re-entrada durante a request)
+    _lastAutoTradeMs = Date.now();
+
+    // Registra a tentativa no histórico imediatamente (será atualizada com o resultado)
+    var _attempt = window._addTradeAttempt ? window._addTradeAttempt(data) : null;
+
+    var direcao = sig.acao === "VENDA"
+      ? "VENDA (score " + scoreRaw + ", força " + scoreAbs + ")"
+      : "COMPRA (score +" + scoreAbs + ")";
+    setStatus("⏳ Enviando ordem " + direcao + " para MT5 — validando com IA...");
+
+    fetch("/api/autotrade/execute", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tv_symbol: data.tv_symbol || "BMFBOVESPA:WIN1!",
+        acao:      sig.acao,
+        score:     scoreRaw,
+        entrada:   sig.entrada || null,
+        stop:      sig.stop    || null,
+        tp1:       sig.tp1     || null,
+        volume:    volume,
+        interval:  getIvl(),
+        signal:    sig,          // envia sinal completo para validacao IA
+      }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.ok && d.result) {
+          var r = d.result;
+          var aiInfo = d.ai || {};
+          var aiMsg  = aiInfo.ia_usada
+            ? " ✅ IA: " + (aiInfo.veredito || "APROVAR") + " (" + (aiInfo.confianca || 0) + "%)"
+            : "";
+          setStatus(
+            "✅ EXECUTADO! " + sig.acao +
+            " | Order #" + r.order +
+            " | Preço: " + (r.price ? r.price.toFixed(0) : "-") +
+            " | |score|=" + scoreAbs + aiMsg
+          );
+          // Atualiza tentativa no histórico
+          if (_attempt && window._updateTradeAttempt) {
+            var iaOk = aiInfo.ia_usada ? " ✅ IA " + (aiInfo.confianca || "") + "%" : "";
+            window._updateTradeAttempt(_attempt, "executado",
+              "✅ Executado #" + r.order + iaOk,
+              aiInfo.motivo || "");
+          }
+          // Guarda linhas do trade para o gráfico não sobrescrevê-las em MANAGE mode
+          if (window._setActiveTradeLine) {
+            window._setActiveTradeLine({
+              acao:  sig.acao,
+              entry: sig.entrada || (r.price || null),
+              sl:    sig.stop    || null,
+              tp1:   sig.tp1     || null,
+            });
+            if (window._redrawTradeLines) window._redrawTradeLines();
+          }
+          // Mostra badge IA no painel manage ao entrar
+          var aiBadge = el("mgmt-ai-badge");
+          var aiText  = el("mgmt-ai-text");
+          if (aiBadge && aiText && aiInfo.ia_usada) {
+            aiText.textContent = "IA: " + (aiInfo.veredito || "APROVAR") +
+              (aiInfo.confianca ? " (" + aiInfo.confianca + "%)" : "") +
+              (aiInfo.motivo ? " — " + String(aiInfo.motivo).slice(0, 80) : "");
+            aiBadge.hidden = false;
+          }
+          enterManageMode();
+          startManagePolling(30);
+          loadAutoTradesHistory();
+        } else {
+          // Bloqueado pela IA ou erro — mostra motivo com detalhes
+          var bloqMsg   = d.error || "Erro desconhecido.";
+          var aiInfo2   = d.ai || {};
+          var isIABlock = bloqMsg.toLowerCase().indexOf("ia bloqueou") >= 0 || bloqMsg.toLowerCase().indexOf("bloqueou") >= 0;
+          var motivoIA  = aiInfo2.motivo || bloqMsg;
+          var motivo    = aiInfo2.motivo ? " — " + String(aiInfo2.motivo).slice(0, 100) : "";
+          if (isIABlock) {
+            setStatus("🚫 IA bloqueou o trade: |score|=" + scoreAbs + motivo);
+            // Atualiza tentativa no histórico como bloqueado
+            if (_attempt && window._updateTradeAttempt) {
+              window._updateTradeAttempt(_attempt, "bloqueado", "🚫 IA bloqueou", motivoIA);
+            }
+            if (window._markAlertIABlocked) {
+              window._markAlertIABlocked(sig.acao, motivoIA);
+            }
+          } else {
+            setStatus("❌ Trade não executado: " + bloqMsg);
+            // Atualiza tentativa no histórico como erro
+            if (_attempt && window._updateTradeAttempt) {
+              window._updateTradeAttempt(_attempt, "erro", "❌ " + bloqMsg.slice(0, 60), "");
+            }
+          }
+          // Libera debounce imediatamente se foi bloqueio (permite tentar no próximo ciclo)
+          _lastAutoTradeMs = 0;
+          // Atualiza histórico de trades para mostrar o bloqueio no DB
+          setTimeout(loadAutoTradesHistory, 600);
+        }
+      })
+      .catch(function (err) { setStatus("❌ Erro de rede: " + err.message, true); });
+  };
+
+  // ── Listener: Aplicar recomendacao (breakeven / trailing) ─────────────
+  var applyBtn2 = el("mgmt-apply-btn");
+  if (applyBtn2) {
+    applyBtn2.addEventListener("click", function () {
+      var action = applyBtn2.dataset.action || "BREAKEVEN";
+      var newSl  = parseFloat(applyBtn2.dataset.newSl);
+      if (isNaN(newSl)) return;
+      var sym = getSym();
+      applyBtn2.disabled = true;
+      applyBtn2.textContent = "⏳ Aplicando...";
+      fetch("/api/autotrade/apply-recommendation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tv_symbol: sym, action: action, new_sl: newSl }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          applyBtn2.disabled = false;
+          if (d.ok) {
+            setStatus("✅ " + action + " aplicado! Novo SL: " + newSl.toLocaleString("pt-BR"));
+            fetchManage();
+          } else {
+            setStatus("❌ Erro: " + (d.error || "Falha ao aplicar."), true);
+            applyBtn2.textContent = "✅ Aplicar";
+          }
+        })
+        .catch(function () { applyBtn2.disabled = false; });
+    });
+  }
+
+  // ── Listener: Fechar trade manualmente ─────────────────────────────────
+  var closeTradeBtn = el("mgmt-close-trade-btn");
+  if (closeTradeBtn) {
+    closeTradeBtn.addEventListener("click", function () {
+      if (!confirm("Fechar o trade ativo agora?")) return;
+      var sym = getSym();
+      closeTradeBtn.disabled = true;
+      fetch("/api/autotrade/apply-recommendation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tv_symbol: sym, action: "FECHAR" }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          closeTradeBtn.disabled = false;
+          if (d.ok) {
+            setStatus("✅ Trade fechado manualmente.");
+            enterScanMode();
+            renderPositions([]);
+            setTimeout(loadAutoTradesHistory, 800);
+          } else {
+            setStatus("❌ Erro: " + (d.error || "Falha ao fechar."), true);
+          }
+        })
+        .catch(function () { closeTradeBtn.disabled = false; });
+    });
+  }
+
+  // ── Listener: Refresh historico ────────────────────────────────────────
+  var histRefreshBtn = el("at-history-refresh");
+  if (histRefreshBtn) {
+    histRefreshBtn.addEventListener("click", loadAutoTradesHistory);
+  }
+
+  // ── Listener: Filtro Hoje / Todos ──────────────────────────────────────
+  var btnFilterToday = el("at-filter-today");
+  var btnFilterAll   = el("at-filter-all");
+  if (btnFilterToday) {
+    btnFilterToday.addEventListener("click", function () {
+      _atShowAll = false;
+      loadAutoTradesHistory();
+    });
+  }
+  if (btnFilterAll) {
+    btnFilterAll.addEventListener("click", function () {
+      _atShowAll = true;
+      loadAutoTradesHistory();
+    });
+  }
+
+  // Carrega historico ao inicializar (só hoje por padrão)
+  loadAutoTradesHistory();
+
+  // ── Polling contínuo a cada 30s quando auto-trade está ativo ──────────
+  setInterval(function () {
+    if (autoTradeEnabled) fetchManage();
+  }, 30000);
+})();
+
+// ============================================================
+// HISTORICO DE TRADES AUTOMATICOS
+// ============================================================
+var _atShowAll = false;   // false = só hoje, true = todos os dias
+
+function loadAutoTradesHistory() {
+  var el = function (id) { return document.getElementById(id); };
+
+  // Sincroniza visual dos botões filtro
+  var btnToday = el("at-filter-today");
+  var btnAll   = el("at-filter-all");
+  if (btnToday && btnAll) {
+    if (_atShowAll) {
+      btnToday.style.background = ""; btnToday.style.color = ""; btnToday.style.fontWeight = "";
+      btnAll.style.background   = "var(--accent)"; btnAll.style.color = "#000"; btnAll.style.fontWeight = "600";
+    } else {
+      btnToday.style.background = "var(--accent)"; btnToday.style.color = "#000"; btnToday.style.fontWeight = "600";
+      btnAll.style.background   = ""; btnAll.style.color = ""; btnAll.style.fontWeight = "";
+    }
+  }
+
+  var url = "/api/autotrade/trades?limit=100" + (_atShowAll ? "&all=1" : "");
+  fetch(url)
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (!d.ok) return;
+      var items = d.items || [];
+      var stats = d.stats  || {};
+
+      // Atualiza stats
+      function setTxt(id, val) { var e = el(id); if (e) e.textContent = val; }
+      setTxt("at-stat-total",      stats.total         || 0);
+      setTxt("at-stat-wins",       stats.wins          || 0);
+      setTxt("at-stat-losses",     stats.losses        || 0);
+      setTxt("at-stat-winrate",    (stats.win_rate_pct || 0) + "%");
+      setTxt("at-stat-bloqueados", stats.bloqueados_ia || 0);
+
+      var pnlPts = stats.pnl_total_pts || 0;
+      var pnlBrl = stats.pnl_total_brl || 0;
+      var ptsEl  = el("at-stat-pnl-pts");
+      var brlEl  = el("at-stat-pnl-brl");
+      if (ptsEl) {
+        ptsEl.textContent = (pnlPts >= 0 ? "+" : "") + pnlPts + " pts";
+        ptsEl.style.color = pnlPts >= 0 ? "#22c55e" : "#ef4444";
+      }
+      if (brlEl) {
+        brlEl.textContent = "R$" + (pnlBrl >= 0 ? "+" : "") + pnlBrl.toFixed(2);
+        brlEl.style.color = pnlBrl >= 0 ? "#22c55e" : "#ef4444";
+      }
+
+      var emptyEl = el("at-history-empty");
+      var wrapEl  = el("at-history-wrap");
+      var bodyEl  = el("at-history-body");
+
+      if (!items.length) {
+        if (emptyEl) emptyEl.hidden = false;
+        if (wrapEl)  wrapEl.hidden  = true;
+        return;
+      }
+      if (emptyEl) emptyEl.hidden = true;
+      if (wrapEl)  wrapEl.hidden  = false;
+
+      if (!bodyEl) return;
+      bodyEl.innerHTML = items.map(function (t) {
+        var isOpen     = !t.closed_at;
+        var acao       = t.acao || "—";
+        var acaoCls    = acao === "COMPRA" ? "rec-buy" : "rec-sell";
+        var hora       = t.opened_at ? t.opened_at.slice(11, 19) : "—";
+        var data       = t.opened_at ? t.opened_at.slice(0, 10) : "—";
+        var pnlPts     = t.pnl_pts;
+        var pnlBrl     = t.pnl_brl;
+        var pnlPtsStr  = isOpen ? "<em>aberto</em>" :
+          pnlPts != null ? '<span style="color:' + (pnlPts >= 0 ? "#22c55e" : "#ef4444") + '">' +
+          (pnlPts >= 0 ? "+" : "") + pnlPts + '</span>' : "—";
+        var pnlBrlStr  = isOpen ? "" :
+          pnlBrl != null ? '<span style="color:' + (pnlBrl >= 0 ? "#22c55e" : "#ef4444") + '">' +
+          "R$" + (pnlBrl >= 0 ? "+" : "") + parseFloat(pnlBrl).toFixed(2) + '</span>' : "—";
+
+        var isBloqueado = t.close_reason === "BLOQUEADO_IA";
+        var motivo = isBloqueado
+          ? '<span style="color:#f87171;font-weight:700" title="' + (t.ai_motivo || "") + '">🚫 IA bloqueou</span>'
+          : t.close_reason || (isOpen ? '<em style="color:#f59e0b">aberto</em>' : "—");
+        var scoreDisp = t.score != null ? Math.abs(t.score) : null;
+        var aiStr  = t.ai_validated
+          ? '<span title="' + (t.ai_motivo || "") + '" style="color:' + (isBloqueado ? "#f87171" : "#818cf8") + '">' +
+            (isBloqueado ? "🚫 " : "✓ ") +
+            (t.ai_veredito || "IA") + (t.ai_confidence ? " " + t.ai_confidence + "%" : "") + '</span>'
+          : '<span style="color:var(--text-muted)">—</span>';
+
+        var rowStyle = isBloqueado
+          ? ' style="background:rgba(127,29,29,.18);opacity:.85"'
+          : '';
+        var aiMotivTip = isBloqueado && t.ai_motivo
+          ? ' title="Motivo IA: ' + t.ai_motivo.replace(/"/g, "'") + '"'
+          : '';
+        return '<tr' + rowStyle + aiMotivTip + '>' +
+          '<td>' + data + '<br><small style="color:var(--text-muted)">' + hora + '</small></td>' +
+          '<td style="font-size:.78rem">' + (t.tv_symbol || "").split(":").pop() + '</td>' +
+          '<td><span class="' + acaoCls + '">' + acao + '</span></td>' +
+          '<td style="text-align:center">' + (scoreDisp != null ? '|' + scoreDisp + '|' : "—") + '</td>' +
+          '<td>' + (t.entry_price ? Math.round(t.entry_price).toLocaleString("pt-BR") : "—") + '</td>' +
+          '<td>' + (t.sl_initial  ? Math.round(t.sl_initial).toLocaleString("pt-BR")  : "—") + '</td>' +
+          '<td>' + (t.tp1_initial ? Math.round(t.tp1_initial).toLocaleString("pt-BR") : "—") + '</td>' +
+          '<td>' + (t.exit_price && !isOpen ? Math.round(t.exit_price).toLocaleString("pt-BR") : "—") + '</td>' +
+          '<td style="font-size:.78rem">' + motivo + '</td>' +
+          '<td>' + pnlPtsStr + '</td>' +
+          '<td>' + pnlBrlStr + '</td>' +
+          '<td>' + aiStr + '</td>' +
+          '</tr>';
+      }).join("");
+    })
+    .catch(function (e) { console.warn("Auto-trades history erro:", e); });
+}
+
+// ============================================================
+// RELATÓRIO MENSAL
+// ============================================================
+(function () {
+  "use strict";
+  var el = function (id) { return document.getElementById(id); };
+
+  // Inicializa o mês com o mês atual
+  var monthInput = el("report-month");
+  if (monthInput) {
+    var now = new Date();
+    monthInput.value = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return "—";
+    return iso.slice(0, 10);
+  }
+
+  function pct(n, d) {
+    return d ? Math.round(n / d * 100) + "%" : "—";
+  }
+
+  // ── Carrega dados do relatório ─────────────────────────────────────────
+  function loadReport() {
+    var month = monthInput ? monthInput.value : "";
+    var url   = "/api/monitor/signals/report" + (month ? "?month=" + encodeURIComponent(month) : "");
+
+    fetch(url)
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) return;
+        renderReport(d);
+        // Habilita botão CSV
+        var csvBtn = el("report-csv-btn");
+        if (csvBtn) csvBtn.disabled = d.total === 0;
+      })
+      .catch(function (e) { console.error("Relatório erro:", e); });
+  }
+
+  // ── Renderiza o relatório ──────────────────────────────────────────────
+  function renderReport(d) {
+    var items  = d.items  || [];
+    var daily  = d.daily  || [];
+    var total  = d.total  || 0;
+    var verif  = d.verificados || 0;
+
+    var summaryEl = el("report-summary");
+    var dailyEl   = el("report-daily-section");
+    var detailEl  = el("report-detail-section");
+    var emptyEl   = el("report-empty");
+
+    function setText(id, val) { var e = el(id); if (e) e.textContent = val; }
+
+    if (total === 0) {
+      if (summaryEl) summaryEl.style.display = "none";
+      if (dailyEl)   dailyEl.style.display   = "none";
+      if (detailEl)  detailEl.style.display  = "none";
+      if (emptyEl)   emptyEl.style.display   = "";
+      return;
+    }
+    if (emptyEl) emptyEl.style.display = "none";
+
+    // Cards de resumo
+    if (summaryEl) summaryEl.style.display = "";
+    var successCount = (d.tp1_hits || 0) + (d.tp2_hits || 0) + (d.tp3_hits || 0);
+    setText("rpt-total",    total);
+    setText("rpt-assertiv", verif ? pct(successCount, verif) : "—");
+    setText("rpt-sucesso",  successCount + " trades");
+    setText("rpt-tp1",      d.tp1_hits || 0);
+    setText("rpt-tp2",      d.tp2_hits || 0);
+    setText("rpt-tp3",      d.tp3_hits || 0);
+    setText("rpt-stop",     d.stp_hits || 0);
+    setText("rpt-stop-pct", verif ? pct(d.stp_hits || 0, verif) : "");
+    setText("rpt-sem",      total - verif);
+
+    // Tabela diária
+    if (dailyEl) dailyEl.style.display = "";
+    var dailyBody = el("report-daily-body");
+    if (dailyBody) {
+      dailyBody.innerHTML = daily.map(function (row) {
+        var acertos = (row.tp1 || 0) + (row.tp2 || 0) + (row.tp3 || 0);
+        return "<tr>" +
+          "<td>" + (row.day || "—") + "</td>" +
+          "<td>" + (row.total || 0) + "</td>" +
+          "<td style='color:#22c55e'>" + (row.tp1 || 0) + "</td>" +
+          "<td style='color:#3b82f6'>" + (row.tp2 || 0) + "</td>" +
+          "<td style='color:#a855f7'>" + (row.tp3 || 0) + "</td>" +
+          "<td style='color:#ef4444'>" + (row.stop || 0) + "</td>" +
+          "<td>" + pct(acertos, row.total) + "</td>" +
+          "</tr>";
+      }).join("");
+    }
+
+    // Tabela de detalhes
+    if (detailEl) detailEl.style.display = "";
+    var detailBody = el("report-detail-body");
+    if (detailBody) {
+      detailBody.innerHTML = items.map(function (r) {
+        var cls = r.acao === "COMPRA" ? "style='color:#22c55e'" : "style='color:#ef4444'";
+        var outcome = "";
+        if (r.tp3_hit)       outcome = "<span class='badge tp3'>★TP3</span>";
+        else if (r.tp2_hit)  outcome = "<span class='badge tp2'>★TP2</span>";
+        else if (r.tp1_hit)  outcome = "<span class='badge tp1'>★TP1</span>";
+        else if (r.stop_hit) outcome = "<span class='badge no'>🛑Stop</span>";
+        else if (r.outcome_checked_at) outcome = "<span class='badge'>—</span>";
+        return "<tr>" +
+          "<td>" + fmtDate(r.created_at) + "</td>" +
+          "<td>" + (r.tv_symbol || "—").split(":").pop() + "</td>" +
+          "<td " + cls + ">" + (r.acao || "—") + "</td>" +
+          "<td>" + (r.score != null ? r.score : "—") + "</td>" +
+          "<td>" + (r.entrada ? Number(r.entrada).toLocaleString("pt-BR") : "—") + "</td>" +
+          "<td>" + (r.stop    ? Number(r.stop).toLocaleString("pt-BR")    : "—") + "</td>" +
+          "<td>" + (r.tp1     ? Number(r.tp1).toLocaleString("pt-BR")     : "—") + "</td>" +
+          "<td>" + (r.tp2     ? Number(r.tp2).toLocaleString("pt-BR")     : "—") + "</td>" +
+          "<td>" + outcome + "</td>" +
+          "</tr>";
+      }).join("");
+    }
+  }
+
+  // ── Exportar CSV ───────────────────────────────────────────────────────
+  var csvBtn = el("report-csv-btn");
+  if (csvBtn) {
+    csvBtn.addEventListener("click", function () {
+      var month = monthInput ? monthInput.value : "";
+      var url   = "/api/monitor/signals/report" + (month ? "?month=" + encodeURIComponent(month) : "");
+      fetch(url)
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (!d.ok || !d.items) return;
+          var header = ["Data", "Simbolo", "Sinal", "Score", "Entrada", "Stop", "TP1", "TP2", "TP3", "TP1 hit", "TP2 hit", "TP3 hit", "Stop hit"];
+          var rows = [header].concat(d.items.map(function (r) {
+            return [
+              fmtDate(r.created_at), (r.tv_symbol || "").split(":").pop(),
+              r.acao, r.score, r.entrada, r.stop, r.tp1, r.tp2, r.tp3,
+              r.tp1_hit ? "S" : "N", r.tp2_hit ? "S" : "N",
+              r.tp3_hit ? "S" : "N", r.stop_hit ? "S" : "N"
+            ];
+          }));
+          var csv  = rows.map(function (r) { return r.join(";"); }).join("\n");
+          var blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+          var a    = document.createElement("a");
+          a.href   = URL.createObjectURL(blob);
+          a.download = "relatorio_" + (month || "trades") + ".csv";
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        })
+        .catch(function () {});
+    });
+  }
+
+  // ── Verificar mês (batch verify) ──────────────────────────────────────
+  var verifyBtn = el("report-verify-btn");
+  if (verifyBtn) {
+    verifyBtn.addEventListener("click", function () {
+      verifyBtn.disabled = true;
+      verifyBtn.textContent = "🔄 Verificando...";
+      fetch("/api/monitor/signals/verify-batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ limit: 50 }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function () {
+          verifyBtn.textContent = "✅ Pronto";
+          setTimeout(function () {
+            verifyBtn.textContent = "🔍 Verificar Mês";
+            verifyBtn.disabled = false;
+          }, 3000);
+          loadReport();
+        })
+        .catch(function () {
+          verifyBtn.textContent = "❌ Erro";
+          verifyBtn.disabled = false;
+        });
+    });
+  }
+
+  // Auto-start when report tab is clicked
+  document.querySelectorAll(".main-tab-btn").forEach(function (btn) {
+    if (btn.getAttribute("data-tab") === "report") {
+      btn.addEventListener("click", function () { loadReport(); });
+    }
+  });
+
+  var loadBtn = el("report-load-btn");
+  if (loadBtn) loadBtn.addEventListener("click", loadReport);
+
+}());
+
+// ============================================================
+// OPERACAO MANUAL — Compra/Venda direta no MT5
+// ============================================================
+(function () {
+  "use strict";
+
+  var el = function (id) { return document.getElementById(id); };
+
+  // Estado do último sinal recebido (preenchido pelo Monitor MT5)
+  window._lastMT5Signal = window._lastMT5Signal || null;
+
+  // Elementos
+  var buyBtn     = el("manual-buy-btn");
+  var sellBtn    = el("manual-sell-btn");
+  var closeBtn   = el("manual-close-btn");
+  var statusDiv  = el("manual-status");
+  var overlay    = el("manual-confirm-overlay");
+  var confirmOk  = el("manual-confirm-ok");
+  var confirmCan = el("manual-confirm-cancel");
+
+  if (!buyBtn || !sellBtn) return;  // painel não presente
+
+  // ---- helpers ----
+  function getSymbol() {
+    var sel = el("mt5-instrument");
+    return (sel && sel.value) || "BMFBOVESPA:WIN1!";
+  }
+
+  function getVolume() {
+    var v = parseFloat((el("manual-volume") || {}).value || "1");
+    return isNaN(v) || v < 1 ? 1 : v;
+  }
+
+  function getSL() {
+    var useSignal = el("manual-use-signal") && el("manual-use-signal").checked;
+    var manualVal = parseFloat((el("manual-sl") || {}).value || "");
+    if (!isNaN(manualVal) && manualVal > 0) return manualVal;
+    if (useSignal && window._lastMT5Signal && window._lastMT5Signal.stop)
+      return window._lastMT5Signal.stop;
+    return null;
+  }
+
+  function getTP1() {
+    var useSignal = el("manual-use-signal") && el("manual-use-signal").checked;
+    var manualVal = parseFloat((el("manual-tp1") || {}).value || "");
+    if (!isNaN(manualVal) && manualVal > 0) return manualVal;
+    if (useSignal && window._lastMT5Signal && window._lastMT5Signal.tp1)
+      return window._lastMT5Signal.tp1;
+    return null;
+  }
+
+  function setStatus(msg, color) {
+    if (!statusDiv) return;
+    statusDiv.textContent = msg;
+    statusDiv.style.color = color || "var(--text-muted)";
+  }
+
+  function fmt(v) { return v ? parseFloat(v).toFixed(0) : "—"; }
+
+  // ---- Modal de confirmação ----
+  var _pendingAction = null;
+
+  function showConfirm(acao, sl, tp1, volume, callback) {
+    var title  = el("manual-confirm-title");
+    var body   = el("manual-confirm-body");
+    if (!overlay || !title || !body) { callback(); return; }
+
+    var cor = acao === "COMPRA" ? "#16a34a" : acao === "VENDA" ? "#dc2626" : "#f59e0b";
+    title.innerHTML = '<span style="color:' + cor + ';font-size:1.3rem">' +
+      (acao === "COMPRA" ? "▲ COMPRA" : acao === "VENDA" ? "▼ VENDA" : "✕ FECHAR") +
+      '</span>';
+
+    if (acao === "FECHAR") {
+      body.innerHTML = "Fechar <strong>todas as posições abertas</strong> em " + getSymbol() + "?";
+    } else {
+      body.innerHTML =
+        "Símbolo: <strong>" + getSymbol() + "</strong><br>" +
+        "Volume: <strong>" + volume + " mini(s)</strong><br>" +
+        "Stop Loss: <strong>" + fmt(sl) + "</strong><br>" +
+        "TP1: <strong>" + fmt(tp1) + "</strong><br><br>" +
+        "<span style='color:#f59e0b;font-size:.8rem'>⚠️ Ordem executada diretamente no MT5</span>";
+    }
+
+    var okBtn = el("manual-confirm-ok");
+    if (okBtn) okBtn.style.background = cor;
+    overlay.style.display = "flex";
+    _pendingAction = callback;
+  }
+
+  function hideConfirm() {
+    if (overlay) overlay.style.display = "none";
+    _pendingAction = null;
+  }
+
+  if (confirmOk)  confirmOk.addEventListener("click",  function () { if (_pendingAction) _pendingAction(); hideConfirm(); });
+  if (confirmCan) confirmCan.addEventListener("click",  hideConfirm);
+  if (overlay)    overlay.addEventListener("click", function (e) { if (e.target === overlay) hideConfirm(); });
+
+  // ---- Execução ----
+  function executeManual(acao) {
+    var sym    = getSymbol();
+    var vol    = getVolume();
+    var sl     = getSL();
+    var tp1    = getTP1();
+
+    showConfirm(acao, sl, tp1, vol, function () {
+      setStatus("Enviando ordem ao MT5...", "#f59e0b");
+      [buyBtn, sellBtn, closeBtn].forEach(function (b) { if (b) b.disabled = true; });
+
+      fetch("/api/trade/manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tv_symbol: sym,
+          acao:      acao,
+          sl:        sl,
+          tp1:       tp1,
+          volume:    vol,
+        }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.ok) {
+            var price = data.result && data.result.price ? data.result.price.toFixed(0) : "—";
+            setStatus("✅ " + acao + " executada @ " + price + " | Order #" + (data.result && data.result.order || "—"), "#16a34a");
+            // Desenha linhas no gráfico LightweightCharts
+            if (window._drawManualTradeLines && data.result) {
+              window._drawManualTradeLines(acao, data.result.price, getSL(), getTP1());
+            }
+            // Ativa modo MANAGE — para análise de novos sinais enquanto trade está ativo
+            if (window.enterManageMode)    window.enterManageMode();
+            if (window.startManagePolling) window.startManagePolling(30);
+            // Atualiza histórico de trades
+            if (window.loadAutoTradesHistory) setTimeout(window.loadAutoTradesHistory, 800);
+          } else {
+            setStatus("❌ " + (data.error || "Erro desconhecido"), "#dc2626");
+          }
+        })
+        .catch(function (err) {
+          setStatus("❌ Erro de rede: " + err.message, "#dc2626");
+        })
+        .finally(function () {
+          [buyBtn, sellBtn, closeBtn].forEach(function (b) { if (b) b.disabled = false; });
+        });
+    });
+  }
+
+  buyBtn.addEventListener("click",  function () { executeManual("COMPRA"); });
+  sellBtn.addEventListener("click", function () { executeManual("VENDA"); });
+  closeBtn.addEventListener("click", function () {
+    showConfirm("FECHAR", null, null, null, function () {
+      setStatus("Fechando posições...", "#f59e0b");
+      [buyBtn, sellBtn, closeBtn].forEach(function (b) { if (b) b.disabled = true; });
+
+      fetch("/api/trade/manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tv_symbol: getSymbol(), acao: "FECHAR" }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          setStatus(data.ok ? "✅ Posição fechada." : "❌ " + (data.error || "Erro"), data.ok ? "#16a34a" : "#dc2626");
+          if (data.ok && window.loadAutoTradesHistory) setTimeout(window.loadAutoTradesHistory, 800);
+        })
+        .catch(function (err) { setStatus("❌ Erro: " + err.message, "#dc2626"); })
+        .finally(function () { [buyBtn, sellBtn, closeBtn].forEach(function (b) { if (b) b.disabled = false; }); });
+    });
+  });
+
+  // Pré-preenche SL/TP quando chega novo sinal do Monitor MT5
+  // (hook chamado pelo fetchMt5 após renderizar sinal)
+  window._onNewMT5Signal = function (signal) {
+    window._lastMT5Signal = signal;
+    var useSignal = el("manual-use-signal");
+    if (!useSignal || !useSignal.checked) return;
+    var slInput  = el("manual-sl");
+    var tp1Input = el("manual-tp1");
+    if (slInput  && signal && signal.stop) slInput.placeholder  = "≈ " + parseFloat(signal.stop).toFixed(0);
+    if (tp1Input && signal && signal.tp1)  tp1Input.placeholder = "≈ " + parseFloat(signal.tp1).toFixed(0);
+  };
+
+}());

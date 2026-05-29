@@ -1,6 +1,9 @@
 /* Trade AI — tema institucional escuro */
 @import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap");
 
+/* Garante que o atributo [hidden] funcione mesmo em elementos com display:flex/grid */
+[hidden] { display: none !important; }
+
 :root {
   --bg: #080c11;
   --bg-elevated: #0f141c;
@@ -756,6 +759,16 @@ table.data td.td-ativo {
   display: block;
 }
 
+/* Monitor MT5 — ocupa largura total da tela, escapando do max-width do .shell */
+#tab-mt5.tab-active {
+  width: 100vw;
+  position: relative;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 1.5rem 2rem;
+  box-sizing: border-box;
+}
+
 /* --- Tab nav --- */
 .main-tabs {
   display: flex;
@@ -853,7 +866,7 @@ table.data td.td-ativo {
 /* --- Monitor Main Grid --- */
 .monitor-main-grid {
   display: grid;
-  grid-template-columns: 1fr 320px;
+  grid-template-columns: 1fr 360px;
   gap: 1rem;
   align-items: start;
 }
@@ -886,7 +899,6 @@ table.data td.td-ativo {
 
 /* --- Signal Panel --- */
 .monitor-signal-panel {
-  min-height: 320px;
   position: relative;
 }
 

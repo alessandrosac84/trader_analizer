@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Trade AI — Dashboard B3</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=6" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=8" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/trade-view.css') }}?v=4" />
 </head>
 <body>
@@ -32,8 +32,12 @@
       <button class="main-tab-btn is-active" data-tab="dashboard" role="tab" aria-selected="true">
         📊 Dashboard
       </button>
-      <button class="main-tab-btn" data-tab="monitor" role="tab" aria-selected="false">
-        🔴 Monitor ao vivo
+
+      <button class="main-tab-btn" data-tab="mt5" role="tab" aria-selected="false">
+        🟢 Monitor MT5
+      </button>
+      <button class="main-tab-btn" data-tab="report" role="tab" aria-selected="false">
+        📊 Relatório
       </button>
     </nav>
 
@@ -339,240 +343,555 @@
 
     </div><!-- /tab-pane #tab-dashboard -->
 
-    <!-- ===================== ABA MONITOR ===================== -->
-    <div id="tab-monitor" class="tab-pane">
 
-      <!-- Controles do Monitor -->
+
+    <!-- ===================== ABA MONITOR MT5 ===================== -->
+    <div id="tab-mt5" class="tab-pane">
+
+      <!-- Controles -->
       <section class="card monitor-controls">
         <div class="monitor-controls__row">
           <div class="monitor-field">
-            <label for="mon-instrument">Instrumento</label>
-            <select id="mon-instrument" class="mon-select">
-              <option value="BMFBOVESPA:WIN1!" data-yf="^BVSP">Mini Índice (WIN1!)</option>
-              <option value="BMFBOVESPA:WDO1!" data-yf="BRL=X">Mini Dólar (WDO1!)</option>
-              <option value="BMFBOVESPA:IBOV" data-yf="^BVSP">Ibovespa</option>
-              <option value="BMFBOVESPA:PETR4" data-yf="PETR4.SA">Petrobras (PETR4)</option>
-              <option value="BMFBOVESPA:VALE3" data-yf="VALE3.SA">Vale (VALE3)</option>
-              <option value="BMFBOVESPA:ITUB4" data-yf="ITUB4.SA">Itaú (ITUB4)</option>
-              <option value="BMFBOVESPA:BBDC4" data-yf="BBDC4.SA">Bradesco (BBDC4)</option>
-              <option value="BMFBOVESPA:BBAS3" data-yf="BBAS3.SA">Banco do Brasil (BBAS3)</option>
-              <option value="BMFBOVESPA:ABEV3" data-yf="ABEV3.SA">Ambev (ABEV3)</option>
-              <option value="BMFBOVESPA:WEGE3" data-yf="WEGE3.SA">WEG (WEGE3)</option>
-              <option value="__custom__">Personalizado…</option>
+            <label for="mt5-instrument">Instrumento</label>
+            <select id="mt5-instrument" class="mon-select">
+              <option value="BMFBOVESPA:WIN1!" selected>Mini Indice (WIN1!)</option>
+              <option value="BMFBOVESPA:WDO1!">Mini Dolar (WDO1!)</option>
+              <option value="BMFBOVESPA:PETR4">Petrobras (PETR4)</option>
+              <option value="BMFBOVESPA:RADL3">Raiadrogasil (RADL3)</option>
+              <option value="BMFBOVESPA:VALE3">Vale (VALE3)</option>
+              <option value="BMFBOVESPA:ITUB4">Itau (ITUB4)</option>
+              <option value="FX:EURUSD">EUR/USD (Forex 24/5)</option>
+              <option value="FX:GBPUSD">GBP/USD (Forex 24/5)</option>
+              <option value="FX:XAUUSD">Ouro XAU/USD (24/5)</option>
+              <option value="CRYPTO:BTCUSD">Bitcoin (BTC/USD) 24h</option>
             </select>
           </div>
-          <div class="monitor-field" id="mon-custom-wrap" hidden>
-            <label for="mon-custom-tv">Símbolo TradingView</label>
-            <input type="text" id="mon-custom-tv" class="mon-input" placeholder="ex: BMFBOVESPA:PETR4" />
-          </div>
           <div class="monitor-field">
-            <label for="mon-interval">Timeframe</label>
-            <select id="mon-interval" class="mon-select">
+            <label for="mt5-interval">Timeframe</label>
+            <select id="mt5-interval" class="mon-select">
               <option value="1">1 minuto</option>
               <option value="5">5 minutos</option>
               <option value="15" selected>15 minutos</option>
               <option value="30">30 minutos</option>
               <option value="60">1 hora</option>
-              <option value="D">Diário</option>
             </select>
           </div>
           <div class="monitor-field">
-            <label for="mon-refresh">Atualizar a cada</label>
-            <select id="mon-refresh" class="mon-select">
-              <option value="60">1 minuto</option>
-              <option value="300" selected>5 minutos</option>
-              <option value="900">15 minutos</option>
+            <label for="mt5-refresh">Atualizar</label>
+            <select id="mt5-refresh" class="mon-select">
+              <option value="30">30 seg</option>
+              <option value="60" selected>1 minuto</option>
+              <option value="300">5 minutos</option>
               <option value="0">Desligado</option>
             </select>
           </div>
           <div class="monitor-field monitor-field--action">
             <label>&nbsp;</label>
             <div class="mon-action-row">
-              <button type="button" class="btn" id="mon-start-btn">▶ Iniciar</button>
-              <button type="button" class="btn btn-ghost" id="mon-notif-btn" title="Ativar notificações do sistema">🔔 Notificações</button>
-              <button type="button" class="btn btn-ghost" id="mon-notif-test-btn" title="Enviar notificação de teste agora" style="display:none">📣 Testar</button>
+              <button type="button" class="btn" id="mt5-start-btn">&#9654; Iniciar</button>
+              <button type="button" class="btn btn-ghost" id="mt5-stop-btn" style="display:none">&#9646;&#9646; Pausar</button>
             </div>
           </div>
         </div>
-        <div class="monitor-status-bar" id="mon-status-bar">
-          <span id="mon-status-text">Configure o instrumento e clique em Iniciar.</span>
+        <div class="monitor-status-bar" id="mt5-status-bar">
+          <span id="mt5-status-text">Configure e clique em Iniciar.</span>
           <div class="monitor-status-right">
-            <span id="mon-notif-status" class="mon-notif-status mon-notif-status--off">🔕 Notificações desativadas</span>
-            <span class="monitor-delay-badge">⚠️ Dados com delay (Yahoo Finance / gratuito)</span>
+            <span id="mt5-fonte-badge" class="monitor-delay-badge" style="display:none"></span>
+            <span id="mt5-last-update" style="font-size:0.8rem;color:var(--text-muted)"></span>
           </div>
         </div>
       </section>
 
-      <!-- Painel de ajuda: notificações macOS -->
-      <div id="mon-notif-help" class="mon-notif-help" style="display:none">
-        <div class="mon-notif-help__icon">🍎</div>
-        <div class="mon-notif-help__body">
-          <strong>Libere as notificações no macOS para receber alertas mesmo com o browser em segundo plano:</strong>
-          <ol>
-            <li>Abra <strong>Configurações do Sistema</strong> → <strong>Notificações</strong></li>
-            <li>Encontre seu browser (<strong>Chrome</strong>, <strong>Safari</strong> ou <strong>Firefox</strong>) na lista</li>
-            <li>Em "Estilo de alerta", escolha <strong>Alertas</strong> (ficam na tela até você dispensar)</li>
-            <li>Ative também <strong>"Mostrar na tela de bloqueio"</strong> se quiser ver com a tela travada</li>
-          </ol>
-          Depois clique em <strong>📣 Testar</strong> para confirmar que está funcionando.
-        </div>
-        <button class="mon-notif-help__close" id="mon-notif-help-close">✕</button>
-      </div>
-
-      <!-- Layout principal: gráfico + painel de sinal -->
+      <!-- Layout: grafico + painel de sinal -->
       <div class="monitor-main-grid">
 
-        <!-- TradingView Widget -->
+        <!-- Coluna esquerda: grafico + manual + historico -->
+        <div>
+
+        <!-- Grafico LightweightCharts (MT5) -->
         <div class="monitor-chart-wrap card">
-          <div class="monitor-chart-header">
-            <span id="mon-chart-label">Gráfico — Mini Índice (WIN1!)</span>
-            <span class="monitor-tv-badge">TradingView (grátis · delay)</span>
+          <div class="monitor-chart-header" style="display:flex;align-items:center;justify-content:space-between;padding:0.5rem 1rem;">
+            <span id="mt5-chart-label" style="font-weight:600">Grafico MT5 &mdash; WINM26 (15m)</span>
+            <div style="display:flex;gap:0.5rem;font-size:0.8rem;">
+              <span style="color:#f0c420">&#9632; EMA9</span>
+              <span style="color:#2196F3">&#9632; EMA21</span>
+              <span style="color:#9c27b0">&#9632; EMA50</span>
+              <span style="color:#ff9800">&#9632; VWAP</span>
+              <span style="color:#607d8b">- - BB</span>
+            </div>
           </div>
-          <div id="tradingview-widget-container">
-            <div id="tradingview_chart" style="width:100%;height:520px;"></div>
+          <div id="mt5-chart" style="width:100%;height:480px;position:relative;">
+            <div id="mt5-chart-placeholder" style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);">
+              <div style="text-align:center;">
+                <div style="font-size:3rem;margin-bottom:1rem">&#128202;</div>
+                <p>Clique em <strong>Iniciar</strong> para carregar o grafico.</p>
+              </div>
+            </div>
           </div>
+
+          <!-- ===== OPERACAO MANUAL — abaixo do grafico ===== -->
+          <div style="padding:.6rem .75rem .5rem;border-top:1px solid var(--border)">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem;flex-wrap:wrap;gap:.4rem">
+              <div style="display:flex;align-items:center;gap:.4rem">
+                <span>🎮</span>
+                <strong style="font-size:.85rem">Operação Manual</strong>
+              </div>
+              <div style="display:flex;align-items:center;gap:.4rem;font-size:.8rem;color:var(--text-muted)">
+                <label style="margin:0">Vol:</label>
+                <input id="manual-volume" type="number" value="1" min="1" max="10" step="1"
+                  style="width:46px;padding:.2rem .3rem;border-radius:5px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);font-size:.82rem;text-align:center">
+                <span>mini(s)</span>
+                <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;margin-left:.4rem">
+                  <input id="manual-use-signal" type="checkbox" checked style="cursor:pointer">
+                  <span>Usar sinal</span>
+                </label>
+              </div>
+            </div>
+            <div style="display:flex;gap:.4rem;margin-bottom:.5rem">
+              <div style="flex:1">
+                <label style="font-size:.7rem;color:var(--text-muted);display:block;margin-bottom:.15rem">Stop Loss</label>
+                <input id="manual-sl" type="number" placeholder="auto do sinal"
+                  style="width:100%;padding:.25rem .4rem;border-radius:5px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);font-size:.8rem">
+              </div>
+              <div style="flex:1">
+                <label style="font-size:.7rem;color:var(--text-muted);display:block;margin-bottom:.15rem">TP1</label>
+                <input id="manual-tp1" type="number" placeholder="auto do sinal"
+                  style="width:100%;padding:.25rem .4rem;border-radius:5px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);font-size:.8rem">
+              </div>
+            </div>
+            <div style="display:flex;gap:.5rem;margin-bottom:.3rem">
+              <button id="manual-buy-btn" class="btn"
+                style="flex:1;background:#16a34a;border-color:#16a34a;color:#fff;font-size:.9rem;font-weight:700;padding:.45rem 0">
+                ▲ COMPRAR
+              </button>
+              <button id="manual-sell-btn" class="btn"
+                style="flex:1;background:#dc2626;border-color:#dc2626;color:#fff;font-size:.9rem;font-weight:700;padding:.45rem 0">
+                ▼ VENDER
+              </button>
+              <button id="manual-close-btn" class="btn btn-ghost"
+                style="padding:.45rem .7rem;font-size:.82rem;white-space:nowrap">
+                ✕ Fechar
+              </button>
+            </div>
+            <div id="manual-status" style="font-size:.75rem;text-align:center;min-height:1.1rem;color:var(--text-muted)"></div>
+          </div>
+
         </div>
 
-        <!-- Painel de sinal -->
-        <div class="monitor-signal-panel card" id="mon-signal-panel">
-          <div class="mon-signal-idle" id="mon-signal-idle">
-            <span class="mon-idle-icon">📡</span>
-            <p>Clique em <strong>Iniciar</strong> para<br>começar o monitoramento.</p>
+
+        
+        <!-- Cards de acuracidade MT5 -->
+        <section id="mt5-outcome-cards" style="margin-top:1rem">
+          <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:stretch">
+            <div class="card outcome-card" style="flex:1;min-width:110px;text-align:center">
+              <div class="outcome-num" id="mt5-oc-total">—</div>
+              <div class="outcome-label">Sinais</div>
+            </div>
+            <div class="card outcome-card" style="flex:1;min-width:110px;text-align:center;border-top:3px solid #22c55e">
+              <div class="outcome-num" id="mt5-oc-tp1">—</div>
+              <div class="outcome-label">🎯 TP1</div>
+              <div class="outcome-pct" id="mt5-oc-tp1-pct"></div>
+            </div>
+            <div class="card outcome-card" style="flex:1;min-width:110px;text-align:center;border-top:3px solid #3b82f6">
+              <div class="outcome-num" id="mt5-oc-tp2">—</div>
+              <div class="outcome-label">🚀 TP2</div>
+              <div class="outcome-pct" id="mt5-oc-tp2-pct"></div>
+            </div>
+            <div class="card outcome-card" style="flex:1;min-width:110px;text-align:center;border-top:3px solid #a855f7">
+              <div class="outcome-num" id="mt5-oc-tp3">—</div>
+              <div class="outcome-label">💎 TP3</div>
+              <div class="outcome-pct" id="mt5-oc-tp3-pct"></div>
+            </div>
+            <div class="card outcome-card" style="flex:1;min-width:110px;text-align:center;border-top:3px solid #ef4444">
+              <div class="outcome-num" id="mt5-oc-stop">—</div>
+              <div class="outcome-label">🛑 Stop</div>
+              <div class="outcome-pct" id="mt5-oc-stop-pct"></div>
+            </div>
+            <div class="card outcome-card" style="flex:1;min-width:110px;text-align:center;border-top:3px solid #f59e0b">
+              <div class="outcome-num" id="mt5-oc-verif">—</div>
+              <div class="outcome-label">✅ Verificados</div>
+            </div>
+          </div>
+        </section>
+
+
+        <!-- ⚠️ Painel Auto-Trade DEMO -->
+        <section class="card autotrade-panel" id="autotrade-panel" style="margin-top:1rem;border:2px solid #f59e0b">
+          <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+            <div style="flex:1;min-width:200px">
+              <div style="display:flex;align-items:center;gap:.5rem">
+                <span style="font-size:1.1rem;font-weight:700">🤖 Auto-Trade</span>
+                <span class="badge no" style="font-size:.7rem;padding:.2rem .5rem">⚠️ APENAS DEMO</span>
+              </div>
+              <div style="font-size:.75rem;color:var(--text-muted);margin-top:.25rem">
+                Executa ordens automaticamente quando um sinal COMPRA/VENDA for detectado.
+              </div>
+            </div>
+            <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
+              <label style="font-size:.8rem;display:flex;align-items:center;gap:.3rem">
+                |Score| mín:
+                <input type="number" id="at-score-min" value="5" min="1" max="10"
+                       title="Valor absoluto do score. VENDA score=-8 → |score|=8 ≥ 5 → EXECUTA"
+                       style="width:50px;padding:.2rem .4rem;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;color:var(--text);text-align:center">
+              </label>
+              <label style="font-size:.8rem;display:flex;align-items:center;gap:.3rem">
+                Volume:
+                <input type="number" id="at-volume" value="1" min="1" max="5" step="1"
+                       style="width:50px;padding:.2rem .4rem;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;color:var(--text);text-align:center">
+              </label>
+              <button id="at-toggle" class="btn"
+                      style="min-width:140px;background:#374151;border:1px solid #6b7280">
+                🔴 Auto-Trade OFF
+              </button>
+              <button id="at-close-btn" class="btn btn-ghost btn-sm" title="Fechar todas as posições abertas pelo bot">
+                ✖ Fechar Posições
+              </button>
+            </div>
+          </div>
+          <!-- Status de execução -->
+          <div id="at-status" style="margin-top:.6rem;font-size:.82rem;color:var(--text-muted);min-height:1.2em"></div>
+          <!-- Posições abertas -->
+          <div id="at-positions" style="margin-top:.5rem"></div>
+        </section>
+
+        <!-- Historico de Trades Automaticos -->
+        <section class="card" id="auto-trades-section" style="margin-top:1rem">
+          <div style="display:flex;align-items:center;gap:1rem;justify-content:space-between;flex-wrap:wrap">
+            <div>
+              <h3 style="margin:0">📋 Histórico de Trades Automáticos</h3>
+              <div style="font-size:.72rem;color:var(--text-muted);margin-top:.15rem">
+                Trades executados pelo Monitor MT5 — com resultado registrado automaticamente
+              </div>
+            </div>
+            <div style="display:flex;gap:.5rem;align-items:center">
+              <div style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;font-size:.8rem">
+                <button id="at-filter-today" class="btn btn-sm" style="border-radius:0;border:none;background:var(--accent);color:#000;font-weight:600">Hoje</button>
+                <button id="at-filter-all"   class="btn btn-sm btn-ghost" style="border-radius:0;border:none">Todos</button>
+              </div>
+              <button class="btn btn-sm" id="at-history-refresh">↺ Atualizar</button>
+            </div>
           </div>
 
-          <div id="mon-signal-content" hidden>
-            <!-- Sinal principal -->
+          <!-- Estatisticas resumidas -->
+          <div id="at-stats-row" style="display:flex;gap:.5rem;margin-top:.75rem;flex-wrap:wrap">
+            <div class="outcome-card" style="flex:1;min-width:90px;text-align:center;padding:.5rem;background:var(--surface-2);border-radius:8px">
+              <div class="outcome-num" id="at-stat-total">—</div>
+              <div class="outcome-label">Total</div>
+            </div>
+            <div class="outcome-card" style="flex:1;min-width:90px;text-align:center;padding:.5rem;background:var(--surface-2);border-radius:8px;border-top:3px solid #22c55e">
+              <div class="outcome-num" id="at-stat-wins">—</div>
+              <div class="outcome-label">Gains</div>
+            </div>
+            <div class="outcome-card" style="flex:1;min-width:90px;text-align:center;padding:.5rem;background:var(--surface-2);border-radius:8px;border-top:3px solid #ef4444">
+              <div class="outcome-num" id="at-stat-losses">—</div>
+              <div class="outcome-label">Stops</div>
+            </div>
+            <div class="outcome-card" style="flex:1;min-width:90px;text-align:center;padding:.5rem;background:var(--surface-2);border-radius:8px;border-top:3px solid #3b82f6">
+              <div class="outcome-num" id="at-stat-winrate">—</div>
+              <div class="outcome-label">Win %</div>
+            </div>
+            <div class="outcome-card" style="flex:1;min-width:120px;text-align:center;padding:.5rem;background:var(--surface-2);border-radius:8px">
+              <div class="outcome-num" id="at-stat-pnl-pts">—</div>
+              <div class="outcome-label">P&amp;L Total (pts)</div>
+            </div>
+            <div class="outcome-card" style="flex:1;min-width:120px;text-align:center;padding:.5rem;background:var(--surface-2);border-radius:8px">
+              <div class="outcome-num" id="at-stat-pnl-brl">—</div>
+              <div class="outcome-label">P&amp;L Total (R$)</div>
+            </div>
+            <div class="outcome-card" style="flex:1;min-width:100px;text-align:center;padding:.5rem;background:rgba(127,29,29,.25);border-radius:8px;border-top:3px solid #f87171" title="Trades bloqueados pela validação IA antes de executar">
+              <div class="outcome-num" id="at-stat-bloqueados" style="color:#f87171">—</div>
+              <div class="outcome-label">🚫 IA Bloqueou</div>
+            </div>
+          </div>
+
+          <div id="at-history-empty" class="empty-state" style="margin-top:.75rem">
+            Nenhum trade automático registrado ainda. Ligue o Auto-Trade para começar.
+          </div>
+          <div class="table-wrap" id="at-history-wrap" hidden style="margin-top:.75rem">
+            <table class="data" id="at-history-table">
+              <thead>
+                <tr>
+                  <th>Data/Hora</th>
+                  <th>Ativo</th>
+                  <th>Ação</th>
+                  <th>Score</th>
+                  <th>Entrada</th>
+                  <th>Stop</th>
+                  <th>TP1</th>
+                  <th>Saída</th>
+                  <th>Motivo</th>
+                  <th>P&amp;L pts</th>
+                  <th>P&amp;L R$</th>
+                  <th>IA</th>
+                </tr>
+              </thead>
+              <tbody id="at-history-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Historico de tentativas de auto-trade -->
+        <section class="card monitor-alerts-section" style="margin-top:1rem">
+          <div class="monitor-alerts-header">
+            <h3>Tentativas de Auto-Trade</h3>
+            <div style="display:flex;gap:.5rem;align-items:center">
+              <span style="font-size:.75rem;color:var(--text-muted)">Apenas sinais em que o bot agiu</span>
+              <button type="button" class="btn btn-ghost btn-sm" id="mt5-clear-alerts">Limpar</button>
+            </div>
+          </div>
+          <div id="mt5-alerts-empty" class="empty-state">Nenhuma tentativa ainda. Ligue o Auto-Trade.</div>
+          <div class="table-wrap" id="mt5-alerts-wrap" hidden>
+            <table class="data" id="mt5-alerts-table">
+              <thead>
+                <tr>
+                  <th>Hora</th><th>Ativo</th><th>Ação</th><th>Score</th>
+                  <th>Entrada</th><th>Stop</th><th>TP1</th>
+                  <th>Status</th><th>Motivo IA</th>
+                </tr>
+              </thead>
+              <tbody id="mt5-alerts-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+
+
+        </div><!-- /coluna-esquerda -->
+
+        <!-- Painel de sinal -->
+        <div class="monitor-signal-panel card" id="mt5-signal-panel">
+          <div class="mon-signal-idle" id="mt5-signal-idle">
+            <span class="mon-idle-icon">&#128225;</span>
+            <p>Aguardando dados<br>do MT5...</p>
+          </div>
+
+          <div id="mt5-signal-content" hidden>
+            <!-- Banner: IA bloqueou o trade automático -->
+            <div id="mt5-ia-block-banner" hidden
+                 style="margin-bottom:.6rem;padding:.5rem .75rem;border-radius:6px;
+                        background:rgba(127,29,29,.35);border:1px solid rgba(248,113,113,.4);
+                        color:#fca5a5;font-size:.78rem;font-weight:600;text-align:center;
+                        white-space:normal;word-break:break-word">
+            </div>
             <div class="mon-signal-badge-wrap">
-              <div class="mon-signal-badge" id="mon-signal-badge">—</div>
+              <div class="mon-signal-badge" id="mt5-signal-badge">-</div>
               <div class="mon-signal-meta">
-                <span class="mon-score-label">Score: <strong id="mon-score">—</strong></span>
-                <span class="mon-forca" id="mon-forca">—</span>
+                <span class="mon-score-label">Score: <strong id="mt5-score">-</strong></span>
+                <span class="mon-forca" id="mt5-forca">-</span>
               </div>
             </div>
 
-            <!-- Preços -->
             <div class="mon-prices-grid">
-              <div class="mon-price-item">
-                <label>Preço atual</label>
-                <span id="mon-preco-atual">—</span>
-              </div>
-              <div class="mon-price-item mon-price-item--entry">
-                <label>Entrada sugerida</label>
-                <span id="mon-entrada">—</span>
-              </div>
-              <div class="mon-price-item mon-price-item--stop">
-                <label>Stop loss</label>
-                <span id="mon-stop">—</span>
-              </div>
-              <div class="mon-price-item mon-price-item--tp">
-                <label>TP1</label>
-                <span id="mon-tp1">—</span>
-              </div>
-              <div class="mon-price-item mon-price-item--tp">
-                <label>TP2</label>
-                <span id="mon-tp2">—</span>
-              </div>
-              <div class="mon-price-item mon-price-item--tp">
-                <label>TP3</label>
-                <span id="mon-tp3">—</span>
-              </div>
+              <div class="mon-price-item"><label>Preco atual</label><span id="mt5-preco">-</span></div>
+              <div class="mon-price-item mon-price-item--entry"><label>Entrada</label><span id="mt5-entrada">-</span></div>
+              <div class="mon-price-item mon-price-item--stop"><label>Stop</label><span id="mt5-stop">-</span></div>
+              <div class="mon-price-item mon-price-item--tp"><label>TP1</label><span id="mt5-tp1">-</span></div>
+              <div class="mon-price-item mon-price-item--tp"><label>TP2</label><span id="mt5-tp2">-</span></div>
+              <div class="mon-price-item mon-price-item--tp"><label>TP3</label><span id="mt5-tp3">-</span></div>
             </div>
 
-            <!-- Indicadores -->
             <div class="mon-indicators">
               <h5>Indicadores</h5>
               <div class="mon-ind-grid">
-                <div class="mon-ind-item"><label>RSI (14)</label><span id="mon-rsi">—</span></div>
-                <div class="mon-ind-item"><label>ADX (14)</label><span id="mon-adx">—</span></div>
-                <div class="mon-ind-item"><label>VWAP</label><span id="mon-vwap">—</span></div>
-                <div class="mon-ind-item"><label>ATR (14)</label><span id="mon-atr">—</span></div>
-                <div class="mon-ind-item"><label>EMA 9</label><span id="mon-ema9">—</span></div>
-                <div class="mon-ind-item"><label>EMA 21</label><span id="mon-ema21">—</span></div>
-                <div class="mon-ind-item"><label>EMA 50</label><span id="mon-ema50">—</span></div>
-                <div class="mon-ind-item"><label>MACD Hist.</label><span id="mon-macd-hist">—</span></div>
-                <div class="mon-ind-item"><label>+DI / -DI</label><span id="mon-di">—</span></div>
-                <div class="mon-ind-item"><label>1h Tendência</label><span id="mon-htf">—</span></div>
-                <div class="mon-ind-item"><label>Suporte</label><span id="mon-suporte">—</span></div>
-                <div class="mon-ind-item"><label>Resistência</label><span id="mon-resistencia">—</span></div>
+                <div class="mon-ind-item"><label>RSI (14)</label><span id="mt5-rsi">-</span></div>
+                <div class="mon-ind-item"><label>ADX (14)</label><span id="mt5-adx">-</span></div>
+                <div class="mon-ind-item"><label>VWAP</label><span id="mt5-vwap">-</span></div>
+                <div class="mon-ind-item"><label>ATR (14)</label><span id="mt5-atr">-</span></div>
+                <div class="mon-ind-item"><label>EMA 9</label><span id="mt5-ema9">-</span></div>
+                <div class="mon-ind-item"><label>EMA 21</label><span id="mt5-ema21">-</span></div>
+                <div class="mon-ind-item"><label>EMA 50</label><span id="mt5-ema50">-</span></div>
+                <div class="mon-ind-item"><label>MACD Hist.</label><span id="mt5-macd">-</span></div>
+                <div class="mon-ind-item"><label>+DI / -DI</label><span id="mt5-di">-</span></div>
+                <div class="mon-ind-item"><label>Tend. 1h</label><span id="mt5-htf">-</span></div>
+                <div class="mon-ind-item"><label>Suporte</label><span id="mt5-suporte">-</span></div>
+                <div class="mon-ind-item"><label>Resistencia</label><span id="mt5-resist">-</span></div>
               </div>
             </div>
 
-            <!-- Padrões de candle -->
-            <div class="mon-sinais-wrap" id="mon-candles-wrap">
-              <h5>Padrões de candle</h5>
-              <ul class="mon-sinais-list" id="mon-candles-list"></ul>
+            <div class="mon-sinais-wrap" id="mt5-candles-wrap">
+              <h5>Padroes de candle</h5>
+              <ul class="mon-sinais-list" id="mt5-candles-list"></ul>
             </div>
 
-            <!-- Confluências -->
             <div class="mon-sinais-wrap">
-              <h5>Confluências detectadas</h5>
-              <ul class="mon-sinais-list" id="mon-sinais-list"></ul>
+              <h5>Confluencias detectadas</h5>
+              <ul class="mon-sinais-list" id="mt5-sinais-list"></ul>
+            </div>
+          </div>
+
+          <!-- Painel MANAGE — visível apenas quando há trade ativo -->
+          <div id="mt5-manage-panel" hidden>
+            <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.75rem">
+              <span style="font-size:1.1rem">🎯</span>
+              <strong style="font-size:.95rem;letter-spacing:.03em">GERENCIANDO TRADE ATIVO</strong>
+              <span id="mgmt-side-badge" class="badge" style="font-size:.72rem;padding:.2rem .55rem">-</span>
             </div>
 
-            <p class="mon-update-time">Última atualização: <span id="mon-last-update">—</span></p>
-            <p class="mon-data-source">Fonte de dados: <span id="mon-yf-symbol">—</span> (Yahoo Finance)</p>
+            <!-- P&L + candles -->
+            <div style="display:flex;gap:.5rem;margin-bottom:.75rem">
+              <div style="flex:1;background:var(--surface-2);border-radius:8px;padding:.5rem;text-align:center">
+                <div style="font-size:.7rem;color:var(--text-muted);margin-bottom:.15rem">P&amp;L Pontos</div>
+                <div id="mgmt-pnl-pts" style="font-size:1.3rem;font-weight:700">—</div>
+              </div>
+              <div style="flex:1;background:var(--surface-2);border-radius:8px;padding:.5rem;text-align:center">
+                <div style="font-size:.7rem;color:var(--text-muted);margin-bottom:.15rem">P&amp;L R$</div>
+                <div id="mgmt-pnl-brl" style="font-size:1.3rem;font-weight:700">—</div>
+              </div>
+              <div style="flex:1;background:var(--surface-2);border-radius:8px;padding:.5rem;text-align:center">
+                <div style="font-size:.7rem;color:var(--text-muted);margin-bottom:.15rem">Candles aberto</div>
+                <div id="mgmt-candles" style="font-size:1.3rem;font-weight:700">—</div>
+              </div>
+            </div>
+
+            <!-- Preços e distâncias -->
+            <div class="mon-prices-grid" style="margin-bottom:.75rem">
+              <div class="mon-price-item"><label>Entrada</label><span id="mgmt-entry">—</span></div>
+              <div class="mon-price-item"><label>Preço atual</label><span id="mgmt-current">—</span></div>
+              <div class="mon-price-item mon-price-item--stop"><label>Stop atual</label><span id="mgmt-sl">—</span></div>
+              <div class="mon-price-item mon-price-item--tp"><label>TP1</label><span id="mgmt-tp1">—</span></div>
+              <div class="mon-price-item"><label>Dist. Stop</label><span id="mgmt-dist-stop">—</span></div>
+              <div class="mon-price-item"><label>Dist. TP1</label><span id="mgmt-dist-tp1">—</span></div>
+            </div>
+
+            <!-- Recomendação -->
+            <div id="mgmt-rec-box" style="padding:.65rem .75rem;border-radius:8px;background:var(--surface-2);border-left:4px solid var(--border)">
+              <div id="mgmt-rec-label" style="font-size:.95rem;font-weight:700;margin-bottom:.2rem">—</div>
+              <div id="mgmt-rec-reason" style="font-size:.78rem;color:var(--text-muted);line-height:1.4">—</div>
+            </div>
+
+            <!-- Stop sugerido -->
+            <div id="mgmt-sl-suggestion-wrap" hidden style="margin-top:.5rem;font-size:.8rem;color:#f59e0b;text-align:center">
+              Stop sugerido: <strong id="mgmt-sl-val">—</strong> pts
+            </div>
+
+            <!-- Sinal técnico atual -->
+            <div style="margin-top:.65rem;font-size:.75rem;color:var(--text-muted);text-align:center">
+              Sinal técnico atual: <span id="mgmt-sig-acao" style="font-weight:600">—</span>
+              &nbsp;|&nbsp; Score: <span id="mgmt-sig-score">—</span>
+            </div>
+
+            <!-- Badge validacao IA -->
+            <div id="mgmt-ai-badge" hidden style="margin-top:.5rem;padding:.4rem .6rem;border-radius:6px;font-size:.75rem;text-align:center;background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.3)">
+              <span id="mgmt-ai-text">IA: —</span>
+            </div>
+
+            <!-- Botoes de acao -->
+            <div id="mgmt-action-btns" hidden style="display:flex;gap:.5rem;margin-top:.65rem">
+              <button id="mgmt-apply-btn" class="btn btn-sm" style="flex:1;font-size:.8rem">
+                ✅ Aplicar Recomendação
+              </button>
+              <button id="mgmt-close-trade-btn" class="btn btn-sm"
+                      style="flex:1;font-size:.8rem;background:#ef4444;border-color:#ef4444;color:#fff">
+                ❌ Fechar Trade
+              </button>
+            </div>
           </div>
 
-          <!-- Loading state -->
-          <div class="mon-loading" id="mon-loading" hidden>
+          <div class="mon-loading" id="mt5-loading" hidden>
             <div class="mon-spinner"></div>
-            <p>Buscando dados…</p>
+            <p>Buscando dados MT5...</p>
           </div>
-
-          <!-- Error state -->
-          <div class="mon-error" id="mon-error" hidden>
-            <span class="mon-error-icon">⚠️</span>
-            <p id="mon-error-text">Erro ao buscar dados.</p>
-            <p id="mon-error-hint" style="font-size:0.78rem;color:var(--text-muted);margin-top:0.4rem;display:none"></p>
+          <div class="mon-error" id="mt5-error" hidden>
+            <span class="mon-error-icon">&#9888;&#65039;</span>
+            <p id="mt5-error-text">Erro ao buscar dados.</p>
           </div>
         </div>
 
       </div><!-- /monitor-main-grid -->
 
-      <!-- Histórico de alertas -->
-      <section class="card monitor-alerts-section">
-        <div class="monitor-alerts-header">
-          <h3>Histórico de alertas</h3>
-          <button type="button" class="btn btn-ghost btn-sm" id="mon-clear-alerts">Limpar</button>
+
+    </div><!-- /tab-pane #tab-mt5 -->
+
+    <!-- ===================== ABA RELATÓRIO ===================== -->
+    <div id="tab-report" class="tab-pane">
+
+      <section class="card" style="margin-top:1rem">
+        <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+          <h2 style="margin:0">📊 Relatório Mensal de Sinais</h2>
+          <input type="month" id="report-month" class="mon-input"
+                 style="padding:.35rem .6rem;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;color:var(--text)"
+                 value="">
+          <button class="btn" id="report-load-btn">Carregar</button>
+          <button class="btn btn-ghost" id="report-csv-btn" disabled>⬇ Exportar CSV</button>
+          <button class="btn btn-ghost" id="report-verify-btn" title="Verificar sinais do mês ainda não verificados">🔍 Verificar Mês</button>
         </div>
-        <div id="mon-alerts-empty" class="empty-state">Nenhum alerta ainda. Inicie o monitoramento.</div>
-        <div class="table-wrap" id="mon-alerts-wrap" hidden>
-          <table class="data" id="mon-alerts-table">
+      </section>
+
+      <!-- Cards de resumo -->
+      <section id="report-summary" style="margin-top:1rem;display:none">
+        <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+          <div class="card outcome-card" style="flex:1;min-width:110px;text-align:center">
+            <div class="outcome-num" id="rpt-total">—</div>
+            <div class="outcome-label">Sinais no mês</div>
+          </div>
+          <div class="card outcome-card" style="flex:1;min-width:110px;text-align:center;border-top:3px solid #22c55e">
+            <div class="outcome-num" id="rpt-assertiv">—</div>
+            <div class="outcome-label">✅ Assertividade</div>
+            <div class="outcome-pct" id="rpt-sucesso"></div>
+          </div>
+          <div class="card outcome-card" style="flex:1;min-width:110px;text-align:center;border-top:3px solid #22c55e">
+            <div class="outcome-num" id="rpt-tp1">—</div>
+            <div class="outcome-label">🎯 TP1</div>
+          </div>
+          <div class="card outcome-card" style="flex:1;min-width:110px;text-align:center;border-top:3px solid #3b82f6">
+            <div class="outcome-num" id="rpt-tp2">—</div>
+            <div class="outcome-label">🚀 TP2</div>
+          </div>
+          <div class="card outcome-card" style="flex:1;min-width:110px;text-align:center;border-top:3px solid #a855f7">
+            <div class="outcome-num" id="rpt-tp3">—</div>
+            <div class="outcome-label">💎 TP3</div>
+          </div>
+          <div class="card outcome-card" style="flex:1;min-width:110px;text-align:center;border-top:3px solid #ef4444">
+            <div class="outcome-num" id="rpt-stop">—</div>
+            <div class="outcome-label">🛑 Stop</div>
+            <div class="outcome-pct" id="rpt-stop-pct"></div>
+          </div>
+          <div class="card outcome-card" style="flex:1;min-width:110px;text-align:center;border-top:3px solid #6b7280">
+            <div class="outcome-num" id="rpt-sem">—</div>
+            <div class="outcome-label">⏳ Sem resultado</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Resumo por dia -->
+      <section class="card" id="report-daily-section" style="margin-top:1rem;display:none">
+        <h3 style="margin-top:0">Resumo por Dia</h3>
+        <div class="table-wrap">
+          <table class="data" id="report-daily-table">
             <thead>
               <tr>
-                <th>Hora</th>
-                <th>Instrumento</th>
-                <th>Sinal</th>
-                <th>Score</th>
-                <th>Preço atual</th>
-                <th>Entrada</th>
-                <th>Stop</th>
-                <th>TP1</th>
+                <th>Data</th><th>Sinais</th>
+                <th>🎯 TP1</th><th>🚀 TP2</th><th>💎 TP3</th>
+                <th>🛑 Stop</th><th>⏳ Sem Res.</th><th>Assertiv.</th>
               </tr>
             </thead>
-            <tbody id="mon-alerts-body"></tbody>
+            <tbody id="report-daily-body"></tbody>
           </table>
         </div>
       </section>
 
-      <!-- Notícias Finnhub -->
-      <section class="card monitor-news-section">
-        <div class="monitor-news-header">
-          <h3>Manchetes do mercado</h3>
-          <div id="mon-finnhub-status" class="mon-finnhub-badge mon-finnhub-badge--warn">
-            Finnhub: aguardando...
-          </div>
-          <button type="button" class="btn btn-ghost btn-sm" id="mon-news-refresh-btn">↺ Atualizar</button>
-        </div>
-        <div id="mon-news-list" class="mon-news-list">
-          <p class="muted" style="padding:1rem">
-            Configure <code>FINNHUB_API_KEY</code> no <code>.env</code> para ativar notícias em tempo real.
-            Sem a chave, apenas dados de preço (Yahoo Finance) ficam disponíveis.
-          </p>
+      <!-- Detalhe completo -->
+      <section class="card" id="report-detail-section" style="margin-top:1rem;display:none">
+        <h3 style="margin-top:0">Todos os Sinais do Mês</h3>
+        <div class="table-wrap">
+          <table class="data" id="report-detail-table">
+            <thead>
+              <tr>
+                <th>Data/Hora</th><th>Instrumento</th><th>Sinal</th><th>Score</th>
+                <th>Entrada</th><th>Stop</th><th>TP1</th><th>TP2</th><th>TP3</th>
+                <th>Resultado</th>
+              </tr>
+            </thead>
+            <tbody id="report-detail-body"></tbody>
+          </table>
         </div>
       </section>
 
-    </div><!-- /tab-pane #tab-monitor -->
+      <div id="report-empty" class="empty-state" style="display:none">
+        Nenhum sinal encontrado para este mês.
+      </div>
+
+
 
     <p class="footer-note">
       Aviso: apoio à decisão, sem garantia de resultado. Evitar trades ruins é prioridade sobre "achar o trade perfeito".
@@ -714,7 +1033,7 @@
 
             <div class="trade-risk-strip" id="modal-trade-risk-strip"></div>
 
-            <div class="trade-journal" id="modal-trade-journal-wrap" hidden>
+                  <div class="trade-journal" id="modal-trade-journal-wrap" hidden>
               <h4>Meu trade (execução real)</h4>
               <p class="trade-journal__hint">
                 Informe se você <strong>operou de fato</strong> esta análise: preencha <strong>entrada</strong> e <strong>saída</strong> executadas. O resultado em <strong>R$</strong> é calculado ao sair dos campos (funciona bem no celular). Se o sinal não for COMPRA/VENDA, a direção é <strong>inferida</strong> pelo movimento do preço — confira e ajuste se precisar.
@@ -758,6 +1077,9 @@
     </div>
   </div>
 
+  <!-- LightweightCharts — grafico do Monitor MT5 ao Vivo -->
+  <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+
   <!-- TradingView Charting Library (gratuita, com delay) -->
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 
@@ -771,6 +1093,19 @@
       marketNewsUrl:      "/api/market/news",
     };
   </script>
-  <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=21" defer></script>
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=40" defer></script>
+
+  <!-- Modal confirmação operação manual -->
+  <div id="manual-confirm-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;align-items:center;justify-content:center">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1.5rem;max-width:320px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.4)">
+      <h4 id="manual-confirm-title" style="margin:0 0 .75rem;font-size:1.1rem;text-align:center">Confirmar operação</h4>
+      <div id="manual-confirm-body" style="font-size:.85rem;color:var(--text-muted);margin-bottom:1.25rem;line-height:1.6;text-align:center"></div>
+      <div style="display:flex;gap:.6rem">
+        <button id="manual-confirm-cancel" class="btn btn-ghost" style="flex:1">Cancelar</button>
+        <button id="manual-confirm-ok" class="btn" style="flex:1;font-weight:700">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>

@@ -20,14 +20,21 @@ from agents.validator import run_validator
 from services.config import Config
 from services.db import (
     get_analysis,
+    get_mt5_signal,
+    init_auto_trades,
     init_db,
+    init_mt5_signals,
     insert_analysis,
+    insert_mt5_signal,
     journal_stats,
     list_analyses,
+    list_mt5_signals,
+    mt5_signals_stats,
     parse_pnl_value,
     update_execution,
+    update_mt5_outcome,
 )
-from services.json_utils import extract_json_object, risk_summary, trader_ativo_hint, trader_ativo_label
+from services.json_utils import extract_json_object, parse_trade_levels, risk_summary, trader_ativo_hint, trader_ativo_label
 from services.market_service import (
     TV_TO_YF,
     TV_INTERVAL_TO_YF,
@@ -227,39 +234,46 @@ def analyze():
 
 
 # ---------------------------------------------------------------------------
-# Monitor — Sinais de trading em tempo real (via Yahoo Finance + TA)
+# Monitor — Sinais de trading em tempo real (MT5 primário + Yahoo Finance fallback)
 # ---------------------------------------------------------------------------
 
 @app.route("/api/monitor/signals")
 def api_monitor_signals():
     """
     GET /api/monitor/signals?tv_symbol=BMFBOVESPA:WIN1!&interval=15
-    Busca candles via Yahoo Finance, calcula indicadores técnicos e retorna
-    sinal de trading (COMPRA/VENDA/NEUTRO) com entrada, stop e alvos.
+    Busca candles via MetaTrader5 (WINM26 real) ou Yahoo Finance (fallback),
+    calcula indicadores técnicos e retorna sinal COMPRA/VENDA/NEUTRO.
     """
     tv_symbol = request.args.get("tv_symbol", "BMFBOVESPA:WIN1!")
     interval  = request.args.get("interval", "15")   # minutos ou D/W (TradingView format)
 
-    # Converte intervalo TradingView → Yahoo Finance (period, interval)
+    # Período/intervalo Yahoo Finance — usado apenas no fallback
     period_yf, interval_yf = TV_INTERVAL_TO_YF.get(interval, ("5d", "15m"))
 
-    # Converte símbolo TradingView → Yahoo Finance
-    yf_symbol = tv_to_yf_symbol(tv_symbol)
-
-    df, error = get_candles(yf_symbol, period=period_yf, interval=interval_yf)
+    # Busca candles — tenta MT5 primeiro (WIN/WDO), cai para Yahoo Finance se necessário
+    df, error = get_candles(
+        tv_symbol,
+        period=period_yf,
+        interval=interval_yf,
+        tv_interval=interval,   # ativa roteamento MT5
+    )
     if error or df is None:
         return jsonify({
             "ok": False,
             "error": error or "Sem dados.",
             "tv_symbol": tv_symbol,
-            "yf_symbol": yf_symbol,
-        }), 200   # 200 para o frontend exibir o erro sem quebrar
+        }), 200
 
     # Busca timeframe maior (1h) para confirmação multi-TF
     # Não busca quando o próprio TF já é ≥ 1h
     htf_df = None
     if interval_yf not in ("60m", "1h", "1d", "1wk"):
-        htf_df, _ = get_candles(yf_symbol, period="1mo", interval="1h")
+        htf_df, _ = get_candles(
+            tv_symbol,
+            period="1mo",
+            interval="1h",
+            tv_interval="60",   # 1h no MT5
+        )
 
     signal = generate_signal(df, htf_df=htf_df)
     if signal is None:
@@ -267,15 +281,18 @@ def api_monitor_signals():
             "ok": False,
             "error": f"Dados insuficientes para análise técnica ({len(df)} candles).",
             "tv_symbol": tv_symbol,
-            "yf_symbol": yf_symbol,
         }), 200
 
+    # Indica a fonte de dados usada na resposta
+    from services.market_service import MT5_AVAILABLE, TV_TO_MT5
+    fonte = "mt5" if (MT5_AVAILABLE and tv_symbol.upper() in TV_TO_MT5) else "yfinance"
+
     return jsonify({
-        "ok": True,
+        "ok":       True,
         "tv_symbol": tv_symbol,
-        "yf_symbol": yf_symbol,
+        "fonte":    fonte,
         "interval": interval,
-        "period": period_yf,
+        "period":   period_yf,
         **signal,
     })
 
@@ -315,19 +332,913 @@ def api_monitor_instruments():
         {"label": "Mini Dólar (WDO1!)",    "tv": "BMFBOVESPA:WDO1!", "yf": "BRL=X",     "finnhub": None},
         {"label": "Ibovespa",              "tv": "BMFBOVESPA:IBOV",  "yf": "^BVSP",     "finnhub": None},
         {"label": "Petrobras (PETR4)",     "tv": "BMFBOVESPA:PETR4", "yf": "PETR4.SA",  "finnhub": "PBR"},
+        {"label": "Raiadrogasil (RADL3)",  "tv": "BMFBOVESPA:RADL3", "yf": "RADL3.SA",  "finnhub": None},
         {"label": "Vale (VALE3)",          "tv": "BMFBOVESPA:VALE3", "yf": "VALE3.SA",  "finnhub": "VALE"},
         {"label": "Itaú (ITUB4)",          "tv": "BMFBOVESPA:ITUB4", "yf": "ITUB4.SA",  "finnhub": "ITUB"},
         {"label": "Bradesco (BBDC4)",      "tv": "BMFBOVESPA:BBDC4", "yf": "BBDC4.SA",  "finnhub": None},
         {"label": "Banco do Brasil (BBAS3)","tv": "BMFBOVESPA:BBAS3","yf": "BBAS3.SA",  "finnhub": None},
         {"label": "Ambev (ABEV3)",         "tv": "BMFBOVESPA:ABEV3", "yf": "ABEV3.SA",  "finnhub": "ABEV"},
         {"label": "WEG (WEGE3)",           "tv": "BMFBOVESPA:WEGE3", "yf": "WEGE3.SA",  "finnhub": None},
+        {"label": "EUR/USD (Forex 24/5)",    "tv": "FX:EURUSD",           "yf": "EURUSD=X",   "finnhub": None},
+        {"label": "GBP/USD (Forex 24/5)",    "tv": "FX:GBPUSD",           "yf": "GBPUSD=X",   "finnhub": None},
+        {"label": "Ouro XAU/USD (24/5)",     "tv": "FX:XAUUSD",           "yf": "GC=F",       "finnhub": None},
+        {"label": "Bitcoin (BTC/USD) 24h",   "tv": "CRYPTO:BTCUSD",       "yf": "BTC-USD",    "finnhub": "BINANCE:BTCUSDT"},
     ]
     return jsonify({"items": instruments})
 
 
 # ---------------------------------------------------------------------------
 
+
+
+
+# ---------------------------------------------------------------------------
+# Monitor MT5 ao Vivo -- candles + indicadores + sinal em um endpoint so
+# ---------------------------------------------------------------------------
+
+@app.route("/api/monitor/mt5")
+def api_monitor_mt5():
+    """
+    GET /api/monitor/mt5?tv_symbol=BMFBOVESPA:WIN1!&interval=15
+    Retorna candles OHLCV + series de indicadores (EMA/VWAP/BB) + sinal de trading.
+    Usado pelo grafico Lightweight Charts do Monitor MT5 ao Vivo.
+    """
+    import pandas as pd
+    from services.market_service import MT5_AVAILABLE, TV_TO_MT5
+    from services.technical_analysis import compute_indicators
+
+    tv_symbol = request.args.get("tv_symbol", "BMFBOVESPA:WIN1!")
+    interval  = request.args.get("interval", "15")
+
+    period_yf, interval_yf = TV_INTERVAL_TO_YF.get(interval, ("5d", "15m"))
+
+    df, error = get_candles(tv_symbol, period=period_yf, interval=interval_yf, tv_interval=interval)
+    if error or df is None:
+        return jsonify({"ok": False, "error": error or "Sem dados."}), 200
+
+    htf_df = None
+    if interval_yf not in ("60m", "1h", "1d", "1wk"):
+        htf_df, _ = get_candles(tv_symbol, period="1mo", interval="1h", tv_interval="60")
+
+    signal = generate_signal(df, htf_df=htf_df)
+    if signal is None:
+        return jsonify({"ok": False, "error": "Dados insuficientes para analise ({} candles).".format(len(df))}), 200
+
+    df_ind = compute_indicators(df)
+
+    def ts(idx):
+        if hasattr(idx, "timestamp"):
+            return int(idx.timestamp())
+        return int(pd.Timestamp(idx).timestamp())
+
+    def series_to_list(s):
+        return [{"time": ts(i), "value": round(float(v), 3)}
+                for i, v in s.items() if pd.notna(v)]
+
+    candles = []
+    for idx, row in df.iterrows():
+        candles.append({
+            "time":   ts(idx),
+            "open":   round(float(row["Open"]),  2),
+            "high":   round(float(row["High"]),  2),
+            "low":    round(float(row["Low"]),   2),
+            "close":  round(float(row["Close"]), 2),
+            "volume": int(row["Volume"]) if pd.notna(row["Volume"]) else 0,
+        })
+
+    fonte = "mt5" if (MT5_AVAILABLE and tv_symbol.upper() in TV_TO_MT5) else "yfinance"
+
+    return jsonify({
+        "ok":       True,
+        "fonte":    fonte,
+        "tv_symbol": tv_symbol,
+        "interval": interval,
+        "candles":  candles,
+        "ema9":     series_to_list(df_ind["ema9"]),
+        "ema21":    series_to_list(df_ind["ema21"]),
+        "ema50":    series_to_list(df_ind["ema50"]),
+        "vwap":     series_to_list(df_ind["vwap"].dropna()),
+        "bb_upper": series_to_list(df_ind["bb_upper"]),
+        "bb_lower": series_to_list(df_ind["bb_lower"]),
+        "bb_mid":   series_to_list(df_ind["bb_mid"]),
+        "signal":   signal,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Verificação de alvos / stop (outcome)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/stats/outcome")
+def api_outcome_summary():
+    """Resumo global de TP/Stop para os cards do dashboard."""
+    return jsonify(outcome_summary())
+
+
+@app.route("/api/analysis/<int:analysis_id>/verify", methods=["POST"])
+def api_verify_outcome(analysis_id: int):
+    """
+    Busca candles 1m via MT5 a partir do momento do sinal e verifica
+    se TP1/TP2/TP3 e stop foram atingidos. Salva resultado no banco.
+    """
+    from services.outcome_checker import check_outcome
+
+    row = get_analysis(analysis_id)
+    if not row:
+        return jsonify({"error": "Análise não encontrada."}), 404
+
+    trader_raw = row.get("trader_json") or ""
+    lvl = parse_trade_levels(trader_raw)
+
+    trader_parsed = extract_json_object(trader_raw) or {}
+    ativo = trader_parsed.get("ativo", "") or ""
+
+    outcome = check_outcome(
+        ativo=ativo,
+        acao=lvl["acao"] or "",
+        created_at_iso=row["created_at"],
+        entrada=lvl["entrada"],
+        stop=row.get("stop_price") or lvl["stop"],
+        tp1=row.get("tp1_price")  or lvl["tp1"],
+        tp2=row.get("tp2_price")  or lvl["tp2"],
+        tp3=row.get("tp3_price")  or lvl["tp3"],
+    )
+
+    update_outcome(analysis_id, **{k: v for k, v in outcome.items()
+                                   if k in ("tp1_hit","tp2_hit","tp3_hit","stop_hit",
+                                            "candles_checked","error")})
+
+    updated = get_analysis(analysis_id)
+    updated["image_url"] = url_for("serve_upload", name=updated["stored_filename"])
+    updated["exec_recorded"] = bool(updated.get("exec_recorded"))
+    return jsonify({"ok": True, "outcome": outcome, "analysis": updated})
+
+
+@app.route("/api/analyses/verify-batch", methods=["POST"])
+def api_verify_batch():
+    """
+    Dispara verificação para os N trades mais recentes ainda não verificados.
+    Retorna lista com resultados individuais.
+    """
+    from services.outcome_checker import check_outcome
+
+    body = request.get_json(silent=True) or {}
+    limit = min(int(body.get("limit", 20)), 50)
+
+    trades = list_analyses(limit)
+    results = []
+    for t in trades:
+        if t.get("outcome_checked_at"):
+            results.append({"id": t["id"], "skipped": True, "reason": "já verificado"})
+            continue
+
+        trader_raw = t.get("trader_json") or ""
+        lvl = parse_trade_levels(trader_raw)
+        trader_parsed = extract_json_object(trader_raw) or {}
+        ativo = trader_parsed.get("ativo", "") or ""
+
+        outcome = check_outcome(
+            ativo=ativo,
+            acao=lvl["acao"] or "",
+            created_at_iso=t["created_at"],
+            entrada=lvl["entrada"],
+            stop=t.get("stop_price") or lvl["stop"],
+            tp1=t.get("tp1_price")  or lvl["tp1"],
+            tp2=t.get("tp2_price")  or lvl["tp2"],
+            tp3=t.get("tp3_price")  or lvl["tp3"],
+        )
+
+        update_outcome(t["id"], **{k: v for k, v in outcome.items()
+                                   if k in ("tp1_hit","tp2_hit","tp3_hit","stop_hit",
+                                            "candles_checked","error")})
+        results.append({"id": t["id"], "skipped": False, **outcome})
+
+    return jsonify({"ok": True, "results": results})
+
+
+
+
+
+# ---------------------------------------------------------------------------
+# Relatório Mensal de Sinais MT5
+# ---------------------------------------------------------------------------
+
+@app.route("/api/monitor/signals/report")
+def api_mt5_signals_report():
+    """
+    GET /api/monitor/signals/report?month=2026-05
+    Retorna resumo + detalhe de todos os sinais do mês.
+    """
+    month = request.args.get("month", "")          # ex: "2026-05"
+    if not month or len(month) < 7:
+        from datetime import datetime, timezone
+        month = datetime.now(timezone.utc).strftime("%Y-%m")
+
+    year, mon = int(month[:4]), int(month[5:7])
+
+    with __import__("sqlite3").connect(__import__("services.config", fromlist=["Config"]).Config.DATABASE_PATH) as conn:
+        conn.row_factory = __import__("sqlite3").Row
+        rows = conn.execute("""
+            SELECT * FROM mt5_signals
+            WHERE acao IN ('COMPRA','VENDA')
+              AND strftime('%Y-%m', created_at) = ?
+            ORDER BY id DESC
+        """, (month,)).fetchall()
+
+    items = [dict(r) for r in rows]
+
+    # Métricas
+    total   = len(items)
+    verif   = sum(1 for r in items if r["outcome_checked_at"])
+    tp1_hit = sum(1 for r in items if r["tp1_hit"])
+    tp2_hit = sum(1 for r in items if r["tp2_hit"])
+    tp3_hit = sum(1 for r in items if r["tp3_hit"])
+    stop_h  = sum(1 for r in items if r["stop_hit"])
+    sem_res = sum(1 for r in items if r["outcome_checked_at"] and not r["tp1_hit"] and not r["stop_hit"])
+    sucesso = sum(1 for r in items if r["tp1_hit"])   # pelo menos TP1
+
+    # Agrupa por dia
+    from collections import defaultdict
+    by_day = defaultdict(list)
+    for r in items:
+        day = r["created_at"][:10]
+        by_day[day].append(r)
+
+    daily = []
+    for day in sorted(by_day.keys(), reverse=True):
+        day_rows = by_day[day]
+        daily.append({
+            "data":    day,
+            "total":   len(day_rows),
+            "tp1_hit": sum(1 for x in day_rows if x["tp1_hit"]),
+            "tp2_hit": sum(1 for x in day_rows if x["tp2_hit"]),
+            "tp3_hit": sum(1 for x in day_rows if x["tp3_hit"]),
+            "stop_hit":sum(1 for x in day_rows if x["stop_hit"]),
+            "sem_res": sum(1 for x in day_rows if x["outcome_checked_at"] and not x["tp1_hit"] and not x["stop_hit"]),
+        })
+
+    return jsonify({
+        "ok": True,
+        "month": month,
+        "summary": {
+            "total": total, "verificados": verif,
+            "tp1_hit": tp1_hit, "tp2_hit": tp2_hit, "tp3_hit": tp3_hit,
+            "stop_hit": stop_h, "sem_resultado": sem_res,
+            "sucesso": sucesso,
+            "assertividade_pct": round(sucesso / verif * 100) if verif else 0,
+            "stop_pct":          round(stop_h  / verif * 100) if verif else 0,
+        },
+        "by_day": daily,
+        "items":  items,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Auto-Trade (DEMO) — execução automática via MT5
+# ---------------------------------------------------------------------------
+
+@app.route("/api/autotrade/status")
+def api_autotrade_status():
+    """Retorna posições abertas do bot."""
+    from services.trade_executor import get_open_positions
+    tv_symbol = request.args.get("tv_symbol", "BMFBOVESPA:WIN1!")
+    positions, error = get_open_positions(tv_symbol)
+    return jsonify({"ok": error is None, "positions": positions, "error": error})
+
+
+@app.route("/api/autotrade/execute", methods=["POST"])
+def api_autotrade_execute():
+    """
+    Executa uma ordem de compra ou venda via MT5 com validacao AI pre-trade.
+    Salva o trade no log para rastreamento completo ate o fechamento.
+    """
+    from services.trade_executor import execute_trade, DEFAULT_VOLUME, SCORE_MIN
+    from services.signal_validator_ai import validate_signal_with_ai
+    from services.trade_log import save_auto_trade
+    body = request.get_json(silent=True) or {}
+
+    tv_symbol = body.get("tv_symbol", "")
+    acao      = body.get("acao", "")
+    score     = int(body.get("score") or 0)
+    entrada   = body.get("entrada")
+    sl        = body.get("stop")
+    tp1       = body.get("tp1")
+    volume    = float(body.get("volume") or DEFAULT_VOLUME)
+    interval  = str(body.get("interval", "15"))
+    signal    = body.get("signal") or {}   # sinal tecnico completo (opcional)
+
+    # Validacao via Azure OpenAI (nao bloqueia se IA indisponivel)
+    ai_result = None
+    if signal and acao in ("COMPRA", "VENDA"):
+        try:
+            ai_result = validate_signal_with_ai(
+                signal=signal,
+                tv_symbol=tv_symbol,
+                interval=interval,
+                score_threshold=SCORE_MIN,
+            )
+            if not ai_result.get("aprovado") and ai_result.get("veredito") == "BLOQUEAR":
+                # Registra bloqueio no histórico para rastreabilidade
+                try:
+                    from services.trade_log import save_auto_trade, close_auto_trade
+                    blocked_id = save_auto_trade(
+                        tv_symbol    = tv_symbol,
+                        interval     = interval,
+                        acao         = acao,
+                        entry_price  = entrada,
+                        volume       = volume,
+                        sl_initial   = sl,
+                        tp1_initial  = tp1,
+                        score        = score,
+                        ai_validated = True,
+                        ai_confidence= ai_result.get("confianca"),
+                        ai_veredito  = "BLOQUEAR",
+                        ai_motivo    = ai_result.get("motivo", "")[:200],
+                    )
+                    close_auto_trade(
+                        trade_id     = blocked_id,
+                        exit_price   = entrada or 0,
+                        close_reason = "BLOQUEADO_IA",
+                        pnl_pts      = 0,
+                        pnl_brl      = 0.0,
+                    )
+                except Exception as _e:
+                    logger.warning("Falha ao registrar bloqueio IA: %s", _e)
+                return jsonify({
+                    "ok":    False,
+                    "result": None,
+                    "error": f"IA bloqueou o trade: {ai_result.get('motivo', '')}",
+                    "ai": ai_result,
+                })
+        except Exception as ai_exc:
+            logger.warning("AI validator falhou, continuando: %s", ai_exc)
+
+    result, error = execute_trade(
+        tv_symbol=tv_symbol,
+        acao=acao,
+        score=score,
+        entrada=entrada,
+        sl=sl,
+        tp1=tp1,
+        volume=volume,
+    )
+
+    # Salva no log de trades
+    trade_log_id = None
+    if result and not error:
+        try:
+            trade_log_id = save_auto_trade(
+                tv_symbol    = tv_symbol,
+                interval     = interval,
+                acao         = acao,
+                entry_price  = result.get("price") or entrada,
+                volume       = volume,
+                sl_initial   = sl,
+                tp1_initial  = tp1,
+                score        = score,
+                mt5_ticket   = result.get("order"),
+                mt5_deal     = result.get("deal"),
+                ai_validated = bool(ai_result and ai_result.get("ia_usada")),
+                ai_confidence= ai_result.get("confianca") if ai_result else None,
+                ai_veredito  = ai_result.get("veredito")  if ai_result else None,
+                ai_motivo    = ai_result.get("motivo")    if ai_result else None,
+            )
+        except Exception as log_exc:
+            logger.warning("Falha ao salvar trade no log: %s", log_exc)
+
+    return jsonify({
+        "ok":          error is None,
+        "result":      result,
+        "error":       error,
+        "ai":          ai_result,
+        "trade_log_id": trade_log_id,
+    })
+
+
+@app.route("/api/monitor/tick")
+def api_monitor_tick():
+    """
+    Retorna o preço atual (tick) de um símbolo via MT5 — endpoint leve para
+    atualização em tempo real do último candle no gráfico (polling a cada 3s).
+
+    GET /api/monitor/tick?tv_symbol=BMFBOVESPA:WIN1!
+    """
+    from services.market_service import TV_TO_MT5, MT5_AVAILABLE
+
+    tv_symbol  = request.args.get("tv_symbol", "BMFBOVESPA:WIN1!")
+    symbol_key = tv_symbol.upper().strip()
+
+    if not MT5_AVAILABLE:
+        return jsonify({"ok": False, "error": "MetaTrader5 não instalado."})
+
+    mt5_symbol = TV_TO_MT5.get(symbol_key)
+    if not mt5_symbol:
+        return jsonify({"ok": False, "error": f"Símbolo '{tv_symbol}' não mapeado."})
+
+    try:
+        import MetaTrader5 as mt5
+
+        # Usa credenciais do .env se configuradas
+        _login    = int(os.getenv("MT5_LOGIN", "0") or 0)
+        _password = os.getenv("MT5_PASSWORD", "")
+        _server   = os.getenv("MT5_SERVER", "")
+        _path     = os.getenv("MT5_PATH", "")
+
+        kwargs = {}
+        if _path and os.path.exists(_path):
+            kwargs["path"] = _path
+        if _login and _password and _server:
+            kwargs.update({"login": _login, "password": _password, "server": _server})
+
+        if not mt5.initialize(**kwargs):
+            return jsonify({"ok": False, "error": f"MT5: {mt5.last_error()}"})
+
+        tick = mt5.symbol_info_tick(mt5_symbol)
+        mt5.shutdown()
+
+        if tick is None:
+            return jsonify({"ok": False, "error": "Tick não disponível."})
+
+        # Para futuros B3 em conta demo, `last` pode ser 0 — usa mid bid/ask
+        price = tick.last if tick.last and tick.last > 0 else (tick.bid + tick.ask) / 2
+
+        return jsonify({
+            "ok":     True,
+            "price":  round(price, 2),
+            "bid":    round(tick.bid,  2),
+            "ask":    round(tick.ask,  2),
+            "time":   tick.time,
+            "volume": tick.volume,
+        })
+
+    except Exception as exc:
+        try:
+            import MetaTrader5 as mt5; mt5.shutdown()
+        except Exception:
+            pass
+        return jsonify({"ok": False, "error": str(exc)})
+
+
+@app.route("/api/autotrade/manage")
+def api_autotrade_manage():
+    """
+    Retorna o modo atual: SCAN (sem posicao) ou MANAGE (com posicao aberta).
+    Detecta fechamento de posicao e registra resultado no log de trades.
+
+    GET /api/autotrade/manage?tv_symbol=BMFBOVESPA:WIN1!&interval=15
+    """
+    from services.trade_executor import get_open_positions
+    from services.market_service import get_candles
+    from services.technical_analysis import generate_signal
+    from services.position_manager import analyze_position
+    from services.trade_log import get_open_auto_trade, close_auto_trade
+
+    tv_symbol    = request.args.get("tv_symbol", "BMFBOVESPA:WIN1!")
+    interval     = request.args.get("interval", "15")
+    interval_min = int(interval) if str(interval).isdigit() else 15
+
+    # Verifica posicoes abertas pelo bot
+    positions, err = get_open_positions(tv_symbol)
+    if err:
+        return jsonify({"ok": False, "error": err})
+
+    def _detect_close_reason(exit_price, open_log):
+        """Detecta motivo de fechamento comparando exit com SL/TP do trade."""
+        if not exit_price or not open_log:
+            return "FECHADO_MT5"
+        sl  = open_log.get("sl_initial")
+        tp1 = open_log.get("tp1_initial")
+        tol = 50  # tolerância de 50 pontos (WIN mini)
+        if sl  and abs(exit_price - float(sl))  <= tol:
+            return "STOP"
+        if tp1 and abs(exit_price - float(tp1)) <= tol:
+            return "TP1"
+        return "FECHADO_MT5"
+
+    def _calc_pnl(exit_price, open_log):
+        pnl_pts, pnl_brl = None, None
+        if exit_price and open_log.get("entry_price"):
+            entry = float(open_log["entry_price"])
+            pnl_pts = round(exit_price - entry) if open_log.get("acao") == "COMPRA" else round(entry - exit_price)
+            vol = float(open_log.get("volume") or 1.0)
+            pnl_brl = round(pnl_pts * 0.20 * vol, 2)
+        return pnl_pts, pnl_brl
+
+    def _get_exit_price(tv_symbol):
+        """Busca preço atual via MT5 para usar como exit price."""
+        try:
+            from services.market_service import TV_TO_MT5, MT5_AVAILABLE
+            if MT5_AVAILABLE:
+                mt5_sym = TV_TO_MT5.get(tv_symbol.upper().strip())
+                if mt5_sym:
+                    import MetaTrader5 as mt5
+                    if mt5.initialize():
+                        tick = mt5.symbol_info_tick(mt5_sym)
+                        price = (tick.last or (tick.bid + tick.ask) / 2) if tick else None
+                        mt5.shutdown()
+                        return price
+        except Exception as ex:
+            logger.warning("Erro ao buscar exit price: %s", ex)
+        return None
+
+    if not positions:
+        # Sem posicao aberta no MT5 — verifica se havia trade no log e registra fechamento
+        from services.trade_log import save_auto_trade
+        open_log = get_open_auto_trade(tv_symbol)
+        closed_trade = None
+        if open_log:
+            try:
+                exit_price   = _get_exit_price(tv_symbol)
+                close_reason = _detect_close_reason(exit_price, open_log)
+                pnl_pts, pnl_brl = _calc_pnl(exit_price, open_log)
+
+                close_auto_trade(
+                    trade_id     = open_log["id"],
+                    exit_price   = exit_price or 0,
+                    close_reason = close_reason,
+                    pnl_pts      = pnl_pts,
+                    pnl_brl      = pnl_brl,
+                )
+                closed_trade = {
+                    "id":           open_log["id"],
+                    "close_reason": close_reason,
+                    "exit_price":   exit_price,
+                    "pnl_pts":      pnl_pts,
+                    "pnl_brl":      pnl_brl,
+                }
+                logger.info("Trade fechado: id=%d motivo=%s pnl=%s", open_log["id"], close_reason, pnl_pts)
+            except Exception as log_exc:
+                logger.warning("Erro ao registrar fechamento no log: %s", log_exc)
+
+        return jsonify({
+            "ok": True, "mode": "SCAN",
+            "position": None, "analysis": None, "signal": None,
+            "closed_trade": closed_trade,
+        })
+
+    position = positions[0]
+
+    # Busca dados de mercado para gerar sinal tecnico atual
+    df, data_err = get_candles(tv_symbol, tv_interval=interval)
+    current_signal = None
+    atr = None
+    if df is not None and not df.empty:
+        current_signal = generate_signal(df)
+        if current_signal:
+            atr = current_signal.get("atr")
+
+    # Analisa a posicao
+    analysis = analyze_position(
+        position=position,
+        current_signal=current_signal,
+        atr=atr,
+        interval_min=interval_min,
+    )
+
+    # Recupera o log do trade aberto para contexto
+    from services.trade_log import save_auto_trade
+    open_log = get_open_auto_trade(tv_symbol)
+
+    # ── Recovery: posição aberta no MT5 mas sem registro no DB ────────────
+    # Ocorre quando o app foi reiniciado ou o trade foi aberto manualmente/externamente.
+    if open_log is None:
+        try:
+            is_buy   = position.get("type") == 0   # 0=BUY, 1=SELL
+            acao_rec = "COMPRA" if is_buy else "VENDA"
+            entry_rec  = float(position.get("price_open") or 0) or None
+            sl_rec     = float(position.get("sl") or 0) or None
+            tp_rec     = float(position.get("tp") or 0) or None
+            vol_rec    = float(position.get("volume") or 1.0)
+            rec_id = save_auto_trade(
+                tv_symbol   = tv_symbol,
+                interval    = interval,
+                acao        = acao_rec,
+                entry_price = entry_rec,
+                volume      = vol_rec,
+                sl_initial  = sl_rec,
+                tp1_initial = tp_rec,
+                score       = None,   # não temos o score original
+                ai_validated= False,
+                ai_veredito = "RECUPERADO",
+                ai_motivo   = "Trade detectado no MT5 sem registro no sistema — recuperado automaticamente.",
+            )
+            open_log = get_open_auto_trade(tv_symbol)
+            logger.info("Trade recuperado do MT5: id=%d %s entry=%.0f", rec_id, acao_rec, entry_rec or 0)
+        except Exception as rec_exc:
+            logger.warning("Erro ao recuperar trade do MT5: %s", rec_exc)
+
+    return jsonify({
+        "ok":         True,
+        "mode":       "MANAGE",
+        "position":   position,
+        "analysis":   analysis,
+        "signal":     current_signal,
+        "trade_log":  open_log,
+    })
+
+
+@app.route("/api/autotrade/close", methods=["POST"])
+def api_autotrade_close():
+    """Fecha todas as posições abertas pelo bot para o símbolo dado."""
+    from services.trade_executor import close_all_positions
+    body = request.get_json(silent=True) or {}
+    tv_symbol = body.get("tv_symbol", "BMFBOVESPA:WIN1!")
+    results, error = close_all_positions(tv_symbol)
+    return jsonify({"ok": error is None, "results": results, "error": error})
+
+
+
+
+@app.route("/api/trade/manual", methods=["POST"])
+def api_trade_manual():
+    """
+    Executa uma ordem MANUAL de compra ou venda via MT5.
+    Diferente do auto-trade: bypassa verificacao de score minimo.
+    O usuario define entrada, SL e TP manualmente.
+
+    Body JSON:
+      tv_symbol, acao, sl, tp1, volume, check_hours (bool)
+    """
+    from services.trade_executor import execute_trade, close_all_positions, DEFAULT_VOLUME, SCORE_MIN
+    from services.trade_log import save_auto_trade
+
+    body      = request.get_json(silent=True) or {}
+    tv_symbol = body.get("tv_symbol", "BMFBOVESPA:WIN1!")
+    acao      = body.get("acao", "")
+    sl        = body.get("sl") or body.get("stop")
+    tp1       = body.get("tp1")
+    volume    = float(body.get("volume") or DEFAULT_VOLUME)
+    check_hrs = bool(body.get("check_hours", True))
+
+    if acao == "FECHAR":
+        results, error = close_all_positions(tv_symbol)
+        return jsonify({"ok": error is None, "results": results, "error": error})
+
+    # Usa score=SCORE_MIN para bypasarr a verificacao de score minimo
+    result, error = execute_trade(
+        tv_symbol=tv_symbol,
+        acao=acao,
+        score=SCORE_MIN,        # bypass: ordem manual sempre passa
+        entrada=None,           # a mercado
+        sl=sl,
+        tp1=tp1,
+        volume=volume,
+        check_market_hours=check_hrs,
+    )
+
+    trade_log_id = None
+    if result and not error:
+        try:
+            trade_log_id = save_auto_trade(
+                tv_symbol   = tv_symbol,
+                interval    = "manual",
+                acao        = acao,
+                entry_price = result.get("price"),
+                volume      = volume,
+                sl_initial  = sl,
+                tp1_initial = tp1,
+                score       = 0,
+                mt5_ticket  = result.get("order"),
+                mt5_deal    = result.get("deal"),
+                ai_validated= False,
+            )
+        except Exception as e:
+            logger.warning("Falha ao salvar trade manual no log: %s", e)
+
+    return jsonify({
+        "ok":           error is None,
+        "result":       result,
+        "error":        error,
+        "trade_log_id": trade_log_id,
+    })
+
+# ---------------------------------------------------------------------------
+# Auto-Trades — Historico e gestao
+# ---------------------------------------------------------------------------
+
+@app.route("/api/autotrade/trades")
+def api_autotrade_trades():
+    """Lista historico de trades automaticos."""
+    from services.trade_log import list_auto_trades, auto_trades_stats
+    limit      = min(int(request.args.get("limit", 50)), 200)
+    show_all   = request.args.get("all", "0") == "1"   # ?all=1 mostra todos os dias
+    today_only = not show_all
+    return jsonify({
+        "ok":         True,
+        "items":      list_auto_trades(limit, today_only=today_only),
+        "stats":      auto_trades_stats(today_only=today_only),
+        "today_only": today_only,
+    })
+
+
+@app.route("/api/autotrade/apply-recommendation", methods=["POST"])
+def api_autotrade_apply_recommendation():
+    """
+    Aplica automaticamente a recomendacao de gestao do MANAGE mode.
+    Acoes suportadas: BREAKEVEN (move SL para entrada), TRAILING (move SL),
+    FECHAR (fecha posicao antecipada), CLOSE (alias para FECHAR).
+    """
+    from services.trade_executor import (
+        get_open_positions, close_all_positions,
+        execute_trade,
+    )
+    from services.trade_log import get_open_auto_trade, close_auto_trade
+    import MetaTrader5 as mt5
+
+    body         = request.get_json(silent=True) or {}
+    tv_symbol    = body.get("tv_symbol", "BMFBOVESPA:WIN1!")
+    action       = (body.get("action") or "").upper()
+    new_sl       = body.get("new_sl")           # preco do novo SL (BREAKEVEN / TRAILING)
+    close_reason = body.get("close_reason")     # motivo do fechamento (TP1, REVERSAO, MANUAL…)
+
+    if action in ("FECHAR", "CLOSE"):
+        results, err = close_all_positions(tv_symbol)
+        pnl_pts = None
+        pnl_brl = None
+
+        # Registra no log
+        open_log = get_open_auto_trade(tv_symbol)
+        if open_log and not err:
+            try:
+                from services.market_service import TV_TO_MT5, MT5_AVAILABLE
+                exit_price = None
+                if MT5_AVAILABLE:
+                    mt5_sym = TV_TO_MT5.get(tv_symbol.upper().strip())
+                    if mt5_sym and mt5.initialize():
+                        tick = mt5.symbol_info_tick(mt5_sym)
+                        if tick:
+                            exit_price = tick.last or (tick.bid + tick.ask) / 2
+                        mt5.shutdown()
+                pnl_pts = None
+                pnl_brl = None
+                if exit_price and open_log.get("entry_price"):
+                    e = float(open_log["entry_price"])
+                    pnl_pts = round(exit_price - e) if open_log["acao"] == "COMPRA" else round(e - exit_price)
+                    vol = float(open_log.get("volume") or 1.0)
+                    pnl_brl = round(pnl_pts * 0.20 * vol, 2)
+                close_auto_trade(
+                    open_log["id"], exit_price or 0,
+                    close_reason or "MANUAL", pnl_pts, pnl_brl,
+                )
+            except Exception as ex:
+                logger.warning("Erro ao fechar log: %s", ex)
+
+        return jsonify({"ok": not err, "results": results, "error": err,
+                        "pnl_pts": pnl_pts, "pnl_brl": pnl_brl})
+
+    if action in ("BREAKEVEN", "TRAILING") and new_sl is not None:
+        # Move o stop loss via MT5 position modify
+        from services.market_service import TV_TO_MT5, MT5_AVAILABLE
+        from services.trade_executor import MAGIC_NUMBER
+
+        if not MT5_AVAILABLE:
+            return jsonify({"ok": False, "error": "MT5 nao disponivel."})
+
+        mt5_sym = TV_TO_MT5.get(tv_symbol.upper().strip())
+        if not mt5_sym:
+            return jsonify({"ok": False, "error": f"Simbolo {tv_symbol} nao mapeado."})
+
+        try:
+            if not mt5.initialize():
+                return jsonify({"ok": False, "error": f"MT5: {mt5.last_error()}"})
+
+            positions = mt5.positions_get(symbol=mt5_sym)
+            if not positions:
+                mt5.shutdown()
+                return jsonify({"ok": False, "error": "Nenhuma posicao aberta."})
+
+            pos = next((p for p in positions if p.magic == MAGIC_NUMBER), None)
+            if not pos:
+                mt5.shutdown()
+                return jsonify({"ok": False, "error": "Posicao do bot nao encontrada."})
+
+            # Snap para tick_size
+            sym_info = mt5.symbol_info(mt5_sym)
+            tick_size = float(sym_info.trade_tick_size) if sym_info and sym_info.trade_tick_size else 1.0
+            new_sl_snapped = round(round(float(new_sl) / tick_size) * tick_size, 10)
+
+            req = {
+                "action":   mt5.TRADE_ACTION_SLTP,
+                "position": pos.ticket,
+                "symbol":   mt5_sym,
+                "sl":       new_sl_snapped,
+                "tp":       pos.tp,
+            }
+            result = mt5.order_send(req)
+            mt5.shutdown()
+
+            if result and result.retcode == mt5.TRADE_RETCODE_DONE:
+                return jsonify({
+                    "ok": True,
+                    "action": action,
+                    "new_sl": new_sl_snapped,
+                    "ticket": pos.ticket,
+                })
+            retcode = result.retcode if result else None
+            comment = result.comment if result else "None"
+            return jsonify({
+                "ok":    False,
+                "error": f"MT5 retcode {retcode}: {comment}",
+            })
+        except Exception as exc:
+            try:
+                mt5.shutdown()
+            except Exception:
+                pass
+            return jsonify({"ok": False, "error": str(exc)})
+
+    return jsonify({"ok": False, "error": f"Acao desconhecida: {action}"})
+
+
+# ---------------------------------------------------------------------------
+# Monitor MT5 — Persistência e verificação de sinais
+# ---------------------------------------------------------------------------
+
+@app.route("/api/monitor/signal/save", methods=["POST"])
+def api_save_mt5_signal():
+    """Salva um sinal do Monitor MT5 no banco."""
+    body = request.get_json(silent=True) or {}
+    required = ("tv_symbol", "interval", "acao")
+    if not all(body.get(k) for k in required):
+        return jsonify({"error": "tv_symbol, interval e acao são obrigatórios."}), 400
+    row_id, created_at = insert_mt5_signal(
+        tv_symbol=body["tv_symbol"],
+        interval=str(body["interval"]),
+        acao=body["acao"],
+        score=body.get("score"),
+        preco=body.get("preco"),
+        entrada=body.get("entrada"),
+        stop=body.get("stop"),
+        tp1=body.get("tp1"),
+        tp2=body.get("tp2"),
+        tp3=body.get("tp3"),
+        vwap=body.get("vwap"),
+    )
+    return jsonify({"ok": True, "id": row_id, "created_at": created_at})
+
+
+@app.route("/api/monitor/signals/history")
+def api_mt5_signals_history():
+    limit = min(int(request.args.get("limit", 100)), 200)
+    return jsonify({"ok": True, "items": list_mt5_signals(limit)})
+
+
+@app.route("/api/monitor/signals/stats")
+def api_mt5_signals_stats():
+    return jsonify(mt5_signals_stats())
+
+
+@app.route("/api/monitor/signal/<int:signal_id>/verify", methods=["POST"])
+def api_verify_mt5_signal(signal_id: int):
+    """Verifica via MT5 se alvos/stop de um sinal foram atingidos."""
+    from services.outcome_checker import check_outcome
+    row = get_mt5_signal(signal_id)
+    if not row:
+        return jsonify({"error": "Sinal não encontrado."}), 404
+    tv_sym = row["tv_symbol"]
+    ativo  = tv_sym.split(":")[-1] if ":" in tv_sym else tv_sym
+    outcome = check_outcome(
+        ativo=ativo,
+        acao=row["acao"],
+        created_at_iso=row["created_at"],
+        entrada=row.get("entrada"),
+        stop=row.get("stop"),
+        tp1=row.get("tp1"),
+        tp2=row.get("tp2"),
+        tp3=row.get("tp3"),
+    )
+    update_mt5_outcome(signal_id, **outcome)
+    updated = get_mt5_signal(signal_id)
+    return jsonify({"ok": True, "outcome": outcome, "signal": dict(updated)})
+
+
+@app.route("/api/monitor/signals/verify-batch", methods=["POST"])
+def api_verify_mt5_batch():
+    """Verifica os N sinais mais recentes ainda não verificados."""
+    from services.outcome_checker import check_outcome
+    body  = request.get_json(silent=True) or {}
+    limit = min(int(body.get("limit", 30)), 100)
+    rows  = list_mt5_signals(limit)
+    results = []
+    for r in rows:
+        if r.get("outcome_checked_at"):
+            results.append({"id": r["id"], "skipped": True})
+            continue
+        tv_sym = r["tv_symbol"]
+        ativo  = tv_sym.split(":")[-1] if ":" in tv_sym else tv_sym
+        outcome = check_outcome(
+            ativo=ativo, acao=r["acao"], created_at_iso=r["created_at"],
+            entrada=r.get("entrada"), stop=r.get("stop"),
+            tp1=r.get("tp1"), tp2=r.get("tp2"), tp3=r.get("tp3"),
+        )
+        update_mt5_outcome(r["id"], **outcome)
+        results.append({"id": r["id"], "skipped": False, **outcome})
+    return jsonify({"ok": True, "results": results})
+
+
 init_db()
+init_mt5_signals()
+init_auto_trades()
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.getenv("PORT", "5000")))
