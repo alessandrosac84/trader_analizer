@@ -54,6 +54,54 @@ app = Flask(__name__, static_folder="static", template_folder="templates")
 app.config["SECRET_KEY"] = Config.SECRET_KEY
 app.config["MAX_CONTENT_LENGTH"] = Config.MAX_CONTENT_LENGTH
 
+# ── Inicialização única no primeiro request ────────────────────────────────
+_app_initialized = False
+
+# ── Debounce e cooldown de auto-trade no servidor ─────────────────────────
+import time as _time
+_last_autotrade_ts   = 0.0   # epoch da última execução de trade
+_AUTOTRADE_COOLDOWN  = 15 * 60  # 15 min entre trades (segundos)
+
+def _autotrade_in_cooldown() -> bool:
+    return (_time.time() - _last_autotrade_ts) < _AUTOTRADE_COOLDOWN
+
+def _register_autotrade_ts():
+    global _last_autotrade_ts
+    _last_autotrade_ts = _time.time()
+
+def _cooldown_remaining_min() -> int:
+    rem = _AUTOTRADE_COOLDOWN - (_time.time() - _last_autotrade_ts)
+    return max(0, int(rem / 60))
+
+# ── Confirmação de fechamento — evita fechar por leitura instável do MT5 ──
+# Exige N leituras consecutivas sem posição antes de registrar o fechamento.
+_no_position_count   = {}   # tv_symbol -> int
+_NO_POSITION_CONFIRM = 3    # quantas leituras consecutivas sem posição são necessárias
+
+@app.before_request
+def _startup_once():
+    global _app_initialized
+    if _app_initialized:
+        return
+    _app_initialized = True
+    try:
+        init_db()
+        init_mt5_signals()
+        init_auto_trades()
+        logger.info("DB inicializado com sucesso.")
+    except Exception as e:
+        logger.warning("Erro ao inicializar DB: %s", e)
+    try:
+        from services.telegram_notifier import start_periodic_summary
+        start_periodic_summary("BMFBOVESPA:WIN1!")
+    except Exception as e:
+        logger.warning("Erro ao iniciar Telegram scheduler: %s", e)
+    try:
+        from services.telegram_commander import start_commander
+        start_commander()
+    except Exception as e:
+        logger.warning("Erro ao iniciar Telegram commander: %s", e)
+
 
 def allowed_file(filename: str) -> bool:
     return (
@@ -597,6 +645,18 @@ def api_mt5_signals_report():
 # Auto-Trade (DEMO) — execução automática via MT5
 # ---------------------------------------------------------------------------
 
+@app.route("/api/autotrade/remote-state", methods=["GET", "POST"])
+def api_autotrade_remote_state():
+    """GET: retorna se auto-trade está habilitado. POST: atualiza o estado."""
+    from services.telegram_commander import is_autotrade_enabled, set_autotrade_enabled
+    if request.method == "POST":
+        body = request.get_json(silent=True) or {}
+        enabled = bool(body.get("enabled", True))
+        set_autotrade_enabled(enabled)
+        return jsonify({"ok": True, "enabled": enabled})
+    return jsonify({"ok": True, "enabled": is_autotrade_enabled()})
+
+
 @app.route("/api/autotrade/status")
 def api_autotrade_status():
     """Retorna posições abertas do bot."""
@@ -612,6 +672,22 @@ def api_autotrade_execute():
     Executa uma ordem de compra ou venda via MT5 com validacao AI pre-trade.
     Salva o trade no log para rastreamento completo ate o fechamento.
     """
+    # Verifica se auto-trade está habilitado (pode ter sido pausado via Telegram)
+    from services.telegram_commander import is_autotrade_enabled
+    if not is_autotrade_enabled():
+        return jsonify({
+            "ok": False, "result": None,
+            "error": "Auto-trade pausado remotamente via Telegram. Use /ativar para reativar.",
+        })
+
+    # Cooldown no servidor — evita re-entrada mesmo se o JS resetar o debounce
+    if _autotrade_in_cooldown():
+        rem = _cooldown_remaining_min()
+        return jsonify({
+            "ok": False, "result": None,
+            "error": f"Cooldown ativo no servidor — próxima entrada em ~{rem} min.",
+        })
+
     from services.trade_executor import execute_trade, DEFAULT_VOLUME, SCORE_MIN
     from services.signal_validator_ai import validate_signal_with_ai
     from services.trade_log import save_auto_trade
@@ -664,6 +740,12 @@ def api_autotrade_execute():
                     )
                 except Exception as _e:
                     logger.warning("Falha ao registrar bloqueio IA: %s", _e)
+                # Notifica Telegram
+                try:
+                    from services.telegram_notifier import notify_ia_blocked
+                    notify_ia_blocked(tv_symbol, acao, score, ai_result.get("motivo", ""))
+                except Exception:
+                    pass
                 return jsonify({
                     "ok":    False,
                     "result": None,
@@ -705,6 +787,28 @@ def api_autotrade_execute():
             )
         except Exception as log_exc:
             logger.warning("Falha ao salvar trade no log: %s", log_exc)
+
+    # Registra timestamp para cooldown no servidor
+    if result and not error:
+        _register_autotrade_ts()
+
+    # Notifica Telegram se trade executado
+    if result and not error:
+        try:
+            from services.telegram_notifier import notify_trade_executed
+            notify_trade_executed(
+                tv_symbol    = tv_symbol,
+                acao         = acao,
+                score        = score,
+                entry_price  = result.get("price") or entrada,
+                sl           = sl,
+                tp1          = tp1,
+                order_id     = result.get("order"),
+                ai_veredito  = ai_result.get("veredito")  if ai_result else None,
+                ai_confianca = ai_result.get("confianca") if ai_result else None,
+            )
+        except Exception:
+            pass
 
     return jsonify({
         "ok":          error is None,
@@ -803,16 +907,44 @@ def api_autotrade_manage():
         return jsonify({"ok": False, "error": err})
 
     def _detect_close_reason(exit_price, open_log):
-        """Detecta motivo de fechamento comparando exit com SL/TP do trade."""
+        """
+        Detecta motivo de fechamento comparando exit com SL/TP e direção do trade.
+        - STOP     : exit dentro da tolerância do SL, ou preço foi contra a posição
+        - TP1      : exit dentro da tolerância do TP1
+        - FECHADO_MT5_GAIN  : fechado pelo MT5 com lucro (sem bater TP1)
+        - FECHADO_MT5_STOP  : fechado pelo MT5 com perda (sem bater SL exato)
+        - FECHADO_MT5       : não foi possível determinar
+        """
         if not exit_price or not open_log:
             return "FECHADO_MT5"
-        sl  = open_log.get("sl_initial")
-        tp1 = open_log.get("tp1_initial")
-        tol = 50  # tolerância de 50 pontos (WIN mini)
+
+        sl    = open_log.get("sl_initial")
+        tp1   = open_log.get("tp1_initial")
+        entry = open_log.get("entry_price")
+        acao  = open_log.get("acao", "")
+        tol   = 50  # tolerância de 50 pontos (WIN mini)
+
         if sl  and abs(exit_price - float(sl))  <= tol:
             return "STOP"
         if tp1 and abs(exit_price - float(tp1)) <= tol:
             return "TP1"
+
+        # Sem bater exatamente SL ou TP — tenta inferir pela direção
+        if entry:
+            entry_f = float(entry)
+            exit_f  = float(exit_price)
+            if acao == "COMPRA":
+                lucro = exit_f > entry_f
+            elif acao == "VENDA":
+                lucro = exit_f < entry_f
+            else:
+                lucro = None
+
+            if lucro is True:
+                return "FECHADO_MT5_GAIN"
+            elif lucro is False:
+                return "FECHADO_MT5_STOP"
+
         return "FECHADO_MT5"
 
     def _calc_pnl(exit_price, open_log):
@@ -842,7 +974,26 @@ def api_autotrade_manage():
         return None
 
     if not positions:
-        # Sem posicao aberta no MT5 — verifica se havia trade no log e registra fechamento
+        # ── Confirmação de fechamento ────────────────────────────────────────
+        # MT5 às vezes retorna vazio por instabilidade de rede/consulta.
+        # Só registra fechamento após N leituras consecutivas sem posição.
+        _no_position_count[tv_symbol] = _no_position_count.get(tv_symbol, 0) + 1
+        if _no_position_count[tv_symbol] < _NO_POSITION_CONFIRM:
+            logger.info("Manage: sem posição (leitura %d/%d) — aguardando confirmação.",
+                        _no_position_count[tv_symbol], _NO_POSITION_CONFIRM)
+            open_log = get_open_auto_trade(tv_symbol)
+            if open_log:
+                # Ainda retorna MANAGE para não interromper o ciclo
+                return jsonify({"ok": True, "mode": "MANAGE",
+                                "position": None, "analysis": None,
+                                "trade_log": open_log, "signal": None})
+            return jsonify({"ok": True, "mode": "SCAN",
+                            "position": None, "analysis": None, "signal": None,
+                            "closed_trade": None})
+
+        # N leituras confirmam ausência de posição — registra fechamento
+        _no_position_count[tv_symbol] = 0
+
         from services.trade_log import save_auto_trade
         open_log = get_open_auto_trade(tv_symbol)
         closed_trade = None
@@ -867,6 +1018,27 @@ def api_autotrade_manage():
                     "pnl_brl":      pnl_brl,
                 }
                 logger.info("Trade fechado: id=%d motivo=%s pnl=%s", open_log["id"], close_reason, pnl_pts)
+                # Notifica Telegram
+                try:
+                    from services.telegram_notifier import notify_trade_closed
+                    notify_trade_closed(
+                        tv_symbol    = tv_symbol,
+                        acao         = open_log.get("acao", "—"),
+                        entry_price  = open_log.get("entry_price"),
+                        exit_price   = exit_price,
+                        close_reason = close_reason,
+                        pnl_pts      = pnl_pts,
+                        pnl_brl      = pnl_brl,
+                    )
+                except Exception:
+                    pass
+                # Verifica se meta diária foi atingida
+                try:
+                    from services.telegram_commander import check_meta_atingida
+                    from services.config import Config
+                    check_meta_atingida(Config.TELEGRAM_BOT_TOKEN, Config.TELEGRAM_CHAT_ID)
+                except Exception:
+                    pass
             except Exception as log_exc:
                 logger.warning("Erro ao registrar fechamento no log: %s", log_exc)
 
@@ -875,6 +1047,9 @@ def api_autotrade_manage():
             "position": None, "analysis": None, "signal": None,
             "closed_trade": closed_trade,
         })
+
+    # Posição existe — reseta o contador de confirmação de fechamento
+    _no_position_count[tv_symbol] = 0
 
     position = positions[0]
 
@@ -901,29 +1076,61 @@ def api_autotrade_manage():
 
     # ── Recovery: posição aberta no MT5 mas sem registro no DB ────────────
     # Ocorre quando o app foi reiniciado ou o trade foi aberto manualmente/externamente.
+    # IMPORTANTE: antes de criar um novo registro, verifica se o último trade fechado
+    # tem o mesmo ticket MT5 — se sim, foi um falso fechamento e reabrimos o registro.
     if open_log is None:
         try:
+            mt5_ticket_atual = int(position.get("ticket") or 0)
             is_buy   = position.get("type") == 0   # 0=BUY, 1=SELL
             acao_rec = "COMPRA" if is_buy else "VENDA"
             entry_rec  = float(position.get("price_open") or 0) or None
             sl_rec     = float(position.get("sl") or 0) or None
             tp_rec     = float(position.get("tp") or 0) or None
             vol_rec    = float(position.get("volume") or 1.0)
-            rec_id = save_auto_trade(
-                tv_symbol   = tv_symbol,
-                interval    = interval,
-                acao        = acao_rec,
-                entry_price = entry_rec,
-                volume      = vol_rec,
-                sl_initial  = sl_rec,
-                tp1_initial = tp_rec,
-                score       = None,   # não temos o score original
-                ai_validated= False,
-                ai_veredito = "RECUPERADO",
-                ai_motivo   = "Trade detectado no MT5 sem registro no sistema — recuperado automaticamente.",
-            )
-            open_log = get_open_auto_trade(tv_symbol)
-            logger.info("Trade recuperado do MT5: id=%d %s entry=%.0f", rec_id, acao_rec, entry_rec or 0)
+
+            # Verifica se o último trade fechado tem o mesmo ticket (falso fechamento)
+            reaberto = False
+            if mt5_ticket_atual:
+                from services.db import _conn as _db_conn
+                with _db_conn() as _conn_rec:
+                    last_closed = _conn_rec.execute("""
+                        SELECT id, mt5_ticket FROM auto_trades
+                        WHERE tv_symbol=? AND closed_at IS NOT NULL
+                        ORDER BY id DESC LIMIT 1
+                    """, (tv_symbol,)).fetchone()
+                if last_closed and int(last_closed["mt5_ticket"] or 0) == mt5_ticket_atual:
+                    # Mesmo ticket — desfaz o fechamento falso
+                    with _db_conn() as _conn_rec:
+                        _conn_rec.execute("""
+                            UPDATE auto_trades
+                            SET closed_at=NULL, exit_price=NULL,
+                                close_reason=NULL, pnl_pts=NULL, pnl_brl=NULL
+                            WHERE id=?
+                        """, (last_closed["id"],))
+                    open_log = get_open_auto_trade(tv_symbol)
+                    reaberto = True
+                    logger.warning(
+                        "Trade id=%d reaberto: falso fechamento detectado (ticket=%d ainda ativo no MT5).",
+                        last_closed["id"], mt5_ticket_atual,
+                    )
+
+            if not reaberto:
+                rec_id = save_auto_trade(
+                    tv_symbol   = tv_symbol,
+                    interval    = interval,
+                    acao        = acao_rec,
+                    entry_price = entry_rec,
+                    volume      = vol_rec,
+                    sl_initial  = sl_rec,
+                    tp1_initial = tp_rec,
+                    score       = None,
+                    mt5_ticket  = mt5_ticket_atual or None,
+                    ai_validated= False,
+                    ai_veredito = "RECUPERADO",
+                    ai_motivo   = "Trade detectado no MT5 sem registro — recuperado automaticamente.",
+                )
+                open_log = get_open_auto_trade(tv_symbol)
+                logger.info("Trade recuperado do MT5: id=%d %s entry=%.0f", rec_id, acao_rec, entry_rec or 0)
         except Exception as rec_exc:
             logger.warning("Erro ao recuperar trade do MT5: %s", rec_exc)
 
@@ -1028,6 +1235,122 @@ def api_autotrade_trades():
         "items":      list_auto_trades(limit, today_only=today_only),
         "stats":      auto_trades_stats(today_only=today_only),
         "today_only": today_only,
+    })
+
+
+@app.route("/api/autotrade/report")
+def api_autotrade_report():
+    """
+    Relatorio de trades por periodo.
+    ?period=day|week|month  (default: day)
+    ?ref=YYYY-MM-DD         (data de referencia, default: hoje)
+    """
+    from services.db import _conn as _db_conn
+    from datetime import datetime, timedelta, date as date_cls
+    import json as _json
+
+    period = request.args.get("period", "day")
+    ref_str = request.args.get("ref", "")
+    try:
+        ref = datetime.strptime(ref_str, "%Y-%m-%d").date() if ref_str else date_cls.today()
+    except ValueError:
+        ref = date_cls.today()
+
+    # Define intervalo de datas
+    if period == "day":
+        date_from = ref
+        date_to   = ref
+    elif period == "week":
+        date_from = ref - timedelta(days=ref.weekday())   # segunda-feira
+        date_to   = date_from + timedelta(days=6)
+    else:  # month
+        date_from = ref.replace(day=1)
+        # ultimo dia do mes
+        if date_from.month == 12:
+            date_to = date_from.replace(year=date_from.year+1, month=1, day=1) - timedelta(days=1)
+        else:
+            date_to = date_from.replace(month=date_from.month+1, day=1) - timedelta(days=1)
+
+    with _db_conn() as conn:
+        rows = conn.execute("""
+            SELECT * FROM auto_trades
+            WHERE date(opened_at, 'localtime') BETWEEN ? AND ?
+            ORDER BY opened_at ASC
+        """, (date_from.isoformat(), date_to.isoformat())).fetchall()
+
+    trades = [dict(r) for r in rows]
+    reais  = [t for t in trades if t.get("close_reason") != "BLOQUEADO_IA"]
+    fechados = [t for t in reais if t.get("closed_at")]
+    abertos  = [t for t in reais if not t.get("closed_at")]
+
+    gains  = [t for t in fechados if (t.get("pnl_pts") or 0) > 0]
+    losses = [t for t in fechados if (t.get("pnl_pts") or 0) < 0]
+    pnl_total_pts = sum(t.get("pnl_pts") or 0 for t in fechados)
+    pnl_total_brl = sum(t.get("pnl_brl") or 0 for t in fechados)
+    avg_gain_pts  = (sum(t["pnl_pts"] for t in gains)  / len(gains))  if gains  else 0
+    avg_loss_pts  = (sum(t["pnl_pts"] for t in losses) / len(losses)) if losses else 0
+    win_rate      = round(len(gains) / len(fechados) * 100) if fechados else 0
+    expectativa   = round(pnl_total_pts / len(fechados), 1) if fechados else 0
+
+    # Breakdown diario
+    from collections import defaultdict
+    daily = defaultdict(lambda: {"trades": 0, "wins": 0, "losses": 0,
+                                 "pnl_pts": 0.0, "pnl_brl": 0.0, "abertos": 0})
+    for t in reais:
+        day_key = (t.get("opened_at") or "")[:10]
+        d = daily[day_key]
+        if not t.get("closed_at"):
+            d["abertos"] += 1
+            d["trades"]  += 1
+            continue
+        d["trades"] += 1
+        pts = t.get("pnl_pts") or 0
+        brl = t.get("pnl_brl") or 0
+        d["pnl_pts"] += pts
+        d["pnl_brl"] += brl
+        if pts > 0: d["wins"]   += 1
+        elif pts < 0: d["losses"] += 1
+
+    daily_list = sorted([{"date": k, **v} for k, v in daily.items()], key=lambda x: x["date"])
+
+    # Melhor e pior dia
+    dias_com_pnl = [d for d in daily_list if d["trades"] - d["abertos"] > 0]
+    best_day  = max(dias_com_pnl, key=lambda x: x["pnl_pts"], default=None)
+    worst_day = min(dias_com_pnl, key=lambda x: x["pnl_pts"], default=None)
+
+    # Score medio
+    scores = [abs(t.get("score") or 0) for t in fechados if t.get("score")]
+    avg_score = round(sum(scores) / len(scores), 1) if scores else 0
+
+    # Por motivo de fechamento
+    by_reason = defaultdict(int)
+    for t in fechados:
+        by_reason[t.get("close_reason") or "outro"] += 1
+
+    return jsonify({
+        "ok":           True,
+        "period":       period,
+        "date_from":    date_from.isoformat(),
+        "date_to":      date_to.isoformat(),
+        "summary": {
+            "total":        len(reais),
+            "fechados":     len(fechados),
+            "abertos":      len(abertos),
+            "wins":         len(gains),
+            "losses":       len(losses),
+            "win_rate":     win_rate,
+            "pnl_total_pts": round(pnl_total_pts),
+            "pnl_total_brl": round(pnl_total_brl, 2),
+            "avg_gain_pts":  round(avg_gain_pts),
+            "avg_loss_pts":  round(avg_loss_pts),
+            "expectativa":   expectativa,
+            "avg_score":     avg_score,
+            "best_day":      best_day,
+            "worst_day":     worst_day,
+            "by_reason":     dict(by_reason),
+        },
+        "daily":  daily_list,
+        "trades": trades,
     })
 
 

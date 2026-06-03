@@ -523,7 +523,7 @@
                 <span style="font-size:1.1rem;font-weight:700">🤖 Auto-Trade</span>
                 <span class="badge no" style="font-size:.7rem;padding:.2rem .5rem">⚠️ APENAS DEMO</span>
               </div>
-              <div style="font-size:.75rem;color:var(--text-muted);margin-top:.25rem">
+              <div style="font-size:.68rem;color:var(--text-muted);margin-top:.2rem;line-height:1.2">
                 Executa ordens automaticamente quando um sinal COMPRA/VENDA for detectado.
               </div>
             </div>
@@ -805,9 +805,135 @@
     <!-- ===================== ABA RELATÓRIO ===================== -->
     <div id="tab-report" class="tab-pane">
 
+      <!-- ═══════════════════════════════════════════════════════
+           RELATÓRIO DE TRADES AUTOMÁTICOS
+      ═══════════════════════════════════════════════════════ -->
       <section class="card" style="margin-top:1rem">
+        <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+          <h2 style="margin:0;font-size:1.1rem">📈 Relatório de Trades</h2>
+          <!-- Seletor de período -->
+          <div style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+            <button class="tr-period-btn active" data-period="day"   style="padding:.4rem .9rem;border:none;cursor:pointer;font-size:.85rem;background:var(--accent);color:#000;font-weight:600">Hoje</button>
+            <button class="tr-period-btn"        data-period="week"  style="padding:.4rem .9rem;border:none;cursor:pointer;font-size:.85rem;background:var(--surface-2);color:var(--text)">Semana</button>
+            <button class="tr-period-btn"        data-period="month" style="padding:.4rem .9rem;border:none;cursor:pointer;font-size:.85rem;background:var(--surface-2);color:var(--text)">Mês</button>
+          </div>
+          <!-- Navegação de data -->
+          <button id="tr-prev" style="padding:.35rem .7rem;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text)">◀</button>
+          <span id="tr-date-label" style="font-size:.9rem;color:var(--text-muted);min-width:140px;text-align:center">—</span>
+          <button id="tr-next" style="padding:.35rem .7rem;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text)">▶</button>
+          <button id="tr-today" style="padding:.35rem .7rem;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text);font-size:.82rem">Ir para hoje</button>
+          <button id="tr-refresh" style="margin-left:auto;padding:.35rem .8rem;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text)">↺ Atualizar</button>
+        </div>
+      </section>
+
+      <!-- Cards de KPIs -->
+      <div id="tr-kpi-row" style="display:grid;grid-template-columns:repeat(9,1fr);gap:.45rem;margin-top:.75rem">
+        <div class="card" style="padding:.75rem .5rem;text-align:center;border-top:3px solid var(--border)">
+          <div style="font-size:1.15rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="tr-k-total">—</div>
+          <div style="font-size:.68rem;color:var(--text-muted);margin-top:.2rem;line-height:1.2">Total trades</div>
+        </div>
+        <div class="card" style="padding:1rem;text-align:center;border-top:3px solid #22c55e">
+          <div style="font-size:1.15rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#22c55e" id="tr-k-winrate">—</div>
+          <div style="font-size:.68rem;color:var(--text-muted);margin-top:.2rem;line-height:1.2">Win Rate</div>
+        </div>
+        <div class="card" style="padding:1rem;text-align:center;border-top:3px solid #22c55e">
+          <div style="font-size:1.15rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#22c55e" id="tr-k-wins">—</div>
+          <div style="font-size:.68rem;color:var(--text-muted);margin-top:.2rem;line-height:1.2">Gains</div>
+        </div>
+        <div class="card" style="padding:1rem;text-align:center;border-top:3px solid #ef4444">
+          <div style="font-size:1.15rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#ef4444" id="tr-k-losses">—</div>
+          <div style="font-size:.68rem;color:var(--text-muted);margin-top:.2rem;line-height:1.2">Stops</div>
+        </div>
+        <div class="card" style="padding:1rem;text-align:center;border-top:3px solid #3b82f6">
+          <div style="font-size:1.15rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="tr-k-pnl-pts">—</div>
+          <div style="font-size:.68rem;color:var(--text-muted);margin-top:.2rem;line-height:1.2">P&amp;L (pts)</div>
+        </div>
+        <div class="card" style="padding:1rem;text-align:center;border-top:3px solid #3b82f6">
+          <div style="font-size:1.15rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="tr-k-pnl-brl">—</div>
+          <div style="font-size:.68rem;color:var(--text-muted);margin-top:.2rem;line-height:1.2">P&amp;L (R$)</div>
+        </div>
+        <div class="card" style="padding:1rem;text-align:center;border-top:3px solid #f59e0b">
+          <div style="font-size:1.15rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#22c55e" id="tr-k-avg-gain">—</div>
+          <div style="font-size:.68rem;color:var(--text-muted);margin-top:.2rem;line-height:1.2">Gain médio (pts)</div>
+        </div>
+        <div class="card" style="padding:1rem;text-align:center;border-top:3px solid #f59e0b">
+          <div style="font-size:1.15rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#ef4444" id="tr-k-avg-loss">—</div>
+          <div style="font-size:.68rem;color:var(--text-muted);margin-top:.2rem;line-height:1.2">Stop médio (pts)</div>
+        </div>
+        <div class="card" style="padding:1rem;text-align:center;border-top:3px solid #a855f7">
+          <div style="font-size:1.15rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="tr-k-expect">—</div>
+          <div style="font-size:.68rem;color:var(--text-muted);margin-top:.2rem;line-height:1.2">Expectativa/trade</div>
+        </div>
+      </div>
+
+      <!-- Melhor e pior dia (visivel só em semana/mes) -->
+      <div id="tr-best-worst" style="display:none;grid-template-columns:1fr 1fr;gap:.65rem;margin-top:.65rem">
+        <div class="card" style="padding:.85rem;border-left:4px solid #22c55e">
+          <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Melhor dia</div>
+          <div style="font-size:1.1rem;font-weight:700;margin-top:.25rem" id="tr-best-date">—</div>
+          <div style="font-size:.85rem;color:#22c55e" id="tr-best-pnl">—</div>
+        </div>
+        <div class="card" style="padding:.85rem;border-left:4px solid #ef4444">
+          <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Pior dia</div>
+          <div style="font-size:1.1rem;font-weight:700;margin-top:.25rem" id="tr-worst-date">—</div>
+          <div style="font-size:.85rem;color:#ef4444" id="tr-worst-pnl">—</div>
+        </div>
+      </div>
+
+      <!-- Gráfico de P&L por dia -->
+      <section class="card" id="tr-chart-section" style="margin-top:.75rem;display:none">
+        <h3 style="margin-top:0;font-size:.9rem;color:var(--text-muted)">P&amp;L por Dia (pts)</h3>
+        <canvas id="tr-chart" style="width:100%;max-height:200px"></canvas>
+      </section>
+
+      <!-- Tabela breakdown por dia (semana/mes) -->
+      <section class="card" id="tr-daily-section" style="margin-top:.75rem;display:none">
+        <h3 style="margin-top:0;font-size:.9rem;color:var(--text-muted)">Resultado por Dia</h3>
+        <div class="table-wrap">
+          <table class="data" id="tr-daily-table">
+            <thead>
+              <tr>
+                <th>Data</th><th>Trades</th><th>Gains</th><th>Stops</th>
+                <th>Win %</th><th>P&amp;L pts</th><th>P&amp;L R$</th>
+              </tr>
+            </thead>
+            <tbody id="tr-daily-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Tabela de todos os trades do período -->
+      <section class="card" id="tr-trades-section" style="margin-top:.75rem">
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem">
+          <h3 style="margin:0;font-size:.9rem;color:var(--text-muted)">Trades do Período</h3>
+          <button id="tr-csv-btn" class="btn btn-ghost" style="margin-left:auto;font-size:.8rem">⬇ CSV</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data" id="tr-trades-table">
+            <thead>
+              <tr>
+                <th>Data/Hora</th><th>Ação</th><th>Score</th>
+                <th>Entrada</th><th>Saída</th><th>Motivo</th>
+                <th>P&amp;L pts</th><th>P&amp;L R$</th><th>IA</th>
+              </tr>
+            </thead>
+            <tbody id="tr-trades-body">
+              <tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:2rem">Carregando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <div id="tr-empty" style="display:none;text-align:center;padding:3rem;color:var(--text-muted)">
+        Nenhum trade encontrado para este período.
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════════
+           RELATÓRIO DE SINAIS (mantido)
+      ═══════════════════════════════════════════════════════ -->
+      <section class="card" style="margin-top:2rem">
         <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
-          <h2 style="margin:0">📊 Relatório Mensal de Sinais</h2>
+          <h2 style="margin:0;font-size:1.1rem">📊 Relatório Mensal de Sinais</h2>
           <input type="month" id="report-month" class="mon-input"
                  style="padding:.35rem .6rem;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;color:var(--text)"
                  value="">
@@ -817,7 +943,6 @@
         </div>
       </section>
 
-      <!-- Cards de resumo -->
       <section id="report-summary" style="margin-top:1rem;display:none">
         <div style="display:flex;gap:.75rem;flex-wrap:wrap">
           <div class="card outcome-card" style="flex:1;min-width:110px;text-align:center">
@@ -853,7 +978,6 @@
         </div>
       </section>
 
-      <!-- Resumo por dia -->
       <section class="card" id="report-daily-section" style="margin-top:1rem;display:none">
         <h3 style="margin-top:0">Resumo por Dia</h3>
         <div class="table-wrap">
@@ -870,7 +994,6 @@
         </div>
       </section>
 
-      <!-- Detalhe completo -->
       <section class="card" id="report-detail-section" style="margin-top:1rem;display:none">
         <h3 style="margin-top:0">Todos os Sinais do Mês</h3>
         <div class="table-wrap">
@@ -890,8 +1013,6 @@
       <div id="report-empty" class="empty-state" style="display:none">
         Nenhum sinal encontrado para este mês.
       </div>
-
-
 
     <p class="footer-note">
       Aviso: apoio à decisão, sem garantia de resultado. Evitar trades ruins é prioridade sobre "achar o trade perfeito".

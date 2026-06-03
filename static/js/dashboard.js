@@ -2176,7 +2176,7 @@
 
   var active     = false;
   var timer      = null;
-  var tickTimer  = null;   // timer de tick (3s) para atualização em tempo real
+  var tickTimer  = null;   // timer de tick (1s) para atualizacao em tempo real
   var alerts     = [];
   var lastSignal = null;  // track signal changes for audio
   var lastCandle = null;  // último candle completo — atualizado pelo tick timer
@@ -3067,23 +3067,50 @@
     if (manageTimer) { clearInterval(manageTimer); manageTimer = null; }
   }
 
+  // ── Sincroniza estado do auto-trade com o servidor ───────────────────────
+  function syncRemoteState(enabled) {
+    fetch("/api/autotrade/remote-state", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: enabled }),
+    }).catch(function () {});
+  }
+
+  function applyEnabled(enabled) {
+    autoTradeEnabled = enabled;
+    updateToggleUI();
+    if (autoTradeEnabled) {
+      setStatus("✅ Auto-Trade ATIVO — aguardando próximo sinal (score ≥ " +
+        (el("at-score-min") ? el("at-score-min").value : "5") + ")");
+      fetchManage();
+      startManagePolling(30);
+    } else {
+      setStatus("⏹ Auto-Trade desativado.");
+      stopManagePolling();
+      enterScanMode();
+      renderPositions([]);
+    }
+  }
+
+  // Ao carregar a página, busca o estado real do servidor
+  fetch("/api/autotrade/remote-state")
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (d.enabled !== autoTradeEnabled) {
+        applyEnabled(d.enabled);
+        if (!d.enabled) {
+          setStatus("⏹ Auto-Trade pausado remotamente via Telegram.");
+        }
+      }
+    })
+    .catch(function () {});
+
   // ── Toggle Auto-Trade ON/OFF ───────────────────────────────────────────
   if (toggleBtn) {
     toggleBtn.addEventListener("click", function () {
-      autoTradeEnabled = !autoTradeEnabled;
-      updateToggleUI();
-      if (autoTradeEnabled) {
-        setStatus("✅ Auto-Trade ATIVO — aguardando próximo sinal (score ≥ " +
-          (el("at-score-min") ? el("at-score-min").value : "5") + ")");
-        // Verifica se já há posição aberta ao ligar
-        fetchManage();
-        startManagePolling(30);
-      } else {
-        setStatus("⏹ Auto-Trade desativado.");
-        stopManagePolling();
-        enterScanMode();
-        renderPositions([]);
-      }
+      var newState = !autoTradeEnabled;
+      syncRemoteState(newState);
+      applyEnabled(newState);
     });
   }
 
@@ -3229,8 +3256,12 @@
               window._updateTradeAttempt(_attempt, "erro", "❌ " + bloqMsg.slice(0, 60), "");
             }
           }
-          // Libera debounce imediatamente se foi bloqueio (permite tentar no próximo ciclo)
-          _lastAutoTradeMs = 0;
+          // Libera debounce APENAS se foi bloqueio de IA (não erro de cooldown/rede)
+          // Bloqueio IA: permite nova tentativa no próximo ciclo de sinal
+          // Cooldown/erro: mantém debounce para não bombardear o servidor
+          if (isIABlock) {
+            _lastAutoTradeMs = 0;
+          }
           // Atualiza histórico de trades para mostrar o bloqueio no DB
           setTimeout(loadAutoTradesHistory, 600);
         }
@@ -3299,7 +3330,10 @@
   // ── Listener: Refresh historico ────────────────────────────────────────
   var histRefreshBtn = el("at-history-refresh");
   if (histRefreshBtn) {
-    histRefreshBtn.addEventListener("click", loadAutoTradesHistory);
+    histRefreshBtn.addEventListener("click", function () {
+      loadAutoTradesHistory();  // atualiza tabela
+      fetchManage();            // atualiza painel MANAGE (posicao ativa)
+    });
   }
 
   // ── Listener: Filtro Hoje / Todos ──────────────────────────────────────
@@ -3321,10 +3355,16 @@
   // Carrega historico ao inicializar (só hoje por padrão)
   loadAutoTradesHistory();
 
-  // ── Polling contínuo a cada 30s quando auto-trade está ativo ──────────
+  // ── Polling continuo: 30s quando ativo, 60s quando pausado (detecta fechamentos) ──
   setInterval(function () {
     if (autoTradeEnabled) fetchManage();
   }, 30000);
+  setInterval(function () {
+    if (!autoTradeEnabled) {
+      fetchManage();            // detecta fechamento mesmo com auto-trade desligado
+      loadAutoTradesHistory();  // atualiza historico
+    }
+  }, 60000);
 })();
 
 // ============================================================
@@ -3406,9 +3446,39 @@ function loadAutoTradesHistory() {
           "R$" + (pnlBrl >= 0 ? "+" : "") + parseFloat(pnlBrl).toFixed(2) + '</span>' : "—";
 
         var isBloqueado = t.close_reason === "BLOQUEADO_IA";
-        var motivo = isBloqueado
+        var _reasonMap = {
+          "TP1":              "🎯 TP1 atingido",
+          "TP2":              "🎯🎯 TP2 atingido",
+          "STOP":             "🛑 Stop Loss",
+          "REVERSAO":         "⚡ Reversão de sinal",
+          "MANUAL":           "✋ Fechado manualmente",
+          "TRAILING":         "📐 Trailing stop",
+          "FECHADO_MT5":      "🔄 Fechado pelo MT5",
+          "FECHADO_MT5_GAIN": "🔄 MT5 fechou (lucro)",
+          "FECHADO_MT5_STOP": "🔄 MT5 fechou (perda)",
+          "BLOQUEADO_IA":     "🚫 IA bloqueou",
+          "RECUPERADO":       "♻️ Recuperado",
+        };
+        var _reasonColor = {
+          "TP1": "#22c55e", "TP2": "#22c55e",
+          "STOP": "#ef4444", "FECHADO_MT5_STOP": "#ef4444",
+          "REVERSAO": "#f59e0b",
+          "MANUAL": "#a78bfa",
+          "FECHADO_MT5_GAIN": "#22c55e",
+          "FECHADO_MT5": "#94a3b8",
+          "RECUPERADO": "#94a3b8",
+        };
+        var motivoTxt = isBloqueado
           ? '<span style="color:#f87171;font-weight:700" title="' + (t.ai_motivo || "") + '">🚫 IA bloqueou</span>'
-          : t.close_reason || (isOpen ? '<em style="color:#f59e0b">aberto</em>' : "—");
+          : isOpen
+            ? '<em style="color:#f59e0b">aberto</em>'
+            : (function() {
+                var r = t.close_reason || "";
+                var label = _reasonMap[r] || r || "—";
+                var color = _reasonColor[r] || "var(--text-muted)";
+                return '<span style="color:' + color + '">' + label + '</span>';
+              })();
+        var motivo = motivoTxt;
         var scoreDisp = t.score != null ? Math.abs(t.score) : null;
         var aiStr  = t.ai_validated
           ? '<span title="' + (t.ai_motivo || "") + '" style="color:' + (isBloqueado ? "#f87171" : "#818cf8") + '">' +
@@ -3814,4 +3884,301 @@ function loadAutoTradesHistory() {
     if (tp1Input && signal && signal.tp1)  tp1Input.placeholder = "≈ " + parseFloat(signal.tp1).toFixed(0);
   };
 
+}());
+
+// ============================================================
+// RELATORIO DE TRADES — periodo dia / semana / mes
+// ============================================================
+(function () {
+  var _period  = "day";
+  var _refDate = new Date();
+  var _chart   = null;
+  var _csvData = [];
+
+  function fmtDate(d) {
+    // d = Date object -> "YYYY-MM-DD"
+    return d.toISOString().slice(0, 10);
+  }
+
+  function fmtDateBR(str) {
+    // "2026-06-03" -> "03/06/2026"
+    if (!str) return "—";
+    var p = str.split("-");
+    return p[2] + "/" + p[1] + "/" + p[0];
+  }
+
+  function fmtPts(v) {
+    if (v === null || v === undefined) return "—";
+    return (v >= 0 ? "+" : "") + Math.round(v) + " pts";
+  }
+
+  function fmtBrl(v) {
+    if (v === null || v === undefined) return "—";
+    return (v >= 0 ? "+R$" : "-R$") + Math.abs(v).toFixed(2);
+  }
+
+  function colorPnl(v) {
+    if (!v && v !== 0) return "";
+    return v > 0 ? "color:#22c55e" : v < 0 ? "color:#ef4444" : "";
+  }
+
+  function el(id) { return document.getElementById(id); }
+  function setText(id, val) { var e = el(id); if (e) e.textContent = val; }
+
+  function dateLabel() {
+    var d = _refDate;
+    if (_period === "day") {
+      return fmtDateBR(fmtDate(d));
+    } else if (_period === "week") {
+      var mon = new Date(d);
+      mon.setDate(d.getDate() - d.getDay() + (d.getDay() === 0 ? -6 : 1));
+      var sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+      return fmtDateBR(fmtDate(mon)) + " — " + fmtDateBR(fmtDate(sun));
+    } else {
+      var months = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+      return months[d.getMonth()] + " " + d.getFullYear();
+    }
+  }
+
+  function stepDate(dir) {
+    var d = new Date(_refDate);
+    if (_period === "day")   d.setDate(d.getDate() + dir);
+    else if (_period === "week")  d.setDate(d.getDate() + dir * 7);
+    else d.setMonth(d.getMonth() + dir);
+    _refDate = d;
+  }
+
+  function renderKpi(s) {
+    var pnlPts = s.pnl_total_pts || 0;
+    var pnlBrl = s.pnl_total_brl || 0;
+    var winRate = s.win_rate || 0;
+    var wins = s.wins || 0;
+    var losses = s.losses || 0;
+
+    setText("tr-k-total", s.fechados || 0);
+    var wrEl = el("tr-k-winrate");
+    if (wrEl) { wrEl.textContent = winRate + "%"; wrEl.style.color = winRate >= 60 ? "#22c55e" : winRate >= 45 ? "#f59e0b" : "#ef4444"; }
+    setText("tr-k-wins", wins);
+    setText("tr-k-losses", losses);
+
+    var ptsEl = el("tr-k-pnl-pts");
+    if (ptsEl) { ptsEl.textContent = (pnlPts >= 0 ? "+" : "") + Math.round(pnlPts) + " pts"; ptsEl.style.color = pnlPts >= 0 ? "#22c55e" : "#ef4444"; }
+    var brlEl = el("tr-k-pnl-brl");
+    if (brlEl) {
+      var brlAbs = Math.abs(pnlBrl);
+      var brlFmt = (brlAbs >= 100 ? brlAbs.toFixed(0) : brlAbs.toFixed(2));
+      brlEl.textContent = (pnlBrl >= 0 ? "+R$" : "-R$") + brlFmt;
+      brlEl.style.color = pnlBrl >= 0 ? "#22c55e" : "#ef4444";
+    }
+
+    var agEl = el("tr-k-avg-gain");
+    if (agEl) agEl.textContent = s.avg_gain_pts ? "+" + s.avg_gain_pts + " pts" : "—";
+    var alEl = el("tr-k-avg-loss");
+    if (alEl) alEl.textContent = s.avg_loss_pts ? s.avg_loss_pts + " pts" : "—";
+    var exEl = el("tr-k-expect");
+    if (exEl) { exEl.textContent = (s.expectativa >= 0 ? "+" : "") + (s.expectativa || 0) + " pts"; exEl.style.color = (s.expectativa || 0) >= 0 ? "#22c55e" : "#ef4444"; }
+
+    // Melhor / pior dia (semana e mes)
+    var bwEl = el("tr-best-worst");
+    if (bwEl) {
+      if (_period !== "day" && (s.best_day || s.worst_day)) {
+        bwEl.style.display = "grid";
+        if (s.best_day) {
+          setText("tr-best-date", fmtDateBR(s.best_day.date));
+          setText("tr-best-pnl", fmtPts(s.best_day.pnl_pts) + " / " + fmtBrl(s.best_day.pnl_brl));
+        }
+        if (s.worst_day) {
+          setText("tr-worst-date", fmtDateBR(s.worst_day.date));
+          var wpEl = el("tr-worst-pnl");
+          if (wpEl) {
+            wpEl.textContent = fmtPts(s.worst_day.pnl_pts) + " / " + fmtBrl(s.worst_day.pnl_brl);
+            wpEl.style.color = s.worst_day.pnl_pts >= 0 ? "#22c55e" : "#ef4444";
+          }
+        }
+      } else {
+        bwEl.style.display = "none";
+      }
+    }
+  }
+
+  function renderChart(daily) {
+    var sec = el("tr-chart-section");
+    if (!sec || !daily || daily.length < 2) { if (sec) sec.style.display = "none"; return; }
+    sec.style.display = "";
+
+    var labels = daily.map(function (d) { return fmtDateBR(d.date).slice(0,5); });
+    var values = daily.map(function (d) { return d.pnl_pts || 0; });
+    var colors = values.map(function (v) { return v >= 0 ? "rgba(34,197,94,0.75)" : "rgba(239,68,68,0.75)"; });
+
+    if (typeof Chart === "undefined") return;
+    if (_chart) { _chart.destroy(); _chart = null; }
+    var ctx = el("tr-chart");
+    if (!ctx) return;
+    _chart = new Chart(ctx, {
+      type: "bar",
+      data: { labels: labels, datasets: [{ data: values, backgroundColor: colors, borderRadius: 4, borderSkipped: false }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: {
+          callbacks: { label: function (c) { return (c.parsed.y >= 0 ? "+" : "") + c.parsed.y + " pts"; } }
+        }},
+        scales: {
+          x: { ticks: { color: "#9ca3af", font: { size: 11 } }, grid: { color: "rgba(255,255,255,.05)" } },
+          y: { ticks: { color: "#9ca3af", font: { size: 11 }, callback: function (v) { return v + " pts"; } }, grid: { color: "rgba(255,255,255,.08)" } }
+        }
+      }
+    });
+  }
+
+  function renderDaily(daily) {
+    var sec = el("tr-daily-section");
+    if (!sec || !daily || daily.length === 0) { if (sec) sec.style.display = "none"; return; }
+    if (_period === "day") { sec.style.display = "none"; return; }
+    sec.style.display = "";
+    var tbody = el("tr-daily-body");
+    if (!tbody) return;
+    tbody.innerHTML = "";
+    daily.forEach(function (d) {
+      var wr = d.trades > 0 ? Math.round(d.wins / (d.trades - d.abertos) * 100) : 0;
+      var row = document.createElement("tr");
+      row.innerHTML =
+        "<td>" + fmtDateBR(d.date) + "</td>" +
+        "<td>" + d.trades + "</td>" +
+        "<td style='color:#22c55e'>" + d.wins + "</td>" +
+        "<td style='color:#ef4444'>" + d.losses + "</td>" +
+        "<td style='" + (wr >= 60 ? "color:#22c55e" : wr >= 45 ? "color:#f59e0b" : "color:#ef4444") + "'>" + (isNaN(wr) ? "—" : wr + "%") + "</td>" +
+        "<td style='" + colorPnl(d.pnl_pts) + "'>" + fmtPts(d.pnl_pts) + "</td>" +
+        "<td style='" + colorPnl(d.pnl_brl) + "'>" + fmtBrl(d.pnl_brl) + "</td>";
+      tbody.appendChild(row);
+    });
+  }
+
+  var _reasonMap = {
+    "TP1": "🎯 TP1", "TP2": "🚀 TP2", "TP3": "💎 TP3",
+    "STOP": "🛑 Stop", "MANUAL": "✋ Manual", "TRAILING": "🔄 Trailing",
+    "BREAKEVEN": "⚖️ Breakeven", "REVERSAO": "↩️ Reversão",
+    "FECHADO_MT5": "📋 MT5 fechou", "FECHADO_MT5_GAIN": "📋 MT5 (lucro)",
+    "FECHADO_MT5_STOP": "📋 MT5 (perda)", "BLOQUEADO_IA": "🚫 Bloqueado IA",
+    "TEMPO": "⏱ Tempo"
+  };
+
+  function renderTrades(trades) {
+    _csvData = trades;
+    var tbody = el("tr-trades-body");
+    var empty = el("tr-empty");
+    var sec   = el("tr-trades-section");
+    if (!tbody) return;
+    tbody.innerHTML = "";
+
+    var reais = trades.filter(function (t) { return t.close_reason !== "BLOQUEADO_IA"; });
+    if (reais.length === 0) {
+      if (sec) sec.style.display = "none";
+      if (empty) empty.style.display = "";
+      return;
+    }
+    if (sec) sec.style.display = "";
+    if (empty) empty.style.display = "none";
+
+    reais.forEach(function (t) {
+      var dt   = (t.opened_at || "").slice(0, 16).replace("T", " ");
+      var pts  = t.pnl_pts !== null && t.pnl_pts !== undefined;
+      var brl  = t.pnl_brl !== null && t.pnl_brl !== undefined;
+      var ptsStr = pts ? ((t.pnl_pts >= 0 ? "+" : "") + Math.round(t.pnl_pts) + " pts") : (t.closed_at ? "—" : "<em style='color:var(--text-muted)'>aberto</em>");
+      var brlStr = brl ? ((t.pnl_brl >= 0 ? "+R$" : "-R$") + Math.abs(t.pnl_brl).toFixed(2)) : "";
+      var motivo = _reasonMap[t.close_reason] || t.close_reason || "<em style='color:#f59e0b'>aberto</em>";
+      var ia = t.ai_confidence ? (t.ai_veredito === "EXECUTAR" ? "<span style='color:#22c55e'>✓ " + t.ai_confidence + "%</span>" : "<span style='color:#ef4444'>✗ " + t.ai_veredito + "</span>") : "—";
+      var row = document.createElement("tr");
+      row.innerHTML =
+        "<td style='white-space:nowrap;font-size:.8rem'>" + dt.slice(5) + "</td>" +
+        "<td><span style='color:" + (t.acao === "COMPRA" ? "#22c55e" : "#ef4444") + ";font-weight:600'>" + (t.acao || "—") + "</span></td>" +
+        "<td>" + (t.score !== null && t.score !== undefined ? "|" + Math.abs(t.score) + "|" : "—") + "</td>" +
+        "<td>" + (t.entry_price ? Math.round(t.entry_price) : "—") + "</td>" +
+        "<td>" + (t.exit_price  ? Math.round(t.exit_price)  : "—") + "</td>" +
+        "<td style='font-size:.8rem'>" + motivo + "</td>" +
+        "<td style='" + (pts ? colorPnl(t.pnl_pts) : "") + ";font-weight:600'>" + ptsStr + "</td>" +
+        "<td style='" + (brl ? colorPnl(t.pnl_brl) : "") + "'>" + brlStr + "</td>" +
+        "<td style='font-size:.78rem'>" + ia + "</td>";
+      tbody.appendChild(row);
+    });
+  }
+
+  function loadReport() {
+    var url = "/api/autotrade/report?period=" + _period + "&ref=" + fmtDate(_refDate);
+    setText("tr-date-label", dateLabel());
+    fetch(url)
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) return;
+        renderKpi(d.summary || {});
+        renderChart(d.daily || []);
+        renderDaily(d.daily || []);
+        renderTrades(d.trades || []);
+      })
+      .catch(function () {
+        var tbody = el("tr-trades-body");
+        if (tbody) tbody.innerHTML = "<tr><td colspan='9' style='text-align:center;color:#ef4444'>Erro ao carregar dados.</td></tr>";
+      });
+  }
+
+  // Carrega Chart.js se não existir
+  function ensureChart(cb) {
+    if (typeof Chart !== "undefined") { cb(); return; }
+    var s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js";
+    s.onload = cb;
+    document.head.appendChild(s);
+  }
+
+  // CSV export
+  function exportCsv() {
+    if (!_csvData.length) return;
+    var cols = ["id","opened_at","acao","score","entry_price","exit_price","close_reason","pnl_pts","pnl_brl","ai_veredito"];
+    var lines = [cols.join(",")];
+    _csvData.forEach(function (t) {
+      lines.push(cols.map(function (c) { return JSON.stringify(t[c] !== null && t[c] !== undefined ? t[c] : ""); }).join(","));
+    });
+    var blob = new Blob([lines.join("\n")], { type: "text/csv" });
+    var a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+    a.download = "trades_" + _period + "_" + fmtDate(_refDate) + ".csv"; a.click();
+  }
+
+  // Init após DOM
+  function init() {
+    // Botões de período
+    document.querySelectorAll(".tr-period-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        _period = btn.dataset.period;
+        document.querySelectorAll(".tr-period-btn").forEach(function (b) {
+          b.style.background = "var(--surface-2)"; b.style.color = "var(--text)"; b.style.fontWeight = "";
+        });
+        btn.style.background = "var(--accent)"; btn.style.color = "#000"; btn.style.fontWeight = "600";
+        loadReport();
+      });
+    });
+    var prev = el("tr-prev"); if (prev) prev.addEventListener("click", function () { stepDate(-1); loadReport(); });
+    var next = el("tr-next"); if (next) next.addEventListener("click", function () { stepDate(+1); loadReport(); });
+    var today = el("tr-today"); if (today) today.addEventListener("click", function () { _refDate = new Date(); loadReport(); });
+    var ref = el("tr-refresh"); if (ref) ref.addEventListener("click", loadReport);
+    var csv = el("tr-csv-btn"); if (csv) csv.addEventListener("click", exportCsv);
+
+    // Carrega ao entrar na aba
+    document.querySelectorAll(".main-tab-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        if (btn.dataset.tab === "report") {
+          ensureChart(loadReport);
+        }
+      });
+    });
+
+    // Carga inicial se já estiver na aba report
+    if (document.querySelector("#tab-report.tab-active")) {
+      ensureChart(loadReport);
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
 }());

@@ -233,6 +233,37 @@ def execute_trade(
         return None, str(exc)
 
 
+def modify_position_sl(tv_symbol: str, new_sl: float) -> "tuple[bool, str | None]":
+    """Move o stop loss de uma posição aberta para new_sl."""
+    open_pos, err = get_open_positions(tv_symbol)
+    if err:
+        return False, err
+    if not open_pos:
+        return False, "Nenhuma posição aberta."
+
+    try:
+        import MetaTrader5 as mt5
+        if not mt5.initialize():
+            return False, f"MT5 não inicializado: {mt5.last_error()}"
+
+        mt5_symbol = _mt5_symbol(tv_symbol) or tv_symbol
+        pos = open_pos[0]
+        req = {
+            "action":   mt5.TRADE_ACTION_SLTP,
+            "symbol":   mt5_symbol,
+            "position": pos["ticket"],
+            "sl":       float(new_sl),
+            "tp":       float(pos.get("tp", 0) or 0),
+        }
+        r = mt5.order_send(req)
+        mt5.shutdown()
+        if r and r.retcode == mt5.TRADE_RETCODE_DONE:
+            return True, None
+        return False, f"MT5 retcode {r.retcode if r else 'None'}: {r.comment if r else ''}"
+    except Exception as exc:
+        return False, str(exc)
+
+
 def close_all_positions(tv_symbol: str) -> "tuple[list, str | None]":
     """Fecha todas as posições abertas pelo bot para o símbolo dado."""
     open_pos, err = get_open_positions(tv_symbol)

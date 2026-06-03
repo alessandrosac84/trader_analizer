@@ -1,5 +1,5 @@
 """
-technical_analysis.py - Motor de analise tecnica v4.
+technical_analysis.py - Motor de analise tecnica v5.
 
 Indicadores:
   - EMA 9 / 21 / 50 / 200  (tendencia + crossover + slope + filtro maior)
@@ -14,6 +14,14 @@ Indicadores:
   - Confirmacao multi-timeframe (1h confirma 15m)
   - Suporte/Resistencia automatico via swing highs/lows (50 candles)
     TP1 usa nivel S/R mais proximo quando disponivel
+
+v5 vs v4:
+  - FILTRO DIRECIONAL macro: EMA200 + tendencia 1h devem alinhar com o sinal
+    * preco < EMA200 E 1h bearish  -> bloqueia COMPRA (retorna NEUTRO)
+    * preco > EMA200 E 1h bullish  -> bloqueia VENDA  (retorna NEUTRO)
+    * sinal misto (EMA200 e 1h divergem): threshold elevado de |4| para |6|
+  - TP alvo revisado para melhorar R:R: COMPRA stop 1.2xATR / TP1 2.0xATR (antes 1.5/1.5)
+    VENDA idem simetrico
 
 v4 vs v3:
   - EMA200 adicionada: ±2 pts quando preco acima/abaixo da media de 200 periodos
@@ -562,11 +570,61 @@ def generate_signal(
     if adx_filtered:
         effective_score = max(min(score, COMPRA_THRESHOLD - 1), VENDA_THRESHOLD + 1)
 
+    # ---- Filtro direcional v5 (EMA200 + HTF) --------------------------------
+    # Determina alinhamento macro: EMA200 direcao + confirmacao 1h
+    ema200_bullish = (ema200 is not None and close is not None and close > ema200)
+    ema200_bearish = (ema200 is not None and close is not None and close < ema200)
+    htf_bullish    = (htf_trend == "alta")
+    htf_bearish    = (htf_trend == "baixa")
+    htf_known      = (htf_trend is not None)
+
+    directional_block = None   # "COMPRA_BLOCKED" | "VENDA_BLOCKED" | None
+
+    if htf_known:
+        # Alinhamento pleno bearish: bloqueia COMPRA
+        if ema200_bearish and htf_bearish:
+            if effective_score >= COMPRA_THRESHOLD:
+                directional_block = "COMPRA_BLOCKED"
+                sinais.append(
+                    "⛔ Filtro direcional: preco abaixo da EMA200 + 1h bearish - "
+                    "COMPRA bloqueada contra a tendencia macro [filtro]"
+                )
+                effective_score = COMPRA_THRESHOLD - 1  # fica NEUTRO
+
+        # Alinhamento pleno bullish: bloqueia VENDA
+        elif ema200_bullish and htf_bullish:
+            if effective_score <= VENDA_THRESHOLD:
+                directional_block = "VENDA_BLOCKED"
+                sinais.append(
+                    "⛔ Filtro direcional: preco acima da EMA200 + 1h bullish - "
+                    "VENDA bloqueada contra a tendencia macro [filtro]"
+                )
+                effective_score = VENDA_THRESHOLD + 1  # fica NEUTRO
+
+        # Sinal misto (EMA200 e 1h divergem): exige threshold maior
+        else:
+            MIXED_THRESHOLD = 6
+            if VENDA_THRESHOLD < effective_score < COMPRA_THRESHOLD:
+                pass  # ja neutro, sem impacto
+            elif effective_score >= COMPRA_THRESHOLD and effective_score < MIXED_THRESHOLD:
+                sinais.append(
+                    f"⚠️ Sinal misto (EMA200 vs 1h divergem): threshold elevado para {MIXED_THRESHOLD} - "
+                    f"score {effective_score} insuficiente [filtro]"
+                )
+                effective_score = COMPRA_THRESHOLD - 1
+            elif effective_score <= VENDA_THRESHOLD and effective_score > -MIXED_THRESHOLD:
+                sinais.append(
+                    f"⚠️ Sinal misto (EMA200 vs 1h divergem): threshold elevado para -{MIXED_THRESHOLD} - "
+                    f"score {effective_score} insuficiente [filtro]"
+                )
+                effective_score = VENDA_THRESHOLD + 1
+    # -------------------------------------------------------------------------
+
     if effective_score >= COMPRA_THRESHOLD:
         acao  = "COMPRA"
         forca = "FORTE" if effective_score >= COMPRA_THRESHOLD + 2 else "MODERADA"
         entrada = _r(close)
-        stop    = _r(close - 1.5 * atr)
+        stop    = _r(close - 1.2 * atr)   # v5: stop mais justo (1.2x vs 1.5x)
 
         # TP1: usa nivel de resistencia S/R mais proximo se disponivel
         sr_tp1 = _nearest_sr_tp(close, sr_resistances, "above", atr)
@@ -574,16 +632,16 @@ def generate_signal(
             tp1 = _r(sr_tp1)
             sinais.append(f"TP1 ajustado para resistencia S/R detectada em {tp1} [nivel de mercado]")
         else:
-            tp1 = _r(close + 1.5 * atr)
+            tp1 = _r(close + 2.0 * atr)   # v5: alvo maior (2.0x vs 1.5x) -> R:R ~1:1.67
 
-        tp2 = _r(close + 3.0 * atr)
-        tp3 = _r(close + 5.0 * atr)
+        tp2 = _r(close + 3.5 * atr)
+        tp3 = _r(close + 6.0 * atr)
 
     elif effective_score <= VENDA_THRESHOLD:
         acao  = "VENDA"
         forca = "FORTE" if effective_score <= VENDA_THRESHOLD - 2 else "MODERADA"
         entrada = _r(close)
-        stop    = _r(close + 1.5 * atr)
+        stop    = _r(close + 1.2 * atr)   # v5: stop mais justo
 
         # TP1: usa nivel de suporte S/R mais proximo se disponivel
         sr_tp1 = _nearest_sr_tp(close, sr_supports, "below", atr)
@@ -591,10 +649,10 @@ def generate_signal(
             tp1 = _r(sr_tp1)
             sinais.append(f"TP1 ajustado para suporte S/R detectado em {tp1} [nivel de mercado]")
         else:
-            tp1 = _r(close - 1.5 * atr)
+            tp1 = _r(close - 2.0 * atr)   # v5: alvo maior
 
-        tp2 = _r(close - 3.0 * atr)
-        tp3 = _r(close - 5.0 * atr)
+        tp2 = _r(close - 3.5 * atr)
+        tp3 = _r(close - 6.0 * atr)
 
     else:
         acao  = "NEUTRO"
@@ -614,8 +672,9 @@ def generate_signal(
         "score":           effective_score,
         "score_raw":       score,
         "forca":           forca,
-        "adx_filtered":    adx_filtered,
-        "htf_trend":       htf_trend,
+        "adx_filtered":      adx_filtered,
+        "directional_block": directional_block,
+        "htf_trend":         htf_trend,
         "entrada":         entrada,
         "stop":            stop,
         "tp1":             tp1,

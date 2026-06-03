@@ -22,8 +22,12 @@ AI_MIN_CONFIDENCE = 55
 _SYSTEM_PROMPT = (
     "Voce e um trader quantitativo especializado em mercados futuros B3 (WIN e WDO). "
     "Avalie setups de trading com rigor tecnico. "
-    "Considere horario do pregao, volatilidade (ATR), posicao relativa dos indicadores "
-    "e qualidade do risco/retorno. "
+    "REGRAS IMPORTANTES:\n"
+    "- RSI extremo (>70 para VENDA, <30 para COMPRA) CONFIRMA a direcao quando alinhado com tendencia — nao e motivo de bloqueio.\n"
+    "- Score tecnico alto (|score| >= 7) com tendencia 1h alinhada = forte confluencia — favorecer EXECUTAR.\n"
+    "- BLOQUEAR apenas quando ha contradicao real: ex. COMPRA contra tendencia 1h baixa, stop impossivel, RR < 1:1.\n"
+    "- AGUARDAR quando setup e razoavel mas ha incerteza (ADX fraco, htf divergente, score borderline).\n"
+    "- EXECUTAR quando confluencia e clara, stop e logico e RR e viavel.\n"
     "Responda SEMPRE com JSON valido no formato exato solicitado — sem texto extra."
 )
 
@@ -55,10 +59,11 @@ Suporte:        {suporte}  |  Resistencia: {resistencia}
 {sinais_text}
 
 Avalie com foco em:
-1. Confluencia dos indicadores com a acao {acao}
-2. Qualidade do stop (nao muito perto do preco, nao muito longe)
-3. TP1 realizavel (entre suporte e resistencia para {acao})
-4. Contexto ADX/tendencia (evitar operar contra tendencia forte)
+1. Confluencia dos indicadores com a acao {acao} — RSI extremo ALINHADO com direcao e positivo
+2. Qualidade do stop (nao muito perto nem muito longe; 0.5-2x ATR e ideal)
+3. TP1 realizavel (para VENDA: TP1 < entrada, acima do suporte; para COMPRA: TP1 > entrada, abaixo da resistencia)
+4. Contexto ADX/tendencia: ADX>25 confirma forca; ADX<20 = range = cautela
+5. Score tecnico: |score|>=7 com 1h alinhada = alta confluencia, favorecer EXECUTAR
 
 Responda SOMENTE com este JSON:
 {{
@@ -183,12 +188,17 @@ def validate_signal_with_ai(
     )
 
     try:
+        import httpx
         from openai import AzureOpenAI
+
+        # Windows: desativa verificacao SSL (mesmo fix aplicado no Telegram)
+        _http_client = httpx.Client(verify=False, trust_env=False)
 
         client = AzureOpenAI(
             api_version    = Config.AZURE_OPENAI_API_VERSION,
             azure_endpoint = Config.AZURE_OPENAI_ENDPOINT,
             api_key        = Config.AZURE_OPENAI_API_KEY,
+            http_client    = _http_client,
         )
         deployment = Config.AZURE_OPENAI_DEPLOYMENT or Config.OPENAI_MODEL
 
@@ -198,8 +208,8 @@ def validate_signal_with_ai(
                 {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user",   "content": prompt},
             ],
-            temperature = 0.15,
-            max_tokens  = 350,
+            temperature             = 0.15,
+            max_completion_tokens   = 350,
         )
 
         content = (response.choices[0].message.content or "").strip()
@@ -236,7 +246,9 @@ def validate_signal_with_ai(
         }
 
     except Exception as exc:
-        logger.warning("AI validator erro: %s", exc)
+        import traceback
+        logger.warning("AI validator erro COMPLETO: %s", traceback.format_exc())
+        logger.warning("AI validator erro resumido: %s — %s", type(exc).__name__, str(exc)[:500])
         return {
             **_fallback_aprovado,
             "motivo":  f"Erro na validacao IA — aprovacao pelo score tecnico. ({type(exc).__name__})",
