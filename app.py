@@ -76,7 +76,8 @@ def _cooldown_remaining_min() -> int:
 # ── Confirmação de fechamento — evita fechar por leitura instável do MT5 ──
 # Exige N leituras consecutivas sem posição antes de registrar o fechamento.
 _no_position_count   = {}   # tv_symbol -> int
-_NO_POSITION_CONFIRM = 3    # quantas leituras consecutivas sem posição são necessárias
+_NO_POSITION_CONFIRM = 3    # leituras consecutivas sem posição para confirmar fechamento
+                            # 3 = ~9s com ticker rápido (XP/B3 estável) — era 8 só pra MetaQuotes instável
 
 @app.before_request
 def _startup_once():
@@ -335,12 +336,25 @@ def api_monitor_signals():
     from services.market_service import MT5_AVAILABLE, TV_TO_MT5
     fonte = "mt5" if (MT5_AVAILABLE and tv_symbol.upper() in TV_TO_MT5) else "yfinance"
 
+    # Detecta posicao orfã: MT5 tem posicao aberta mas DB nao tem registro aberto.
+    # Isso ocorre apos falso fechamento — o frontend pode usar esse flag para forcar MANAGE.
+    orphan_position = False
+    try:
+        from services.trade_executor import get_open_positions
+        from services.trade_log import get_open_auto_trade
+        positions, _ = get_open_positions(tv_symbol)
+        if positions and not get_open_auto_trade(tv_symbol):
+            orphan_position = True
+    except Exception:
+        pass
+
     return jsonify({
-        "ok":       True,
-        "tv_symbol": tv_symbol,
-        "fonte":    fonte,
-        "interval": interval,
-        "period":   period_yf,
+        "ok":              True,
+        "tv_symbol":       tv_symbol,
+        "fonte":           fonte,
+        "interval":        interval,
+        "period":          period_yf,
+        "orphan_position": orphan_position,
         **signal,
     })
 
@@ -851,7 +865,8 @@ def api_monitor_tick():
         kwargs = {}
         if _path and os.path.exists(_path):
             kwargs["path"] = _path
-        if _login and _password and _server:
+        _mq_servers = {"metaquotes-demo", "metaquotes-demo2"}
+        if _login and _password and _server and _server.lower() not in _mq_servers:
             kwargs.update({"login": _login, "password": _password, "server": _server})
 
         if not mt5.initialize(**kwargs):
@@ -881,6 +896,37 @@ def api_monitor_tick():
         except Exception:
             pass
         return jsonify({"ok": False, "error": str(exc)})
+
+
+@app.route("/api/autotrade/position-pnl")
+def api_position_pnl():
+    """
+    Endpoint leve para atualização em tempo real do P&L no modo Manager.
+    Retorna o profit atual direto do MT5 (já calculado pelo broker na moeda da conta).
+    GET /api/autotrade/position-pnl?tv_symbol=FX:XAUUSD
+    """
+    from services.trade_executor import get_open_positions
+    tv_symbol = request.args.get("tv_symbol", "")
+    positions, err = get_open_positions(tv_symbol or None)
+    if err:
+        return jsonify({"ok": False, "error": err})
+    if not positions:
+        return jsonify({"ok": True, "found": False})
+    pos = positions[0]
+    profit       = pos.get("profit", 0)
+    current_price = pos.get("price_current", 0)
+    volume        = pos.get("volume", 1)
+    entry_price   = pos.get("price_open", 0)
+    pos_type      = pos.get("type", 0)  # 0=BUY, 1=SELL
+    return jsonify({
+        "ok":           True,
+        "found":        True,
+        "profit":       round(profit, 2),
+        "current_price": round(current_price, 2),
+        "entry_price":  round(entry_price, 2),
+        "volume":       volume,
+        "type":         pos_type,
+    })
 
 
 @app.route("/api/autotrade/manage")
@@ -1354,7 +1400,6 @@ def api_autotrade_report():
     })
 
 
-@app.route("/api/autotrade/apply-recommendation", methods=["POST"])
 def api_autotrade_apply_recommendation():
     """
     Aplica automaticamente a recomendacao de gestao do MANAGE mode.

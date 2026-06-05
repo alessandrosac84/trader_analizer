@@ -47,11 +47,33 @@ def _mt5_symbol(tv_symbol: str) -> "str | None":
     return _TV_TO_MT5_TRADE.get(tv_symbol.upper().strip())
 
 
+def _mt5_init_kwargs() -> dict:
+    """
+    Retorna kwargs para mt5.initialize().
+    Para MetaQuotes-Demo nao passa credenciais (servidor nao aceita login via Python).
+    Para demais servidores (XP, etc.) passa login/password/server do .env.
+    """
+    login    = int(os.getenv("MT5_LOGIN", "0") or 0)
+    password = os.getenv("MT5_PASSWORD", "")
+    server   = os.getenv("MT5_SERVER", "")
+    path     = os.getenv("MT5_PATH", "")
+    kwargs: dict = {}
+    if path and os.path.exists(path):
+        kwargs["path"] = path
+    _mq = {"metaquotes-demo", "metaquotes-demo2"}
+    if login and password and server and server.lower() not in _mq:
+        kwargs["login"]    = login
+        kwargs["password"] = password
+        kwargs["server"]   = server
+    return kwargs
+
+
 def get_open_positions(tv_symbol: str = None) -> "tuple[list, str | None]":
     """Retorna posições abertas do bot (filtradas por magic e opcionalmente símbolo)."""
     try:
         import MetaTrader5 as mt5
-        if not mt5.initialize():
+        kwargs = _mt5_init_kwargs()
+        if not mt5.initialize(**kwargs):
             return [], f"MT5 não inicializado: {mt5.last_error()}"
 
         if tv_symbol:
@@ -60,11 +82,19 @@ def get_open_positions(tv_symbol: str = None) -> "tuple[list, str | None]":
         else:
             positions = mt5.positions_get()
 
-        mt5.shutdown()
         if positions is None:
-            return [], None
+            positions = []
 
         ours = [dict(p._asdict()) for p in positions if p.magic == MAGIC_NUMBER]
+
+        # Fallback: se não achou por símbolo, busca TODAS as posições do bot
+        # (cobre casos de nome de símbolo ligeiramente diferente no servidor)
+        if not ours and tv_symbol:
+            all_pos = mt5.positions_get()
+            if all_pos:
+                ours = [dict(p._asdict()) for p in all_pos if p.magic == MAGIC_NUMBER]
+
+        mt5.shutdown()
         return ours, None
     except Exception as exc:
         logger.warning("get_open_positions erro: %s", exc)
@@ -116,7 +146,7 @@ def execute_trade(
     try:
         import MetaTrader5 as mt5
 
-        if not mt5.initialize():
+        if not mt5.initialize(**_mt5_init_kwargs()):
             return None, f"MT5 não inicializado: {mt5.last_error()}"
 
         # Garante símbolo visível no Market Watch
@@ -243,7 +273,7 @@ def modify_position_sl(tv_symbol: str, new_sl: float) -> "tuple[bool, str | None
 
     try:
         import MetaTrader5 as mt5
-        if not mt5.initialize():
+        if not mt5.initialize(**_mt5_init_kwargs()):
             return False, f"MT5 não inicializado: {mt5.last_error()}"
 
         mt5_symbol = _mt5_symbol(tv_symbol) or tv_symbol
@@ -274,7 +304,7 @@ def close_all_positions(tv_symbol: str) -> "tuple[list, str | None]":
 
     try:
         import MetaTrader5 as mt5
-        if not mt5.initialize():
+        if not mt5.initialize(**_mt5_init_kwargs()):
             return [], f"MT5 não inicializado: {mt5.last_error()}"
 
         mt5_symbol = _mt5_symbol(tv_symbol) or tv_symbol

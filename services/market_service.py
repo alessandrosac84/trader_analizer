@@ -132,7 +132,10 @@ def _get_candles_mt5(mt5_symbol: str, tv_interval: str = "15") -> tuple:
     kwargs = {}
     if _path and os.path.exists(_path):
         kwargs["path"] = _path
-    if _login and _password and _server:
+    # Passa credenciais somente para servidores XP/B3.
+    # MetaQuotes-Demo nao aceita login via Python — usa terminal ja aberto.
+    _mq_servers = {"metaquotes-demo", "metaquotes-demo2"}
+    if _login and _password and _server and _server.lower() not in _mq_servers:
         kwargs["login"]    = _login
         kwargs["password"] = _password
         kwargs["server"]   = _server

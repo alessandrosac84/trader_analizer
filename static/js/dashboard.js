@@ -1941,6 +1941,11 @@
         var adxNote = data.adx_filtered ? " · ADX fraco (range)" : "";
         var htfNote = data.htf_trend ? " · 1h: " + data.htf_trend : "";
         monSetStatus("✓ Atualizado às " + now + " · " + tvSym + adxNote + htfNote);
+        // Posicao orfã: MT5 tem posicao aberta mas DB nao tem registro — aciona fetchManage para recuperar
+        if (data.orphan_position && autoTradeEnabled) {
+          console.warn("[AutoTrade] Posicao orfã detectada — forcando modo MANAGE.");
+          fetchManage();
+        }
         // Notificação: dispara quando o sinal MUDA para COMPRA ou VENDA.
         // NEUTRO reseta o rastreador → próximo COMPRA/VENDA dispara novo alerta.
         var acao = (data.acao || "").toUpperCase();
@@ -2278,20 +2283,11 @@
   }
 
   // ---- Linhas de trade manual no grafico ----
-  // Marca o alert mais recente da mesma direção como bloqueado pela IA e re-renderiza
+  // Definição inicial — será sobrescrita abaixo com versão completa que usa showSkipBanner
   window._markAlertIABlocked = function (acao, motivo) {
-    for (var i = 0; i < alerts.length; i++) {
-      if (alerts[i].sinal === acao && !alerts[i].ia_blocked) {
-        alerts[i].ia_blocked = true;
-        alerts[i].ia_motivo  = motivo || "";
-        break;
-      }
-    }
-    renderAlerts();
-    // Mostra banner no painel de sinal
     var banner = document.getElementById("mt5-ia-block-banner");
     if (banner) {
-      banner.textContent = "🚫 IA bloqueou — " + (motivo ? String(motivo).slice(0, 120) : "trade não autorizado");
+      banner.textContent = "🚫 IA bloqueou — " + (motivo ? String(motivo).slice(0, 150) : "trade não autorizado");
       banner.hidden = false;
     }
   };
@@ -2646,12 +2642,45 @@
   window._addTradeAttempt    = addTradeAttempt;
   window._updateTradeAttempt = updateTradeAttempt;
 
-  // Expõe markAlertIABlocked (agora só usado para banner no painel de sinal)
-  window._markAlertIABlocked = function (acao, motivo) {
+  // ── Banner "por que não entrou?" ──────────────────────────────────────────
+  // Exibe motivo do bloqueio no painel de sinal quando sinal forte não executa.
+  // type: "ia" | "debounce" | "cooldown" | "disabled" | "manage"
+  window.showSkipBanner = function (msg, type) {
     var banner = document.getElementById("mt5-ia-block-banner");
-    if (banner) {
-      banner.textContent = "🚫 IA bloqueou — " + (motivo ? String(motivo).slice(0, 120) : "trade não autorizado");
-      banner.hidden = false;
+    if (!banner) return;
+    banner.textContent = msg;
+    banner.hidden = false;
+    var themes = {
+      ia:       { bg: "rgba(127,29,29,.45)",  border: "#f87171", text: "#fca5a5" },
+      debounce: { bg: "rgba(120,53,15,.45)",  border: "#fbbf24", text: "#fde68a" },
+      cooldown: { bg: "rgba(120,53,15,.45)",  border: "#fbbf24", text: "#fde68a" },
+      disabled: { bg: "rgba(55,65,81,.45)",   border: "#9ca3af", text: "#d1d5db" },
+      manage:   { bg: "rgba(7,89,133,.45)",   border: "#38bdf8", text: "#7dd3fc" },
+    };
+    var t = themes[type || "ia"] || themes.ia;
+    banner.style.background   = t.bg;
+    banner.style.borderColor  = t.border;
+    banner.style.borderLeft   = "3px solid " + t.border;
+    banner.style.color        = t.text;
+  };
+
+  // Expõe markAlertIABlocked — marca alert na lista e exibe banner via showSkipBanner
+  window._markAlertIABlocked = function (acao, motivo) {
+    // Marca alert na lista de alertas
+    for (var _i = 0; _i < alerts.length; _i++) {
+      if (alerts[_i].sinal === acao && !alerts[_i].ia_blocked) {
+        alerts[_i].ia_blocked = true;
+        alerts[_i].ia_motivo  = motivo || "";
+        break;
+      }
+    }
+    renderAlerts();
+    // Exibe banner de motivo via showSkipBanner
+    if (window.showSkipBanner) {
+      window.showSkipBanner(
+        "🚫 IA bloqueou — " + (motivo ? String(motivo).slice(0, 150) : "trade não autorizado"),
+        "ia"
+      );
     }
   };
 
@@ -2711,11 +2740,28 @@
           var lastMs     = window._getLastTradeMs  ? window._getLastTradeMs()  : 0;
           var debounceMs = window._getDebounceMs   ? window._getDebounceMs()   : 900000;
           var dentroDebounce = (agora - lastMs) < debounceMs;
+          var _autoOn    = window._getAutoEnabled ? window._getAutoEnabled() : false;
+          var _sigAbs    = Math.abs(data.signal.score || 0);
+          var _sigStr    = (data.signal.score > 0 ? "+" : "") + (data.signal.score || 0);
+          var _STRONG    = 7;  // limiar para exibir banner "por que não entrou?"
+
           if (!dentroDebounce && window.autoTradeOnSignal) {
             window.autoTradeOnSignal(data);
-          } else if (dentroDebounce && window._getAutoEnabled && window._getAutoEnabled()) {
+          } else if (dentroDebounce && _autoOn) {
             var restante = Math.ceil((debounceMs - (agora - lastMs)) / 60000);
             setStatus("⏳ Sinal " + data.signal.acao + " detectado — próxima entrada em ~" + restante + "min (debounce).");
+            if (_sigAbs >= _STRONG && window.showSkipBanner) {
+              window.showSkipBanner(
+                "⏳ Sinal forte " + data.signal.acao + " (score " + _sigStr + ") — debounce ativo, próxima entrada em ~" + restante + "min",
+                "debounce"
+              );
+            }
+          } else if (!_autoOn && _sigAbs >= _STRONG && window.showSkipBanner) {
+            // Auto-trade desabilitado — sinal forte detectado mas não executado
+            window.showSkipBanner(
+              "⚠️ Sinal forte " + data.signal.acao + " (score " + _sigStr + ") não executado — Auto-trade está desabilitado",
+              "disabled"
+            );
           }
         }
         // Update label
@@ -2860,6 +2906,7 @@
   function enterScanMode() {
     if (tradeMode === "SCAN") return;
     tradeMode = "SCAN";
+    stopPnlTicker();
     if (window._setActiveTradeLine) window._setActiveTradeLine(null);  // limpa linhas do trade
     if (window._redrawTradeLines)   window._redrawTradeLines();        // limpa linhas do gráfico
     var managePanel  = el("mt5-manage-panel");
@@ -2974,7 +3021,11 @@
     fetch("/api/autotrade/manage?tv_symbol=" + encodeURIComponent(sym) + "&interval=" + ivl)
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        if (!d.ok) return;
+        if (!d.ok) {
+          // Erro no manage — não faz nada, próximo ciclo tentará novamente
+          logger.warn && logger.warn("[Manage] erro:", d.error);
+          return;
+        }
         if (d.mode === "SCAN") {
           // Posicao foi fechada — volta para SCAN
           enterScanMode();
@@ -2993,6 +3044,16 @@
         } else {
           // Ainda em MANAGE
           enterManageMode();
+          // Guarda dados do trade para o ticker rápido de P&L
+          if (d.trade_log) {
+            _activeEntry  = parseFloat(d.trade_log.entry_price) || _activeEntry;
+            _activeAcao   = d.trade_log.acao || _activeAcao;
+            _activeVolume = parseFloat(d.trade_log.volume) || 1;
+          } else if (d.position) {
+            _activeEntry  = parseFloat(d.position.price_open) || _activeEntry;
+            _activeAcao   = d.position.type === 0 ? "COMPRA" : "VENDA";
+            _activeVolume = parseFloat(d.position.volume) || 1;
+          }
           // Salva linhas do trade ativo para o gráfico não sobrescrevê-las
           if (d.trade_log && window._setActiveTradeLine) {
             window._setActiveTradeLine({
@@ -3056,15 +3117,96 @@
       .catch(function () {});
   }
 
+  // ── Ticker rápido de P&L (1s) — atualiza preço atual e P&L sem análise completa ──
+  var _pnlTicker    = null;
+  var _activeEntry  = null;   // entry_price do trade ativo
+  var _activeAcao   = null;   // "COMPRA" | "VENDA"
+  var _activeVolume = 1;
+
+  function _updatePnlFromTick(price) {
+    if (!_activeEntry || !_activeAcao || !price) return;
+    var pts = _activeAcao === "COMPRA"
+      ? Math.round((price - _activeEntry) * 100) / 100
+      : Math.round((_activeEntry - price) * 100) / 100;
+    // Para WIN (pts inteiros) ou Forex/Ouro (2 decimais)
+    var ptsDisplay = Number.isInteger(pts) ? pts : pts.toFixed(2);
+    var pnlBrl = null;
+    // Tenta calcular R$ se for WIN (valor por ponto = R$0.20)
+    // Para ouro/forex exibe só pts sem R$
+    var isB3 = (getSym() || "").indexOf("BMFBOVESPA") >= 0;
+    if (isB3) pnlBrl = pts * 0.20 * _activeVolume;
+
+    var sign  = pts >= 0 ? "+" : "";
+    var color = pts >= 0 ? "#22c55e" : "#ef4444";
+    var ptsEl = el("mgmt-pnl-pts");
+    var brlEl = el("mgmt-pnl-brl");
+    var curEl = el("mgmt-current");
+    if (ptsEl) { ptsEl.textContent = sign + ptsDisplay + " pts"; ptsEl.style.color = color; }
+    if (brlEl && pnlBrl !== null) { brlEl.textContent = sign + "R$" + Math.abs(pnlBrl).toFixed(2); brlEl.style.color = color; }
+    else if (brlEl) { brlEl.textContent = sign + ptsDisplay + " pts"; brlEl.style.color = color; }
+    if (curEl) curEl.textContent = price.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  var _pnlNoPosCnt = 0;   // leituras consecutivas com "found: false" no ticker rápido
+  var _PNL_NO_POS_TRIGGER = 3;  // quantas leituras sem posição antes de acionar fetchManage()
+
+  function startPnlTicker() {
+    if (_pnlTicker) return;
+    _pnlNoPosCnt = 0;
+    _pnlTicker = setInterval(function () {
+      if (tradeMode !== "MANAGE") return;
+      var sym = getSym();
+      fetch("/api/autotrade/position-pnl?tv_symbol=" + encodeURIComponent(sym))
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (!d.ok || !d.found) {
+            // Posição sumiu — conta leituras consecutivas sem posição.
+            // Após N leituras, força fetchManage() para confirmar fechamento rapidamente
+            // (sem isso, o manage poll de 30s levaria ~4min para detectar o TP/SL).
+            _pnlNoPosCnt++;
+            if (_pnlNoPosCnt >= _PNL_NO_POS_TRIGGER) {
+              _pnlNoPosCnt = 0;
+              setStatus("🔍 Posição não encontrada — verificando encerramento...");
+              fetchManage();  // aciona verificação imediata no servidor
+            }
+            return;
+          }
+          _pnlNoPosCnt = 0;  // posição ativa → reseta contador
+          var profit  = d.profit;
+          var price   = d.current_price;
+          var sign    = profit >= 0 ? "+" : "";
+          var color   = profit >= 0 ? "#22c55e" : "#ef4444";
+          var ptsEl   = el("mgmt-pnl-pts");
+          var brlEl   = el("mgmt-pnl-brl");
+          var curEl   = el("mgmt-current");
+          // Exibe profit na moeda da conta (USD para MetaQuotes, BRL para XP)
+          if (ptsEl) { ptsEl.textContent = sign + profit.toFixed(2); ptsEl.style.color = color; }
+          if (brlEl) { brlEl.textContent = sign + Math.abs(profit).toFixed(2); brlEl.style.color = color; }
+          if (curEl && price) curEl.textContent = price.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        })
+        .catch(function () {});
+    }, 1000);
+  }
+
+  function stopPnlTicker() {
+    if (_pnlTicker) { clearInterval(_pnlTicker); _pnlTicker = null; }
+    _pnlNoPosCnt  = 0;
+    _activeEntry  = null;
+    _activeAcao   = null;
+    _activeVolume = 1;
+  }
+
   // ── Inicia polling MANAGE ──────────────────────────────────────────────
   window.startManagePolling = function startManagePolling(intervalSec) {
     if (manageTimer) clearInterval(manageTimer);
     fetchManage();
     manageTimer = setInterval(fetchManage, (intervalSec || 30) * 1000);
+    startPnlTicker();
   }
 
   function stopManagePolling() {
     if (manageTimer) { clearInterval(manageTimer); manageTimer = null; }
+    stopPnlTicker();
   }
 
   // ── Sincroniza estado do auto-trade com o servidor ───────────────────────
@@ -3230,6 +3372,10 @@
               (aiInfo.motivo ? " — " + String(aiInfo.motivo).slice(0, 80) : "");
             aiBadge.hidden = false;
           }
+          // Guarda dados do trade para o ticker rápido de P&L
+          _activeEntry  = parseFloat(sig.entrada) || null;
+          _activeAcao   = sig.acao || null;
+          _activeVolume = parseFloat(volume) || 1;
           enterManageMode();
           startManagePolling(30);
           loadAutoTradesHistory();
@@ -3254,6 +3400,13 @@
             // Atualiza tentativa no histórico como erro
             if (_attempt && window._updateTradeAttempt) {
               window._updateTradeAttempt(_attempt, "erro", "❌ " + bloqMsg.slice(0, 60), "");
+            }
+            // Banner visível para sinais fortes bloqueados por cooldown / horário / outros
+            if (scoreAbs >= 7 && window.showSkipBanner) {
+              var _isCooldown = bloqMsg.toLowerCase().indexOf("cooldown") >= 0;
+              var _isHorario  = bloqMsg.toLowerCase().indexOf("horário") >= 0 || bloqMsg.toLowerCase().indexOf("pregão") >= 0;
+              var _bType = _isCooldown ? "cooldown" : (_isHorario ? "manage" : "ia");
+              window.showSkipBanner("❌ Score " + (scoreRaw > 0 ? "+" : "") + scoreRaw + " não executado — " + bloqMsg.slice(0, 130), _bType);
             }
           }
           // Libera debounce APENAS se foi bloqueio de IA (não erro de cooldown/rede)
@@ -4155,7 +4308,6 @@ function loadAutoTradesHistory() {
         loadReport();
       });
     });
-    var prev = el("tr-prev"); if (prev) prev.addEventListener("click", function () { stepDate(-1); loadReport(); });
     var next = el("tr-next"); if (next) next.addEventListener("click", function () { stepDate(+1); loadReport(); });
     var today = el("tr-today"); if (today) today.addEventListener("click", function () { _refDate = new Date(); loadReport(); });
     var ref = el("tr-refresh"); if (ref) ref.addEventListener("click", loadReport);
