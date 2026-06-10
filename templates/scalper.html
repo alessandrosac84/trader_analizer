@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scalper — TradeAI</title>
+<style>
+/* ── Reset & base ─────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:        #080c12;
+  --surface:   #0f1520;
+  --surface2:  #161e2e;
+  --border:    #1e2d45;
+  --text:      #e2e8f0;
+  --muted:     #64748b;
+  --buy:       #22c55e;
+  --sell:      #ef4444;
+  --buy-dim:   rgba(34,197,94,.15);
+  --sell-dim:  rgba(239,68,68,.15);
+  --gold:      #f59e0b;
+  --accent:    #6366f1;
+  --radius:    8px;
+}
+body { background: var(--bg); color: var(--text); font-family: 'Inter', 'Segoe UI', sans-serif;
+       font-size: 13px; overflow: hidden; height: 100vh; }
+button { cursor: pointer; border: none; border-radius: var(--radius); font-size: 13px;
+         font-weight: 700; letter-spacing: .04em; transition: opacity .15s, transform .1s; }
+button:active { transform: scale(.96); }
+button:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ── Layout principal ─────────────────────────────────────────────────── */
+#app {
+  display: grid;
+  grid-template-rows: 44px 36px 1fr 44px;
+  height: 100vh;
+}
+
+/* ── Barra de contexto macro ────────────────────────────────────────────── */
+#macro-bar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 0 14px;
+  background: var(--surface2); border-bottom: 1px solid var(--border);
+  font-size: 11px; overflow-x: auto; white-space: nowrap;
+}
+.macro-item { display: flex; align-items: center; gap: 5px; }
+.macro-label { color: var(--muted); }
+.macro-val   { font-weight: 700; }
+.macro-sep   { color: var(--border); }
+#vwap-badge  { padding: 2px 8px; border-radius: 10px; font-weight: 700; font-size: 10px; }
+#vwap-badge.BULL   { background: var(--buy-dim);  color: var(--buy);  }
+#vwap-badge.BEAR   { background: var(--sell-dim); color: var(--sell); }
+#vwap-badge.NEUTRO { background: rgba(245,158,11,.12); color: var(--gold); }
+#session-badge { padding: 2px 8px; border-radius: 10px; font-weight: 700; font-size: 10px; }
+#session-badge.PRIME      { background: var(--buy-dim);  color: var(--buy); }
+#session-badge.BOM        { background: rgba(99,102,241,.15); color: #818cf8; }
+#session-badge.PERIGOSO   { background: var(--sell-dim); color: var(--sell); }
+#session-badge.FECHAMENTO { background: rgba(245,158,11,.12); color: var(--gold); }
+#session-badge.FECHADO    { background: rgba(100,116,139,.15); color: var(--muted); }
+#score-bar-wrap { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+#score-label { font-weight: 700; font-size: 12px; }
+#score-bar-bg {
+  width: 80px; height: 8px; border-radius: 4px;
+  background: var(--surface); overflow: hidden;
+}
+#score-bar { height: 100%; border-radius: 4px; transition: width .4s, background .4s; }
+
+/* ── Topbar ─────────────────────────────────────────────────────────────── */
+#topbar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 0 16px;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+}
+#topbar h1 { font-size: 15px; font-weight: 700; letter-spacing: .08em; color: var(--gold); }
+#sym-select {
+  background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 10px; font-size: 13px;
+}
+#b3-status { font-size: 11px; color: var(--muted); margin-left: 4px; }
+.top-badge { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+.top-badge.open  { background: var(--buy-dim);  color: var(--buy);  }
+.top-badge.close { background: var(--sell-dim); color: var(--sell); }
+#sim-badge {
+  padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700;
+  cursor: pointer; border: none; letter-spacing: .04em;
+  background: transparent; color: var(--muted); border: 1px solid var(--border);
+  transition: all .2s;
+}
+#sim-badge.active {
+  background: rgba(245,158,11,.15); color: var(--gold);
+  border-color: var(--gold); box-shadow: 0 0 8px rgba(245,158,11,.3);
+}
+#conn-badge { margin-left: auto; }
+.conn-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+.conn-dot.ok  { background: var(--buy);  box-shadow: 0 0 6px var(--buy);  }
+.conn-dot.err { background: var(--sell); box-shadow: 0 0 6px var(--sell); }
+
+/* ── Grid principal (3 colunas) ─────────────────────────────────────────── */
+#main-grid {
+  display: grid;
+  grid-template-columns: 220px 1fr 280px;
+  gap: 6px; padding: 6px;
+  overflow: hidden;
+}
+
+/* ── Painéis genéricos ──────────────────────────────────────────────────── */
+.panel {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.panel-title {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .1em; color: var(--muted); margin-bottom: 8px;
+}
+
+/* ── BOOK ───────────────────────────────────────────────────────────────── */
+#book-panel { }
+.book-ask-zone, .book-bid-zone { display: flex; flex-direction: column; gap: 2px; flex: 1; overflow: hidden; }
+.book-spread {
+  text-align: center; font-size: 10px; color: var(--muted);
+  padding: 4px 0; border-top: 1px dashed var(--border); border-bottom: 1px dashed var(--border);
+  margin: 4px 0;
+}
+.book-row {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; font-variant-numeric: tabular-nums;
+  padding: 2px 4px; border-radius: 4px; position: relative; overflow: hidden;
+}
+.book-bar {
+  position: absolute; top: 0; bottom: 0; border-radius: 3px; opacity: .28;
+}
+.book-row.ask .book-bar { background: var(--sell); right: 0; }
+.book-row.bid .book-bar { background: var(--buy);  left:  0; }
+.book-price { font-weight: 600; position: relative; z-index: 1; }
+.book-vol   { margin-left: auto; color: var(--muted); font-size: 11px; position: relative; z-index: 1; }
+.book-row.ask .book-price { color: var(--sell); }
+.book-row.bid .book-price { color: var(--buy);  }
+
+/* ── PAINEL CENTRAL ──────────────────────────────────────────────────────── */
+#center-panel {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 10px;
+}
+/* Preço grande */
+#price-display {
+  font-size: 52px; font-weight: 900; letter-spacing: .02em;
+  font-variant-numeric: tabular-nums;
+  transition: color .25s;
+}
+#price-display.up   { color: var(--buy);  }
+#price-display.down { color: var(--sell); }
+#price-display.flat { color: var(--text); }
+#bid-ask-row { font-size: 12px; color: var(--muted); display: flex; gap: 16px; }
+#bid-ask-row span { font-weight: 600; }
+#bid-val { color: var(--buy); }
+#ask-val { color: var(--sell); }
+
+/* Gauge semicircular */
+#gauge-wrap { position: relative; width: 240px; height: 130px; }
+#gauge-svg  { width: 240px; height: 130px; }
+#gauge-label {
+  position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+  font-size: 11px; color: var(--muted); white-space: nowrap;
+}
+
+/* Signal badge */
+#signal-badge {
+  padding: 6px 24px; border-radius: 20px; font-size: 14px; font-weight: 800;
+  letter-spacing: .06em; transition: all .2s;
+}
+#signal-badge.COMPRA { background: var(--buy-dim);  color: var(--buy);  border: 1px solid var(--buy); }
+#signal-badge.VENDA  { background: var(--sell-dim); color: var(--sell); border: 1px solid var(--sell); }
+#signal-badge.NEUTRO { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+
+/* Confirm bar */
+#confirm-bar-wrap { width: 200px; }
+#confirm-label { font-size: 10px; color: var(--muted); text-align: center; margin-bottom: 3px; }
+#confirm-bar-bg { background: var(--surface2); border-radius: 4px; height: 6px; overflow: hidden; }
+#confirm-bar    { height: 6px; border-radius: 4px; background: var(--accent); width: 0%; transition: width .3s; }
+
+/* Botões manuais */
+#manual-btns { display: flex; gap: 10px; width: 100%; }
+#btn-buy  { flex: 1; padding: 12px; background: var(--buy);  color: #000; font-size: 15px; }
+#btn-sell { flex: 1; padding: 12px; background: var(--sell); color: #fff; font-size: 15px; }
+#btn-close-pos {
+  width: 100%; padding: 8px; background: var(--surface2);
+  color: var(--gold); border: 1px solid var(--gold); font-size: 12px;
+}
+
+/* Auto-trade controles */
+#auto-section {
+  width: 100%; display: flex; flex-direction: column; gap: 8px;
+}
+#auto-toggle {
+  width: 100%; padding: 10px;
+  background: var(--surface2); color: var(--muted);
+  border: 1px solid var(--border); font-size: 13px;
+}
+#auto-toggle.active {
+  background: rgba(99,102,241,.2); color: #818cf8;
+  border-color: #6366f1; box-shadow: 0 0 12px rgba(99,102,241,.25);
+}
+.cfg-row {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 11px; color: var(--muted);
+}
+.cfg-row label { flex: 1; }
+.cfg-row input[type=number] {
+  width: 64px; background: var(--surface2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 5px; padding: 3px 6px; font-size: 12px;
+}
+#auto-reason { font-size: 10px; color: var(--muted); text-align: center; min-height: 14px; }
+
+/* Posição aberta */
+#pos-box {
+  width: 100%; padding: 8px 12px; border-radius: var(--radius);
+  background: var(--surface2); border: 1px solid var(--border);
+  font-size: 12px; display: none;
+}
+#pos-box.active { display: block; }
+#pos-pnl { font-size: 22px; font-weight: 800; text-align: center; margin: 4px 0; }
+.pos-row { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; }
+.pos-row span:last-child { color: var(--text); }
+
+/* ── PAINEL DIREITO ──────────────────────────────────────────────────────── */
+#right-panel { display: flex; flex-direction: column; gap: 6px; overflow: hidden; }
+
+/* Barras de agressão */
+#aggr-panel { flex: 0 0 auto; }
+.aggr-side { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+.aggr-label-row { display: flex; justify-content: space-between; font-size: 11px; }
+.aggr-bar-bg { background: var(--surface2); border-radius: 4px; height: 10px; overflow: hidden; }
+.aggr-bar    { height: 10px; border-radius: 4px; transition: width .4s; }
+.aggr-bar.buy  { background: var(--buy);  }
+.aggr-bar.sell { background: var(--sell); }
+#aggr-total { font-size: 10px; color: var(--muted); text-align: right; margin-top: 2px; }
+
+/* Tape */
+#tape-panel { flex: 1; overflow: hidden; }
+#tape-list  {
+  overflow-y: auto; height: calc(100% - 24px);
+  display: flex; flex-direction: column; gap: 1px;
+}
+.tape-row {
+  display: flex; gap: 6px; padding: 2px 4px; border-radius: 3px;
+  font-size: 11px; font-variant-numeric: tabular-nums;
+  transition: background .15s;
+}
+.tape-row.BUY  { border-left: 2px solid var(--buy);  }
+.tape-row.SELL { border-left: 2px solid var(--sell); }
+.tape-row:hover { background: var(--surface2); }
+.tape-time  { color: var(--muted); }
+.tape-price { font-weight: 600; flex: 1; }
+.tape-row.BUY  .tape-price { color: var(--buy);  }
+.tape-row.SELL .tape-price { color: var(--sell); }
+.tape-vol   { color: var(--muted); }
+.tape-side  { font-weight: 700; width: 32px; text-align: right; }
+.tape-row.BUY  .tape-side { color: var(--buy);  }
+.tape-row.SELL .tape-side { color: var(--sell); }
+
+/* ── Status bar ─────────────────────────────────────────────────────────── */
+#statusbar {
+  display: flex; align-items: center; gap: 16px; padding: 0 16px;
+  background: var(--surface); border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+.stat-item { display: flex; gap: 6px; }
+.stat-label { color: var(--muted); }
+.stat-val   { font-weight: 700; }
+#stat-pnl.pos { color: var(--buy);  }
+#stat-pnl.neg { color: var(--sell); }
+#stat-pnl.zero { color: var(--text); }
+#status-msg { margin-left: auto; color: var(--muted); font-size: 11px; max-width: 300px;
+              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#btn-reset-session {
+  margin-left: 8px; padding: 3px 10px; background: transparent;
+  color: var(--muted); border: 1px solid var(--border); font-size: 11px; font-weight: 400;
+}
+#btn-trade-log {
+  padding: 3px 10px; background: transparent;
+  color: var(--muted); border: 1px solid var(--border); font-size: 11px; font-weight: 400;
+  cursor: pointer;
+}
+#btn-trade-log:hover { color: var(--text); border-color: var(--text); }
+#btn-auto-params {
+  padding: 3px 10px; font-size: 11px; font-weight: 600; cursor: pointer;
+  border: 1px solid var(--buy); background: rgba(34,197,94,.15); color: var(--buy);
+  border-radius: var(--radius); transition: opacity .15s;
+}
+#btn-auto-params:hover { opacity: .8; }
+#btn-auto-params.ap-btn-off {
+  background: transparent; color: var(--muted); border-color: var(--border);
+}
+#btn-auto-params.ap-btn-active {
+  background: rgba(34,197,94,.15); color: var(--buy); border-color: var(--buy);
+}
+
+
+/* ── Modal Log ──────────────────────────────────────────────────────────── */
+#log-modal {
+  position: fixed; inset: 0; background: rgba(0,0,0,.7);
+  z-index: 1000; display: flex; align-items: center; justify-content: center;
+}
+#log-modal-box {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; width: 820px; max-width: 96vw;
+  max-height: 90vh; display: flex; flex-direction: column; overflow: hidden;
+}
+#log-modal-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 16px; border-bottom: 1px solid var(--border); font-weight: 700;
+}
+#log-modal-header button {
+  background: transparent; border: none; color: var(--muted); font-size: 16px; cursor: pointer;
+}
+#log-summary-bar {
+  display: flex; gap: 20px; padding: 10px 16px;
+  border-bottom: 1px solid var(--border); font-size: 13px; flex-wrap: wrap;
+}
+#log-summary-bar .ls-item { display: flex; flex-direction: column; align-items: center; }
+#log-summary-bar .ls-label { font-size: 10px; color: var(--muted); }
+#log-summary-bar .ls-val   { font-size: 16px; font-weight: 700; }
+#log-context-bars {
+  display: flex; gap: 12px; padding: 8px 16px;
+  border-bottom: 1px solid var(--border); font-size: 11px; flex-wrap: wrap;
+}
+.lc-group { background: var(--bg); border-radius: 6px; padding: 6px 10px; }
+.lc-title { color: var(--muted); font-size: 10px; margin-bottom: 4px; }
+.lc-row   { display: flex; justify-content: space-between; gap: 12px; }
+.lc-key   { color: var(--muted); }
+.lc-pct   { font-weight: 700; }
+#log-table-wrap { overflow-y: auto; flex: 1; }
+#log-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+#log-table th {
+  position: sticky; top: 0; background: var(--surface);
+  padding: 6px 10px; text-align: left; font-weight: 600;
+  color: var(--muted); border-bottom: 1px solid var(--border);
+}
+#log-table td { padding: 5px 10px; border-bottom: 1px solid rgba(255,255,255,.04); }
+#log-table tr:hover td { background: rgba(255,255,255,.03); }
+.log-win  { color: var(--buy); font-weight: 700; }
+.log-loss { color: var(--sell); font-weight: 700; }
+.log-be   { color: var(--gold); font-weight: 700; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ── Topbar ──────────────────────────────────────────────────────────── -->
+  <div id="topbar">
+    <h1>⚡ SCALPER</h1>
+    <select id="sym-select">
+      <option value="WDON26" selected>WDON26 — Mini Dólar</option>
+      <option value="WDOM26">WDOM26 — Mini Dólar (ant.)</option>
+      <option value="WINM26">WINM26 — Mini Índice</option>
+      <option value="GOLD11">GOLD11</option>
+      <option value="BOVA11">BOVA11</option>
+      <option value="IVVB11">IVVB11</option>
+      <option value="PETR4">PETR4</option>
+      <option value="VALE3">VALE3</option>
+      <option value="XAUUSD">XAUUSD — Ouro (24h)</option>
+      <option value="EURUSD">EURUSD — Euro (24h)</option>
+    </select>
+    <span id="b3-badge" class="top-badge close">FECHADO</span>
+    <button id="sim-badge" onclick="toggleSim()">⚙ SIM: OFF</button>
+    <span id="conn-badge">
+      <span class="conn-dot err" id="conn-dot"></span>
+      <span id="conn-txt">Conectando...</span>
+    </span>
+  </div>
+
+  <!-- ── Barra de Contexto Macro ───────────────────────────────────────── -->
+  <div id="macro-bar">
+    <div class="macro-item">
+      <span class="macro-label">VWAP:</span>
+      <span class="macro-val" id="vwap-val">—</span>
+      <span id="vwap-badge" class="NEUTRO">NEUTRO</span>
+    </div>
+    <span class="macro-sep">|</span>
+    <div class="macro-item">
+      <span class="macro-label">ATR(1m):</span>
+      <span class="macro-val" id="atr-val">—</span>
+      <span class="macro-label">ticks</span>
+    </div>
+    <span class="macro-sep">|</span>
+    <div class="macro-item">
+      <span class="macro-label">Δ Cumulativo:</span>
+      <span class="macro-val" id="cum-delta-val">—</span>
+      <span id="cum-delta-bias" style="font-size:10px;font-weight:700">—</span>
+    </div>
+    <span class="macro-sep">|</span>
+    <div class="macro-item">
+      <span class="macro-label">Fluxo:</span>
+      <span class="macro-val" id="flow-signal">—</span>
+    </div>
+    <span class="macro-sep">|</span>
+    <div class="macro-item">
+      <span id="session-badge" class="FECHADO">—</span>
+    </div>
+    <div id="score-bar-wrap">
+      <span class="macro-label">Score:</span>
+      <span id="score-label">0</span>
+      <div id="score-bar-bg"><div id="score-bar" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <!-- ── Main grid ───────────────────────────────────────────────────────── -->
+  <div id="main-grid">
+
+    <!-- COLUNA 1: Book de ordens -->
+    <div class="panel" id="book-panel">
+      <div class="panel-title">Book de Ordens</div>
+      <div class="book-ask-zone" id="book-asks"></div>
+      <div class="book-spread" id="book-spread">Spread: —</div>
+      <div class="book-bid-zone" id="book-bids"></div>
+    </div>
+
+    <!-- COLUNA 2: Centro -->
+    <div class="panel" id="center-panel">
+      <!-- Preço -->
+      <div id="price-display" class="flat">—</div>
+      <div id="bid-ask-row">
+        <span>Bid: <span id="bid-val">—</span></span>
+        <span>Ask: <span id="ask-val">—</span></span>
+      </div>
+
+      <!-- Gauge semicircular -->
+      <div id="gauge-wrap">
+        <svg id="gauge-svg" viewBox="0 0 240 130" xmlns="http://www.w3.org/2000/svg">
+          <!-- Trilho -->
+          <path d="M 20 120 A 100 100 0 0 1 220 120" fill="none" stroke="#1e2d45" stroke-width="18" stroke-linecap="round"/>
+          <!-- Gradiente venda→neutro→compra -->
+          <defs>
+            <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%"   stop-color="#ef4444"/>
+              <stop offset="50%"  stop-color="#f59e0b"/>
+              <stop offset="100%" stop-color="#22c55e"/>
+            </linearGradient>
+          </defs>
+          <path id="gauge-arc" d="M 20 120 A 100 100 0 0 1 220 120" fill="none"
+                stroke="url(#gaugeGrad)" stroke-width="18" stroke-linecap="round"
+                stroke-dasharray="314" stroke-dashoffset="157"/>
+          <!-- Agulha -->
+          <line id="gauge-needle" x1="120" y1="120" x2="120" y2="28"
+                stroke="#e2e8f0" stroke-width="3" stroke-linecap="round"
+                transform="rotate(0, 120, 120)"/>
+          <!-- Pivô -->
+          <circle cx="120" cy="120" r="7" fill="#1e2d45" stroke="#e2e8f0" stroke-width="2"/>
+          <!-- Labels -->
+          <text x="18"  y="140" fill="#ef4444" font-size="10" font-weight="700">VENDA</text>
+          <text x="100" y="20"  fill="#f59e0b" font-size="10" text-anchor="middle">50%</text>
+          <text x="204" y="140" fill="#22c55e" font-size="10" font-weight="700" text-anchor="end">COMPRA</text>
+        </svg>
+        <div id="gauge-label">Agressão compradora: 50%</div>
+      </div>
+
+      <!-- Sinal atual -->
+      <div id="signal-badge" class="NEUTRO">AGUARDANDO</div>
+
+      <!-- Barra de confirmação do auto-trade -->
+      <div id="confirm-bar-wrap">
+        <div id="confirm-label">Confirmação: 0/3</div>
+        <div id="confirm-bar-bg"><div id="confirm-bar"></div></div>
+      </div>
+
+      <!-- Posição aberta -->
+      <div id="pos-box">
+        <div class="pos-row"><span>Posição:</span><span id="pos-side">—</span></div>
+        <div id="pos-pnl">—</div>
+        <div class="pos-row"><span>Entrada:</span><span id="pos-entry">—</span></div>
+        <div class="pos-row"><span>TP:</span><span id="pos-tp" style="color:var(--buy)">—</span></div>
+        <div class="pos-row"><span>SL:</span><span id="pos-sl" style="color:var(--sell)">—</span></div>
+        <button id="btn-close-pos" onclick="manualClose()">✕ Fechar manualmente</button>
+      </div>
+
+      <!-- Botões manuais -->
+      <div id="manual-btns">
+        <button id="btn-buy"  onclick="manualTrade('COMPRA')">▲ COMPRA</button>
+        <button id="btn-sell" onclick="manualTrade('VENDA')">▼ VENDA</button>
+      </div>
+
+      <!-- Controles auto-trade -->
+      <div id="auto-section">
+        <button id="auto-toggle" onclick="toggleAuto()">🤖 AUTO-TRADE: OFF</button>
+        <div id="auto-reason"></div>
+        <div class="cfg-row"><label>Volume (cotas):</label>
+          <input type="number" id="cfg-volume" value="1" min="1" step="1"></div>
+        <div class="cfg-row"><label>TP (ticks min):</label>
+          <input type="number" id="cfg-tp" value="5" min="1" step="1"
+                 title="TP mínimo em ticks. Com ATR sizing ON, pode ser maior."></div>
+        <div class="cfg-row"><label>SL (ticks min):</label>
+          <input type="number" id="cfg-sl" value="2" min="1" step="1"
+                 title="SL mínimo em ticks. Com ATR sizing ON, pode ser maior."></div>
+        <div class="cfg-row" title="Adapta SL/TP ao ATR atual: SL≥25%ATR, TP≥55%ATR. Evita stops por ruído.">
+          <label>ATR sizing (dinâmico):</label>
+          <input type="checkbox" id="cfg-atr-sizing" checked
+                 style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer">
+        </div>
+        <div class="cfg-row"><label>Threshold agr. (%):</label>
+          <input type="number" id="cfg-threshold" value="65" min="51" max="99" step="1"></div>
+        <div class="cfg-row"><label>Score mín. (0-100):</label>
+          <input type="number" id="cfg-score-min" value="70" min="50" max="95" step="1"
+                 title="Score mínimo 0-100 para entrar (padrão: 70)"></div>
+        <div class="cfg-row"><label>Confirmações:</label>
+          <input type="number" id="cfg-confirm" value="1" min="1" max="10" step="1"></div>
+        <div class="cfg-row"><label>Cooldown (s):</label>
+          <input type="number" id="cfg-cooldown" value="60" min="5" max="300" step="5"></div>
+        <div class="cfg-row" style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px">
+          <label>Break-even (ticks):</label>
+          <input type="number" id="cfg-be-ticks" value="3" min="0" max="10" step="1"
+                 title="Mover SL para entry após lucro de N ticks (0 = desativado)"></div>
+        <div class="cfg-row"><label>Saída por tempo (s):</label>
+          <input type="number" id="cfg-time-exit" value="90" min="0" max="600" step="5"
+                 title="Fechar no mercado se posição ficar aberta mais de N segundos (0 = desativado)"></div>
+        <div class="cfg-row"><label>Volatil. mín. (ticks):</label>
+          <input type="number" id="cfg-vol-min" value="2" min="0" max="10" step="1"
+                 title="Range mínimo nos últimos 20s para permitir entrada (0 = desativado)"></div>
+        <div class="cfg-row"><label>Vel. tape mín. (n/3s):</label>
+          <input type="number" id="cfg-vel-min" value="2" min="0" max="30" step="1"
+                 title="Negócios mínimos nos últimos 3s para entrada (0 = desativado)"></div>
+        <div class="cfg-row" style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px">
+          <label>Máx. trades/dia:</label>
+          <input type="number" id="cfg-max-daily" value="30" min="1" max="100" step="1"
+                 title="Limite de entradas automáticas por dia (reinicia ao zerar sessão)"></div>
+      </div>
+    </div>
+
+    <!-- COLUNA 3: Agressão + Tape -->
+    <div id="right-panel">
+      <!-- Agressão -->
+      <div class="panel" id="aggr-panel">
+        <div class="panel-title">Agressão (últimos <span id="aggr-sec">30</span>s)</div>
+        <div id="aggr-bars">
+          <div class="aggr-row">
+            <span class="aggr-side buy">COMPRA</span>
+            <div class="aggr-bar-wrap">
+              <div id="buy-bar" class="aggr-bar buy-bar"></div>
+            </div>
+            <span id="buy-pct-txt"  class="aggr-pct buy">50.0%</span>
+            <span id="buy-vol-txt"  class="aggr-vol">0</span>
+          </div>
+          <div class="aggr-row">
+            <span class="aggr-side sell">VENDA</span>
+            <div class="aggr-bar-wrap">
+              <div id="sell-bar" class="aggr-bar sell-bar"></div>
+            </div>
+            <span id="sell-pct-txt" class="aggr-pct sell">50.0%</span>
+            <span id="sell-vol-txt" class="aggr-vol">0</span>
+          </div>
+        </div>
+        <div id="aggr-total">Negócios: 0</div>
+        <div id="volatility-badge" style="display:none"></div>
+      </div><!-- /aggr-panel -->
+
+      <!-- Tape de negócios -->
+      <div class="panel" id="tape-panel">
+        <div class="panel-title">Tape (últimos negócios)</div>
+        <div id="tape-list"></div>
+      </div>
+
+      <!-- Simulação badge -->
+      <div id="sim-badge" style="display:none">⚠ MODO SIMULAÇÃO</div>
+
+    </div><!-- /right-panel -->
+  </div><!-- /main-grid -->
+
+  <!-- Status bar -->
+  <div id="statusbar">
+    <div class="stat-item">
+      <span class="stat-label">Trades:</span>
+      <span class="stat-val" id="stat-trades">0</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-label">&#x2705; Wins:</span>
+      <span class="stat-val" id="stat-wins" style="color:var(--buy)">0</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-label">&#x2796; BE:</span>
+      <span class="stat-val" id="stat-be" style="color:var(--gold)">0</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-label">&#x274C; Losses:</span>
+      <span class="stat-val" id="stat-losses" style="color:var(--sell)">0</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-label">RESULTADO:</span>
+      <span class="stat-val" id="stat-pnl">R$0,00</span>
+    </div>
+    <span id="status-msg">Iniciando...</span>
+    <button id="btn-auto-params" class="ap-btn-active" onclick="window.toggleAutoParams()" title="Auto-ajuste de par&#226;metros por sess&#227;o">&#9881; Auto</button>
+    <button id="btn-reset-session" onclick="resetSession()">Zerar sessao</button>
+    <button id="btn-trade-log" onclick="window.showTradeLog()" title="Log de Trades">&#128202; Log</button>
+  </div>
+
+  <!-- ── Modal: Log de Trades ───────────────────────────────────────────── -->
+  <div id="log-modal" style="display:none">
+    <div id="log-modal-box">
+      <div id="log-modal-header">
+        <span>&#128202; Log de Trades</span>
+        <button onclick="document.getElementById('log-modal').style.display='none'">&#10005;</button>
+      </div>
+      <div id="log-summary-bar"></div>
+      <div id="log-context-bars"></div>
+      <div id="log-table-wrap">
+        <table id="log-table">
+          <thead><tr>
+            <th>Data/Hora</th><th>Dir</th><th>Resultado</th>
+            <th>P&amp;L</th><th>Score</th><th>VWAP</th>
+            <th>Sessão</th><th>Saída</th>
+          </tr></thead>
+          <tbody id="log-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /app -->
+
+<script src="{{ url_for('static', filename='js/scalper.js') }}"></script>
+</body>
+</html>
