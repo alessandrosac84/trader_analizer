@@ -341,7 +341,10 @@ def _calc_vwap_atr(mt5_sym: str) -> dict:
         rates = mt5.copy_rates_from(mt5_sym, mt5.TIMEFRAME_M1, utc_start, 500)
         if rates is None or len(rates) == 0:
             result = {"vwap": None, "atr_1m": None, "context": "NEUTRO",
-                      "price": None, "ts": now_ts}
+                      "price": None,
+                      "day_open": None, "day_high": None, "day_low": None,
+                      "day_amplitude": None, "day_dist_open": None, "day_dist_min": None,
+                      "ts": now_ts}
             _vwap_cache[mt5_sym] = result
             return result
 
@@ -361,7 +364,14 @@ def _calc_vwap_atr(mt5_sym: str) -> dict:
             window = trs[-14:] if len(trs) >= 14 else trs
             atr    = sum(window) / len(window) if window else None
 
-        last_price = float(rates[-1]["close"])
+        last_price  = float(rates[-1]["close"])
+        open_price  = float(rates[0]["open"])
+        high_price  = max(float(r["high"]) for r in rates)
+        low_price   = min(float(r["low"])  for r in rates)
+        amplitude   = round(high_price - low_price, 2)
+        dist_open   = round(last_price - open_price, 2)
+        dist_min    = round(last_price - low_price,  2)
+
         ts_val     = TICK_SIZE_OVERRIDE.get(mt5_sym, 0.5)
         context    = "NEUTRO"
         if vwap:
@@ -369,18 +379,28 @@ def _calc_vwap_atr(mt5_sym: str) -> dict:
             elif last_price < vwap - ts_val: context = "BEAR"
 
         result = {
-            "vwap":    round(vwap,       2) if vwap  else None,
-            "atr_1m":  round(atr / ts_val, 1) if atr and ts_val > 0 else None,  # em ticks
-            "context": context,
-            "price":   round(last_price, 2),
-            "ts":      now_ts,
+            "vwap":         round(vwap,       2) if vwap  else None,
+            "atr_1m":       round(atr / ts_val, 1) if atr and ts_val > 0 else None,  # em ticks
+            "context":      context,
+            "price":        round(last_price, 2),
+            # ── Valores do dia (novos) ──────────────────────────────────────
+            "day_open":     round(open_price, 2),
+            "day_high":     round(high_price, 2),
+            "day_low":      round(low_price,  2),
+            "day_amplitude": amplitude,
+            "day_dist_open": dist_open,
+            "day_dist_min":  dist_min,
+            "ts":           now_ts,
         }
         _vwap_cache[mt5_sym] = result
         return result
 
     except Exception as exc:
         logger.warning("_calc_vwap_atr: %s", exc)
-        result = {"vwap": None, "atr_1m": None, "context": "NEUTRO", "price": None, "ts": now_ts}
+        result = {"vwap": None, "atr_1m": None, "context": "NEUTRO", "price": None,
+                  "day_open": None, "day_high": None, "day_low": None,
+                  "day_amplitude": None, "day_dist_open": None, "day_dist_min": None,
+                  "ts": now_ts}
         _vwap_cache[mt5_sym] = result
         return result
 
@@ -390,7 +410,8 @@ def _get_time_weight() -> dict:
     brt = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=-3))).time()
     t   = brt.hour * 60 + brt.minute   # minutos desde 00:00
 
-    if   540 <= t <  630: return {"weight": 100, "session": "PRIME",      "label": "Prime (09:00-10:30)"}
+    if   540 <= t <  555: return {"weight":   0, "session": "FECHADO",    "label": "Aguardando abertura (09:00-09:15)"}  # primeiros 15min: ruído de abertura
+    elif 555 <= t <  630: return {"weight": 100, "session": "PRIME",      "label": "Prime (09:15-10:30)"}
     elif 630 <= t <  720: return {"weight":  80, "session": "BOM",        "label": "Bom (10:30-12:00)"}
     elif 720 <= t <  840: return {"weight":  25, "session": "PERIGOSO",   "label": "Perigoso (12-14h)"}
     elif 840 <= t <  990: return {"weight":  80, "session": "BOM",        "label": "Bom (14:00-16:30)"}
@@ -566,6 +587,12 @@ def _calc_multi_score(
     buf          = _tick_buf.get(mt5_sym)
     now          = time.time()
 
+    # Alinhamento VWAP: define se estamos operando A FAVOR da tendência
+    vwap_context = vwap_data.get("context", "NEUTRO")
+    vwap_aligned = (is_buy and vwap_context == "BULL") or (not is_buy and vwap_context == "BEAR")
+    # Hard-block de consistência: mais tolerante na tendência (pullbacks têm ticks contra momentaneamente)
+    consistency_hard_block = 48 if vwap_aligned else 55
+
     # ── 1. BURST VELOCITY — 30 pts ──────────────────────────────────────────
     # Quantos ticks chegaram nos últimos 2s vs média dos últimos 30s?
     # Aceleração 3x = instituição entrando agressivamente AGORA.
@@ -605,6 +632,7 @@ def _calc_multi_score(
             elif consistency >= 70: pts["tick_consistency"] = 12
             elif consistency >= 60: pts["tick_consistency"] =  5
             elif consistency >= 55: pts["tick_consistency"] =  0
+            elif consistency >= consistency_hard_block: pts["tick_consistency"] = 0  # zona tolerada em tendência
             else:
                 pts["tick_consistency"] =  0
                 hard_blocked = True
@@ -685,6 +713,15 @@ def _calc_multi_score(
     else:
         pts["cum_delta_pen"] = 0
 
+    # ── 7. Bônus alinhamento VWAP — +12 pts ─────────────────────────────────
+    # Opera a favor da tendência intraday = barreira menor, mais oportunidades.
+    # Pullbacks em downtrend são entradas VENDA mesmo com ticks momentaneamente comprados.
+    if vwap_aligned and vwap_context != "NEUTRO":
+        pts["vwap_trend_bonus"] = 12
+        reasons.append(f"✅ Tendência VWAP {vwap_context} alinhada")
+    else:
+        pts["vwap_trend_bonus"] = 0
+
     # ── Score final ──────────────────────────────────────────────────────────
     total = round(sum(pts.values()), 1)
     return {
@@ -696,6 +733,7 @@ def _calc_multi_score(
         "cum_pct":           cum_pct,
         "tick_consistency":  round(consistency, 1),
         "burst_vel_2s":      count_2s,
+        "vwap_aligned":      vwap_aligned,
     }
 
 def _calc_aggr(mt5_sym: str, window_sec: int) -> dict:
@@ -1028,9 +1066,9 @@ def execute_scalper_trade(symbol: str, acao: str, volume: float,
                           tp_ticks: int = 5, sl_ticks: int = 2,
                           use_atr_sizing: bool = True) -> tuple:
     """Executa trade scalper com TP/SL dinâmicos baseados no ATR atual.
-    use_atr_sizing=True: SL = max(sl_ticks, ATR*0.40); TP = max(tp_ticks, ATR*0.85)
+    use_atr_sizing=True: SL = max(sl_ticks, ATR*0.55); TP = max(tp_ticks, ATR*1.15)
     atr_1m é em TICKS (já dividido por tick_size). Fatores calibrados para
-    ATR típico de 6-13 ticks no WDON26/WINM26 — garante SL ≥ 40% do ATR.
+    ATR típico de 8-13 ticks no WDON26 — SL sobrevive ao ruído, TP alcança o move real.
     """
     global _sim_ticket_counter
     mt5_sym = _resolve_symbol(symbol)
@@ -1043,8 +1081,8 @@ def execute_scalper_trade(symbol: str, acao: str, volume: float,
             if atr_t and atr_t > 2:                 # só ajusta se ATR for significativo
                 sl_orig   = sl_ticks
                 tp_orig   = tp_ticks
-                sl_atr    = max(sl_ticks, round(atr_t * 0.40))  # 40% do ATR em ticks, mínimo configurado
-                tp_atr    = max(tp_ticks, round(atr_t * 0.85))  # 85% do ATR em ticks, mínimo configurado
+                sl_atr    = max(sl_ticks, round(atr_t * 0.55))  # 55% do ATR — sobrevive ao ruído do WDON26
+                tp_atr    = max(tp_ticks, round(atr_t * 1.15))  # 115% do ATR — captura o move real
                 # Cap: no máximo 4× o valor configurado (evita SL absurdo em spike de volatilidade)
                 sl_ticks  = min(sl_atr, sl_ticks * 4)
                 tp_ticks  = min(tp_atr, tp_ticks * 4)

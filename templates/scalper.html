@@ -236,6 +236,49 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .aggr-bar.sell { background: var(--sell); }
 #aggr-total { font-size: 10px; color: var(--muted); text-align: right; margin-top: 2px; }
 
+/* ── Painel Fluxo do Dia ─────────────────────────────────────────────────── */
+#flow-day-panel { flex: 0 0 auto; }
+.fd-section { margin-bottom: 8px; }
+.fd-section:last-child { margin-bottom: 0; }
+.fd-title { font-size: 9px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: .1em; color: var(--muted); margin-bottom: 5px; }
+/* Agressão do dia */
+.fd-aggr-row { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; font-size: 11px; }
+.fd-aggr-label { width: 42px; font-weight: 700; }
+.fd-aggr-label.buy  { color: var(--buy);  }
+.fd-aggr-label.sell { color: var(--sell); }
+.fd-bar-bg { flex: 1; background: var(--surface2); border-radius: 3px; height: 7px; overflow: hidden; }
+.fd-bar    { height: 7px; border-radius: 3px; transition: width .5s; }
+.fd-bar.buy  { background: var(--buy);  }
+.fd-bar.sell { background: var(--sell); }
+.fd-pct    { width: 34px; text-align: right; font-size: 10px; color: var(--muted); }
+.fd-saldo  { font-size: 10px; text-align: right; margin-top: 1px; font-weight: 700; }
+.fd-saldo.bull { color: var(--buy);  }
+.fd-saldo.bear { color: var(--sell); }
+.fd-saldo.neutro { color: var(--muted); }
+/* Probabilidade */
+.fd-prob-wrap { display: flex; align-items: center; gap: 4px; margin-bottom: 3px; }
+.fd-prob-sell { width: 28px; font-size: 10px; font-weight: 700; color: var(--sell); }
+.fd-prob-buy  { width: 28px; font-size: 10px; font-weight: 700; color: var(--buy); text-align: right; }
+.fd-prob-bar-bg { flex: 1; background: var(--sell-dim); border-radius: 3px; height: 9px; overflow: hidden; position: relative; }
+.fd-prob-bar-fill { height: 9px; border-radius: 3px; background: var(--buy); transition: width .5s; }
+.fd-prob-label { font-size: 10px; text-align: center; font-weight: 700; margin-top: 1px; }
+.fd-prob-label.buy  { color: var(--buy);  }
+.fd-prob-label.sell { color: var(--sell); }
+.fd-prob-label.neutro { color: var(--muted); }
+/* Valores do dia */
+.fd-day-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 2px 8px;
+}
+.fd-day-item { display: flex; justify-content: space-between; align-items: baseline;
+               font-size: 10px; }
+.fd-day-label { color: var(--muted); }
+.fd-day-val   { font-weight: 700; font-variant-numeric: tabular-nums; }
+.fd-day-val.buy   { color: var(--buy);  }
+.fd-day-val.sell  { color: var(--sell); }
+.fd-day-val.gold  { color: var(--gold); }
+
 /* Tape */
 #tape-panel { flex: 1; overflow: hidden; }
 #tape-list  {
@@ -487,31 +530,36 @@ button:disabled { opacity: .4; cursor: not-allowed; }
         <div class="cfg-row"><label>Volume (cotas):</label>
           <input type="number" id="cfg-volume" value="1" min="1" step="1"></div>
         <div class="cfg-row"><label>TP (ticks min):</label>
-          <input type="number" id="cfg-tp" value="5" min="1" step="1"
-                 title="TP mínimo em ticks. Com ATR sizing ON, pode ser maior."></div>
+          <input type="number" id="cfg-tp" value="9" min="1" step="1"
+                 title="TP mínimo em ticks. Com ATR sizing ON, pode ser maior. ATR×1.15 típico."></div>
         <div class="cfg-row"><label>SL (ticks min):</label>
-          <input type="number" id="cfg-sl" value="2" min="1" step="1"
-                 title="SL mínimo em ticks. Com ATR sizing ON, pode ser maior."></div>
+          <input type="number" id="cfg-sl" value="5" min="1" step="1"
+                 title="SL mínimo em ticks. Com ATR sizing ON, pode ser maior. ATR×0.55 típico."></div>
         <div class="cfg-row" title="Adapta SL/TP ao ATR atual: SL≥25%ATR, TP≥55%ATR. Evita stops por ruído.">
           <label>ATR sizing (dinâmico):</label>
           <input type="checkbox" id="cfg-atr-sizing" checked
                  style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer">
         </div>
+        <div class="cfg-row" title="Filtra direção pelo VWAP intraday: BEAR=só VENDA, BULL=só COMPRA. Evita operar contra-tendência.">
+          <label>Filtro VWAP (tendência):</label>
+          <input type="checkbox" id="cfg-vwap-filter" checked
+                 style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer">
+        </div>
         <div class="cfg-row"><label>Threshold agr. (%):</label>
           <input type="number" id="cfg-threshold" value="65" min="51" max="99" step="1"></div>
         <div class="cfg-row"><label>Score mín. (0-100):</label>
-          <input type="number" id="cfg-score-min" value="70" min="50" max="95" step="1"
-                 title="Score mínimo 0-100 para entrar (padrão: 70)"></div>
+          <input type="number" id="cfg-score-min" value="68" min="50" max="95" step="1"
+                 title="Score mínimo 0-100 para entrar (padrão: 68). VWAP bonus +12pts já aplicado."></div>
         <div class="cfg-row"><label>Confirmações:</label>
           <input type="number" id="cfg-confirm" value="1" min="1" max="10" step="1"></div>
         <div class="cfg-row"><label>Cooldown (s):</label>
-          <input type="number" id="cfg-cooldown" value="60" min="5" max="300" step="5"></div>
+          <input type="number" id="cfg-cooldown" value="45" min="5" max="300" step="5"></div>
         <div class="cfg-row" style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px">
           <label>Break-even (ticks):</label>
-          <input type="number" id="cfg-be-ticks" value="3" min="0" max="10" step="1"
+          <input type="number" id="cfg-be-ticks" value="4" min="0" max="10" step="1"
                  title="Mover SL para entry após lucro de N ticks (0 = desativado)"></div>
         <div class="cfg-row"><label>Saída por tempo (s):</label>
-          <input type="number" id="cfg-time-exit" value="90" min="0" max="600" step="5"
+          <input type="number" id="cfg-time-exit" value="300" min="0" max="600" step="5"
                  title="Fechar no mercado se posição ficar aberta mais de N segundos (0 = desativado)"></div>
         <div class="cfg-row"><label>Volatil. mín. (ticks):</label>
           <input type="number" id="cfg-vol-min" value="2" min="0" max="10" step="1"
@@ -534,7 +582,7 @@ button:disabled { opacity: .4; cursor: not-allowed; }
         <div id="aggr-bars">
           <div class="aggr-row">
             <span class="aggr-side buy">COMPRA</span>
-            <div class="aggr-bar-wrap">
+              <div class="aggr-bar-wrap">
               <div id="buy-bar" class="aggr-bar buy-bar"></div>
             </div>
             <span id="buy-pct-txt"  class="aggr-pct buy">50.0%</span>
@@ -552,6 +600,71 @@ button:disabled { opacity: .4; cursor: not-allowed; }
         <div id="aggr-total">Negócios: 0</div>
         <div id="volatility-badge" style="display:none"></div>
       </div><!-- /aggr-panel -->
+
+      <!-- Fluxo do Dia (NOVO) -->
+      <div class="panel" id="flow-day-panel">
+        <div class="panel-title">Fluxo do Dia</div>
+
+        <!-- Agressão acumulada do dia -->
+        <div class="fd-section">
+          <div class="fd-title">Agressão Acumulada</div>
+          <div class="fd-aggr-row">
+            <span class="fd-aggr-label buy">COMPRA</span>
+            <div class="fd-bar-bg"><div class="fd-bar buy" id="fd-buy-bar" style="width:50%"></div></div>
+            <span class="fd-pct" id="fd-buy-pct">50%</span>
+          </div>
+          <div class="fd-aggr-row">
+            <span class="fd-aggr-label sell">VENDA</span>
+            <div class="fd-bar-bg"><div class="fd-bar sell" id="fd-sell-bar" style="width:50%"></div></div>
+            <span class="fd-pct" id="fd-sell-pct">50%</span>
+          </div>
+          <div class="fd-saldo neutro" id="fd-saldo">Saldo: —</div>
+        </div>
+
+        <!-- Probabilidade direcional -->
+        <div class="fd-section">
+          <div class="fd-title">Probabilidade</div>
+          <div class="fd-prob-wrap">
+            <span class="fd-prob-sell" id="fd-prob-sell">50%</span>
+            <div class="fd-prob-bar-bg">
+              <div class="fd-prob-bar-fill" id="fd-prob-fill" style="width:50%"></div>
+            </div>
+            <span class="fd-prob-buy" id="fd-prob-buy">50%</span>
+          </div>
+          <div class="fd-prob-label neutro" id="fd-prob-label">NEUTRO</div>
+        </div>
+
+        <!-- Valores do Dia -->
+        <div class="fd-section">
+          <div class="fd-title">Valores do Dia</div>
+          <div class="fd-day-grid">
+            <div class="fd-day-item">
+              <span class="fd-day-label">Abert.</span>
+              <span class="fd-day-val" id="fd-day-open">—</span>
+            </div>
+            <div class="fd-day-item">
+              <span class="fd-day-label">Amplit.</span>
+              <span class="fd-day-val gold" id="fd-day-amp">—</span>
+            </div>
+            <div class="fd-day-item">
+              <span class="fd-day-label">Máx.</span>
+              <span class="fd-day-val buy" id="fd-day-high">—</span>
+            </div>
+            <div class="fd-day-item">
+              <span class="fd-day-label">Dist Ab.</span>
+              <span class="fd-day-val" id="fd-day-dist-open">—</span>
+            </div>
+            <div class="fd-day-item">
+              <span class="fd-day-label">Mín.</span>
+              <span class="fd-day-val sell" id="fd-day-low">—</span>
+            </div>
+            <div class="fd-day-item">
+              <span class="fd-day-label">Dist Mín.</span>
+              <span class="fd-day-val buy" id="fd-day-dist-min">—</span>
+            </div>
+          </div>
+        </div>
+      </div><!-- /flow-day-panel -->
 
       <!-- Tape de negócios -->
       <div class="panel" id="tape-panel">

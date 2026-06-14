@@ -320,6 +320,20 @@ def api_scalper_auto_check():
             _auto["signal_count"] = 0
             return _deny(f"🚫 Score srv {sv_score:.0f} < mín {score_min_sv} — entrada bloqueada")
 
+        # Hard-block 3: VWAP direction filter — só operar a favor da tendência
+        # BEAR = preço abaixo da VWAP intraday → só VENDA permitida
+        # BULL = preço acima da VWAP intraday → só COMPRA permitida
+        # NEUTRO → permite ambas as direções
+        vwap_ctx = macro_sv.get("vwap", {}).get("context", "NEUTRO")
+        use_vwap_filter = bool(body.get("use_vwap_filter", True))
+        if use_vwap_filter and vwap_ctx != "NEUTRO":
+            if vwap_ctx == "BEAR" and signal == "COMPRA":
+                _auto["signal_count"] = 0
+                return _deny(f"🚫 VWAP BEAR — apenas VENDA (bloqueando COMPRA contra-tendência)")
+            if vwap_ctx == "BULL" and signal == "VENDA":
+                _auto["signal_count"] = 0
+                return _deny(f"🚫 VWAP BULL — apenas COMPRA (bloqueando VENDA contra-tendência)")
+
         # Hard-block 2: divergência delta severa (buy_pct extremo contra direção)
         if sv_blocked:
             _auto["signal_count"] = 0

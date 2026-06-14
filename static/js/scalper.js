@@ -419,6 +419,9 @@ function _sendAutoCheck(b3Open) {
     b3_open:      b3Open,
     score_min:    _cfgNum("cfg-score-min") || 75,
     max_daily:    _cfgNum("cfg-max-daily")  || 15,
+    use_vwap_filter: document.getElementById("cfg-vwap-filter")
+                       ? document.getElementById("cfg-vwap-filter").checked
+                       : true,
   };
 
   fetch("/api/scalper/auto-check", {
@@ -483,6 +486,90 @@ function _updateVolatility(vol) {
   }
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   Painel Fluxo do Dia — agressão acumulada + probabilidade + OHLC
+───────────────────────────────────────────────────────────────────────────── */
+function _updateFlowDay(macro) {
+  if (!macro) return;
+
+  // ── 1. Agressão acumulada do dia (cum_delta) ────────────────────────────
+  var cum     = macro.cum_delta || {};
+  var buyPct  = typeof cum.buy_pct  === "number" ? cum.buy_pct  : 50;
+  var sellPct = 100 - buyPct;
+  var delta   = typeof cum.delta    === "number" ? cum.delta    : 0;
+  var bias    = cum.bias || "NEUTRO";
+
+  var fdBuyBar  = document.getElementById("fd-buy-bar");
+  var fdSellBar = document.getElementById("fd-sell-bar");
+  var fdBuyPct  = document.getElementById("fd-buy-pct");
+  var fdSellPct = document.getElementById("fd-sell-pct");
+  var fdSaldo   = document.getElementById("fd-saldo");
+
+  if (fdBuyBar)  fdBuyBar.style.width  = buyPct.toFixed(1)  + "%";
+  if (fdSellBar) fdSellBar.style.width = sellPct.toFixed(1) + "%";
+  if (fdBuyPct)  fdBuyPct.textContent  = buyPct.toFixed(1)  + "%";
+  if (fdSellPct) fdSellPct.textContent = sellPct.toFixed(1) + "%";
+  if (fdSaldo) {
+    var saldoSign = delta >= 0 ? "▲" : "▼";
+    fdSaldo.textContent = "Saldo: " + (delta >= 0 ? "+" : "") + Math.round(delta) + " lots " + saldoSign;
+    fdSaldo.className = "fd-saldo " + (bias === "BULLISH" ? "bull" : bias === "BEARISH" ? "bear" : "neutro");
+  }
+
+  // ── 2. Probabilidade direcional (score_buy vs score_sell) ──────────────
+  var sb = (macro.score_buy  || {}).score || 0;
+  var ss = (macro.score_sell || {}).score || 0;
+  // Combina score com cum_delta (70% score, 30% delta)
+  var scoreBuyNorm  = sb / Math.max(sb + ss, 1) * 100;
+  var deltaAdj      = (buyPct - 50) * 0.3;   // max ±15%
+  var buyProb       = Math.max(5, Math.min(95, Math.round(scoreBuyNorm * 0.7 + 50 * 0.3 + deltaAdj)));
+  var sellProb      = 100 - buyProb;
+
+  var fdProbFill  = document.getElementById("fd-prob-fill");
+  var fdProbBuy   = document.getElementById("fd-prob-buy");
+  var fdProbSell  = document.getElementById("fd-prob-sell");
+  var fdProbLabel = document.getElementById("fd-prob-label");
+
+  if (fdProbFill) fdProbFill.style.width = buyProb + "%";
+  if (fdProbBuy)  fdProbBuy.textContent  = buyProb  + "%";
+  if (fdProbSell) fdProbSell.textContent = sellProb + "%";
+  if (fdProbLabel) {
+    if      (buyProb >= 55) { fdProbLabel.textContent = "COMPRA"; fdProbLabel.className = "fd-prob-label buy";  }
+    else if (buyProb <= 45) { fdProbLabel.textContent = "VENDA";  fdProbLabel.className = "fd-prob-label sell"; }
+    else                    { fdProbLabel.textContent = "NEUTRO"; fdProbLabel.className = "fd-prob-label neutro"; }
+  }
+
+  // ── 3. Valores do Dia (via vwap data que agora inclui day_open etc.) ───
+  var vwap = macro.vwap || {};
+  var fmtPts = function(v) {
+    if (v == null || isNaN(v)) return "—";
+    return (v >= 0 ? "+" : "") + Math.round(v) + " pts";
+  };
+
+  var elOpen    = document.getElementById("fd-day-open");
+  var elHigh    = document.getElementById("fd-day-high");
+  var elLow     = document.getElementById("fd-day-low");
+  var elAmp     = document.getElementById("fd-day-amp");
+  var elDistO   = document.getElementById("fd-day-dist-open");
+  var elDistM   = document.getElementById("fd-day-dist-min");
+
+  if (elOpen) elOpen.textContent = vwap.day_open  != null ? vwap.day_open.toFixed(2)  : "—";
+  if (elHigh) elHigh.textContent = vwap.day_high  != null ? vwap.day_high.toFixed(2)  : "—";
+  if (elLow)  elLow.textContent  = vwap.day_low   != null ? vwap.day_low.toFixed(2)   : "—";
+  if (elAmp)  elAmp.textContent  = vwap.day_amplitude != null
+    ? Math.round(vwap.day_amplitude) + " pts" : "—";
+
+  if (elDistO) {
+    var dOpen = vwap.day_dist_open;
+    elDistO.textContent = fmtPts(dOpen);
+    elDistO.className   = "fd-day-val " + (dOpen != null && dOpen >= 0 ? "buy" : "sell");
+  }
+  if (elDistM) {
+    var dMin = vwap.day_dist_min;
+    elDistM.textContent = dMin != null ? "+" + Math.round(dMin) + " pts" : "—";
+    elDistM.className   = "fd-day-val buy";
+  }
+}
+
 function _pollData() {
   var aggrSec = _cfgNum("cfg-cooldown");  // reutiliza cooldown como window? Não —
   // O aggr_seconds é separado; vamos fixar 30s ou ler de um campo futuro
@@ -521,6 +608,9 @@ function _pollData() {
     // ── Macro: VWAP, Delta, Score, Absorção, Horário ─────────────────────
     if (d.macro) _updateMacroBar(d.macro);
 
+    // ── Fluxo do Dia: agressão acumulada + probabilidade + valores diários ──
+    if (d.macro) _updateFlowDay(d.macro);
+
     if (_autoEnabled && !_hasPosition && _volatilityOk) {
       _sendAutoCheck(!!d.b3_open);
     } else if (!_autoEnabled) {
@@ -554,27 +644,27 @@ var _macroScore    = 0;   // score atual (0-100) para uso no auto-check
 //   65-80= burst moderado (opera em BOM e PRIME)
 //   80+  = burst forte (opera em qualquer sessão)
 var _SESSION_PRESETS = {
-  // PRIME 9-10:30: máxima liquidez — burst mais frequente aqui
+  // PRIME 9-10:30: máxima liquidez — melhor janela do dia
   PRIME: {
-    "cfg-score-min": 65, "cfg-threshold": 65,
-    "cfg-vel-min": 2,    "cfg-vol-min": 1,  "cfg-cooldown": 60, "cfg-confirm": 1
+    "cfg-score-min": 62, "cfg-threshold": 63,
+    "cfg-vel-min": 2,    "cfg-vol-min": 1,  "cfg-cooldown": 55, "cfg-confirm": 1
   },
-  // BOM: bom momentum — exige burst mais limpo
+  // BOM: bom momentum — cooldown maior evita churn em cluster de trades
   BOM: function () {
     var h = new Date().getHours();
     return h >= 14
-      ? { "cfg-score-min": 68, "cfg-threshold": 65, "cfg-vel-min": 2, "cfg-vol-min": 1, "cfg-cooldown": 65, "cfg-confirm": 1 }
-      : { "cfg-score-min": 68, "cfg-threshold": 65, "cfg-vel-min": 2, "cfg-vol-min": 1, "cfg-cooldown": 60, "cfg-confirm": 1 };
+      ? { "cfg-score-min": 68, "cfg-threshold": 63, "cfg-vel-min": 2, "cfg-vol-min": 1, "cfg-cooldown": 60, "cfg-confirm": 1 }
+      : { "cfg-score-min": 68, "cfg-threshold": 63, "cfg-vel-min": 2, "cfg-vol-min": 1, "cfg-cooldown": 60, "cfg-confirm": 1 };
   },
-  // PERIGOSO 12-14h: poucos bursts reais — exige sinal muito claro
+  // PERIGOSO 12-14h: lateralização típica — exige sinal muito claro, cooldown longo
   PERIGOSO: {
-    "cfg-score-min": 75, "cfg-threshold": 68,
-    "cfg-vel-min": 3,    "cfg-vol-min": 2,  "cfg-cooldown": 90, "cfg-confirm": 1
+    "cfg-score-min": 73, "cfg-threshold": 67,
+    "cfg-vel-min": 3,    "cfg-vol-min": 2,  "cfg-cooldown": 80, "cfg-confirm": 1
   },
-  // FECHAMENTO 16:30-17h: bursts de encerramento — cuidado com reversões
+  // FECHAMENTO 16:30-17h: bursts de encerramento — cuidado com reversões rápidas
   FECHAMENTO: {
-    "cfg-score-min": 72, "cfg-threshold": 67,
-    "cfg-vel-min": 3,    "cfg-vol-min": 1,  "cfg-cooldown": 75, "cfg-confirm": 1
+    "cfg-score-min": 70, "cfg-threshold": 65,
+    "cfg-vel-min": 3,    "cfg-vol-min": 1,  "cfg-cooldown": 60, "cfg-confirm": 1
   }
   // FECHADO: fora do horario B3 — _sessionBlock bloqueia
 };
@@ -638,8 +728,8 @@ function _updateMacroBar(macro) {
     sessBdg.className   = timeW.session || "FECHADO";
     sessBdg.textContent = timeW.label   || "—";
   }
-  // Hard-block: apenas quando mercado fechado; PERIGOSO usa preset rígido (sem hard-block)
-  _sessionBlock = (!timeW.session || timeW.session === "FECHADO");
+  // Hard-block: mercado fechado E horário PERIGOSO (12-14h) — lateralização, sem edge
+  _sessionBlock = (!timeW.session || timeW.session === "FECHADO" || timeW.session === "PERIGOSO");
   // Auto-params: aplica preset quando a sessao muda
   if (_autoParamsEnabled && timeW.session && timeW.session !== _lastAutoSession) {
     _applySessionParams(timeW.session);
@@ -1117,7 +1207,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
 /* ─────────────────────────────────────────────────────────────────────────────
    Modal: Log de Trades — assertividade histórica
-───────────────────────────────────────────────────────────────────────────── */
+───────────────────────────────────────────────────────────   Modal: Log de Trades — assertividade histórica
+─────────────────────────────────────────────────────────────────────────────── */
 window.showTradeLog = function () {
   var modal = document.getElementById("log-modal");
   if (!modal) return;
@@ -1209,5 +1300,5 @@ function _logContextGroup(title, obj) {
       v.total > 0 && (v.wins/v.total) >= 0.40 ? "var(--warn)" : "var(--sell)";
     return _logStat(k, wr + " (" + v.total + ")", wrColor);
   }).join("");
-  return "<div class='lc-group'><div class='lc-title'>" + title + "</div>" + rows + "</div>";
+  return "<div class='lc-group'><div class='lc-title'>" + title +" </div>" + rows + "</div>";
 }
