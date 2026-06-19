@@ -722,6 +722,24 @@ def _calc_multi_score(
     else:
         pts["vwap_trend_bonus"] = 0
 
+    # ── 8. Penalidade exaustao de impulso ───────────────────────────────────
+    # Dados historicos (133 trades): score 80-100 -> win rate 9%, loss rate 82%.
+    # Causa: burst_vel maximo (ratio >=3x) + tick_consistency maximo (>=90%) simultaneos
+    # indicam que o movimento JA ACONTECEU -- entramos no teto do impulso, nao no inicio.
+    # Grau 1 (severo): burst maximo + consistencia >=90% -> -20pts
+    # Grau 2 (moderado): burst maximo + consistencia >=80% -> -10pts
+    _burst_max       = pts.get("burst_vel", 0) >= 30
+    _consistency_pts = pts.get("tick_consistency", 0)
+
+    if _burst_max and _consistency_pts >= 30:       # burst >=3x + tape >=90%
+        pts["exaustao_pen"] = -20
+        reasons.append("AVISO Impulso no teto: burst x3+ com tape 90%+ -> possivel exaustao")
+    elif _burst_max and _consistency_pts >= 22:     # burst >=3x + tape >=80%
+        pts["exaustao_pen"] = -10
+        reasons.append("AVISO Burst extremo com tape 80%+ -> atencao a exaustao")
+    else:
+        pts["exaustao_pen"] = 0
+
     # ── Score final ──────────────────────────────────────────────────────────
     total = round(sum(pts.values()), 1)
     return {

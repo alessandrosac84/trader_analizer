@@ -1209,12 +1209,15 @@ document.addEventListener("DOMContentLoaded", function () {
    Modal: Log de Trades — assertividade histórica
 ───────────────────────────────────────────────────────────   Modal: Log de Trades — assertividade histórica
 ─────────────────────────────────────────────────────────────────────────────── */
+// ── Log state (closure) ───────────────────────────────────────────────────
+var _logAllTrades   = [];
+var _logContextData = {};
+
 window.showTradeLog = function () {
   var modal = document.getElementById("log-modal");
   if (!modal) return;
   modal.style.display = "flex";
 
-  // Limpar estado anterior
   var sb = document.getElementById("log-summary-bar");
   var cb = document.getElementById("log-context-bars");
   var tb = document.getElementById("log-tbody");
@@ -1235,53 +1238,124 @@ window.showTradeLog = function () {
       return;
     }
 
-    // ── Summary bar ──────────────────────────────────────────────────────
-    var pnlColor = d.total_pnl >= 0 ? "var(--buy)" : "var(--sell)";
-    var wrColor  = d.win_rate  >= 55 ? "var(--buy)" : (d.win_rate >= 45 ? "var(--gold)" : "var(--sell)");
-    if (sb) sb.innerHTML = [
-      _logStat("Trades",    d.trades,                 "var(--text)"),
-      _logStat("✅ Wins",   d.wins || 0,              "var(--buy)"),
-      _logStat("➖ BE",     d.bes  || 0,              "var(--gold)"),
-      _logStat("❌ Losses", d.losses || 0,            "var(--sell)"),
-      _logStat("Win Rate",  (d.win_rate||0).toFixed(1)+"%", wrColor),
-      _logStat("Score Méd", (d.avg_score||0).toFixed(0), "var(--text)"),
-      _logStat("P&L Total", _fmtBRL(d.total_pnl || 0), pnlColor),
-    ].join("");
+    _logAllTrades   = d.last_trades || [];
+    _logContextData = d;
 
-    // ── Context breakdown ─────────────────────────────────────────────────
-    var cbHtml = "";
-    cbHtml += _logContextGroup("VWAP",    d.by_vwap);
-    cbHtml += _logContextGroup("Sessão",  d.by_session);
-    cbHtml += _logContextGroup("Score",   d.by_score);
-    if (cb) cb.innerHTML = cbHtml;
-
-    // ── Table ─────────────────────────────────────────────────────────────
-    var rows = (d.last_trades || []);
-    if (tb) {
-      if (rows.length === 0) {
-        tb.innerHTML = "<tr><td colspan='8' style='color:var(--muted);text-align:center'>Sem trades com resultado.</td></tr>";
-      } else {
-        tb.innerHTML = rows.map(function (t) {
-          var resClass = t.resultado === "WIN" ? "log-win" : (t.resultado === "LOSS" ? "log-loss" : "log-be");
-          var pnlColor = parseFloat(t.profit||0) >= 0 ? "color:var(--buy)" : "color:var(--sell)";
-          return "<tr>" +
-            "<td>" + (t.datetime_brt || "—").split(" ")[1] + " " + (t.datetime_brt||"").split(" ")[0].slice(5) + "</td>" +
-            "<td>" + (t.direcao === "COMPRA" ? "&#9650;" : "&#9660;") + " " + (t.direcao||"?") + "</td>" +
-            "<td class='" + resClass + "'>" + (t.resultado || "—") + "</td>" +
-            "<td style='" + pnlColor + "'>" + _fmtBRL(parseFloat(t.profit||0)) + "</td>" +
-            "<td>" + (t.score || "—") + "</td>" +
-            "<td>" + (t.vwap_context || "—") + "</td>" +
-            "<td>" + (t.session || "—") + "</td>" +
-            "<td>" + (t.exit_reason || "—") + "</td>" +
-          "</tr>";
-        }).join("");
-      }
-    }
+    // Popula filtro de dia e renderiza
+    _logBuildDayFilter();
+    _logRenderView();
   })
   .catch(function (e) {
-    if (sb) sb.innerHTML = "<span style='color:var(--sell)'>Falha ao carregar log: " + e + "</span>";
+    var sb2 = document.getElementById("log-summary-bar");
+    if (sb2) sb2.innerHTML = "<span style='color:var(--sell)'>Falha ao carregar log: " + e + "</span>";
   });
 };
+
+function _logBuildDayFilter() {
+  var sel = document.getElementById("log-day-filter");
+  if (!sel) return;
+
+  // Datas únicas ordenadas decrescente
+  var seen = {};
+  _logAllTrades.forEach(function (t) {
+    var dt = (t.datetime_brt || "").split(" ")[0];
+    if (dt) seen[dt] = true;
+  });
+  var dates = Object.keys(seen).sort().reverse();
+
+  // Data de hoje para selecionar por padrão
+  var today = new Date();
+  var todayStr = today.getFullYear() + "-" +
+    String(today.getMonth()+1).padStart(2,"0") + "-" +
+    String(today.getDate()).padStart(2,"0");
+
+  sel.innerHTML = '<option value="">Todos (' + dates.length + ' dias)</option>' +
+    dates.map(function (d) {
+      var isToday = d === todayStr;
+      var label   = isToday ? d + " — Hoje" : d;
+      return '<option value="' + d + '"' + (isToday ? ' selected' : '') + '>' + label + '</option>';
+    }).join("");
+
+  sel.onchange = _logRenderView;
+}
+
+function _logRenderView() {
+  var sel        = document.getElementById("log-day-filter");
+  var filterDate = sel ? sel.value : "";
+  var trades     = filterDate
+    ? _logAllTrades.filter(function (t) { return (t.datetime_brt || "").startsWith(filterDate); })
+    : _logAllTrades;
+
+  _logRenderSummary(trades, filterDate);
+  _logRenderTable(trades);
+}
+
+function _logRenderSummary(trades, filterDate) {
+  var sb = document.getElementById("log-summary-bar");
+  var cb = document.getElementById("log-context-bars");
+  if (!sb) return;
+
+  var wins   = trades.filter(function (t) { return t.resultado === "WIN";  }).length;
+  var bes    = trades.filter(function (t) { return t.resultado === "BE";   }).length;
+  var losses = trades.filter(function (t) { return t.resultado === "LOSS"; }).length;
+  var total  = trades.length;
+  var pnl    = trades.reduce(function (s, t) { return s + parseFloat(t.profit || 0); }, 0);
+  var wr     = total > 0 ? wins / total * 100 : 0;
+  var avg    = total > 0
+    ? trades.reduce(function (s, t) { return s + parseFloat(t.score || 0); }, 0) / total
+    : 0;
+
+  var pnlColor = pnl >= 0 ? "var(--buy)" : "var(--sell)";
+  var wrColor  = wr  >= 55 ? "var(--buy)" : (wr >= 45 ? "var(--gold)" : "var(--sell)");
+
+  sb.innerHTML = [
+    _logStat("Trades",    total,                   "var(--text)"),
+    _logStat("✅ Wins",   wins,                    "var(--buy)"),
+    _logStat("➖ BE",     bes,                     "var(--gold)"),
+    _logStat("❌ Losses", losses,                  "var(--sell)"),
+    _logStat("Win Rate",  wr.toFixed(1) + "%",     wrColor),
+    _logStat("Score Méd", avg.toFixed(0),          "var(--text)"),
+    _logStat("P&L Total", _fmtBRL(pnl),            pnlColor),
+  ].join("");
+
+  // Context bars — só mostrar na visão geral (sem filtro de dia)
+  if (cb) {
+    if (!filterDate) {
+      var cbHtml = _logContextGroup("VWAP",   _logContextData.by_vwap)
+                 + _logContextGroup("Sessão", _logContextData.by_session)
+                 + _logContextGroup("Score",  _logContextData.by_score);
+      cb.innerHTML = cbHtml;
+    } else {
+      cb.innerHTML = "";
+    }
+  }
+}
+
+function _logRenderTable(trades) {
+  var tb = document.getElementById("log-tbody");
+  if (!tb) return;
+  if (trades.length === 0) {
+    tb.innerHTML = "<tr><td colspan='8' style='color:var(--muted);text-align:center;padding:12px'>Sem trades para este dia.</td></tr>";
+    return;
+  }
+  tb.innerHTML = trades.map(function (t) {
+    var resClass = t.resultado === "WIN" ? "log-win" : (t.resultado === "LOSS" ? "log-loss" : "log-be");
+    var pnlClr   = parseFloat(t.profit || 0) >= 0 ? "color:var(--buy)" : "color:var(--sell)";
+    var dt       = (t.datetime_brt || "—");
+    var hora     = dt.split(" ")[1] || "";
+    var data     = (dt.split(" ")[0] || "").slice(5);   // MM-DD
+    return "<tr>" +
+      "<td>" + hora + " " + data + "</td>" +
+      "<td>" + (t.direcao === "COMPRA" ? "&#9650;" : "&#9660;") + " " + (t.direcao || "?") + "</td>" +
+      "<td class='" + resClass + "'>" + (t.resultado || "—") + "</td>" +
+      "<td style='" + pnlClr + "'>" + _fmtBRL(parseFloat(t.profit || 0)) + "</td>" +
+      "<td>" + (t.score || "—") + "</td>" +
+      "<td>" + (t.vwap_context || "—") + "</td>" +
+      "<td>" + (t.session || "—") + "</td>" +
+      "<td>" + (t.exit_reason || "—") + "</td>" +
+    "</tr>";
+  }).join("");
+}
 
 function _logStat(label, val, color) {
   return "<div class='ls-item'>" +

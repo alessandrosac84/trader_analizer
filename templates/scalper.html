@@ -373,7 +373,7 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .lc-row   { display: flex; justify-content: space-between; gap: 12px; }
 .lc-key   { color: var(--muted); }
 .lc-pct   { font-weight: 700; }
-#log-table-wrap { overflow-y: auto; flex: 1; }
+#log-table-wrap { overflow-y: auto; flex: 1; min-height: 0; }
 #log-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 #log-table th {
   position: sticky; top: 0; background: var(--surface);
@@ -396,7 +396,8 @@ button:disabled { opacity: .4; cursor: not-allowed; }
     <select id="sym-select">
       <option value="WDON26" selected>WDON26 — Mini Dólar</option>
       <option value="WDOM26">WDOM26 — Mini Dólar (ant.)</option>
-      <option value="WINM26">WINM26 — Mini Índice</option>
+      <option value="WINQ26">WINQ26 — Mini Índice</option>
+      <option value="WINM26">WINM26 — Mini Índice (ant.)</option>
       <option value="GOLD11">GOLD11</option>
       <option value="BOVA11">BOVA11</option>
       <option value="IVVB11">IVVB11</option>
@@ -711,6 +712,11 @@ button:disabled { opacity: .4; cursor: not-allowed; }
     <div id="log-modal-box">
       <div id="log-modal-header">
         <span>&#128202; Log de Trades</span>
+        <select id="log-day-filter" title="Filtrar por dia"
+          style="background:var(--bg);border:1px solid var(--border);color:var(--text);
+                 border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer;min-width:130px">
+          <option value="">Todos os dias</option>
+        </select>
         <button onclick="document.getElementById('log-modal').style.display='none'">&#10005;</button>
       </div>
       <div id="log-summary-bar"></div>

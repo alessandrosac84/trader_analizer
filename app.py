@@ -77,6 +77,31 @@ def _cooldown_remaining_min() -> int:
     rem = _AUTOTRADE_COOLDOWN - (_time.time() - _last_autotrade_ts)
     return max(0, int(rem / 60))
 
+# ── Cooldown especial: proteção pós-abertura (09:00–09:30 BRT) ────────────────
+_ABERTURA_COOLDOWN_SEC  = 20 * 60   # 20 min de proteção após trade na abertura
+_last_abertura_trade_ts = 0.0       # epoch do último trade executado na janela
+
+def _is_abertura_window() -> bool:
+    """Retorna True se o horário BRT atual está na janela 09:00–09:30."""
+    from datetime import datetime, timezone, timedelta
+    brt = datetime.now(timezone(timedelta(hours=-3)))
+    return brt.hour == 9 and brt.minute < 30
+
+def _abertura_cooldown_active() -> bool:
+    """Retorna True se um trade foi feito na abertura e o cooldown ainda está ativo."""
+    if _last_abertura_trade_ts == 0.0:
+        return False
+    return (_time.time() - _last_abertura_trade_ts) < _ABERTURA_COOLDOWN_SEC
+
+def _abertura_cooldown_remaining_min() -> int:
+    rem = _ABERTURA_COOLDOWN_SEC - (_time.time() - _last_abertura_trade_ts)
+    return max(0, int(rem / 60))
+
+def _register_abertura_trade():
+    """Registra que um trade foi executado na janela de abertura."""
+    global _last_abertura_trade_ts
+    _last_abertura_trade_ts = _time.time()
+
 # ── Confirmação de fechamento — evita fechar por leitura instável do MT5 ──
 # Exige N leituras consecutivas sem posição antes de registrar o fechamento.
 _no_position_count   = {}   # tv_symbol -> int
@@ -698,12 +723,42 @@ def api_autotrade_execute():
             "error": "Auto-trade pausado remotamente via Telegram. Use /ativar para reativar.",
         })
 
+    # Verifica se meta diária já foi atingida (proteção de lucro)
+    try:
+        from services.telegram_commander import get_meta_diaria
+        from services.trade_log import auto_trades_stats
+        _meta = get_meta_diaria()
+        if _meta is not None:
+            _stats  = auto_trades_stats(today_only=True)
+            _pnl_hj = float(_stats.get("pnl_total_brl") or 0.0)
+            if _pnl_hj >= _meta:
+                from services.telegram_commander import set_autotrade_enabled
+                set_autotrade_enabled(False)   # garante que está pausado
+                return jsonify({
+                    "ok": False, "result": None,
+                    "error": (
+                        f"Meta diária de R${_meta:.0f} já atingida "
+                        f"(P&L hoje: R${_pnl_hj:+.2f}). "
+                        "Auto-trade pausado para proteger o lucro."
+                    ),
+                })
+    except Exception as _meta_exc:
+        logger.warning("Verificação de meta falhou (não bloqueia): %s", _meta_exc)
+
     # Cooldown no servidor — evita re-entrada mesmo se o JS resetar o debounce
     if _autotrade_in_cooldown():
         rem = _cooldown_remaining_min()
         return jsonify({
             "ok": False, "result": None,
             "error": f"Cooldown ativo no servidor — próxima entrada em ~{rem} min.",
+        })
+
+    # Proteção pós-abertura: após trade executado entre 09:00-09:30 BRT, aguarda 20 min
+    if _abertura_cooldown_active():
+        rem = _abertura_cooldown_remaining_min()
+        return jsonify({
+            "ok": False, "result": None,
+            "error": f"Cooldown pós-abertura ativo — proteção de 20 min após trade na janela 09:00-09:30. Próxima entrada em ~{rem} min.",
         })
 
     from services.trade_executor import execute_trade, DEFAULT_VOLUME, SCORE_MIN
@@ -731,8 +786,14 @@ def api_autotrade_execute():
                 interval=interval,
                 score_threshold=SCORE_MIN,
             )
-            if not ai_result.get("aprovado") and ai_result.get("veredito") == "BLOQUEAR":
-                # Registra bloqueio no histórico para rastreabilidade
+            # AGUARDAR e BLOQUEAR ambos impedem execução automática.
+            # BLOQUEAR = IA identificou contradição real.
+            # AGUARDAR = IA identificou incerteza / setup duvidoso.
+            # Em auto-trade, qualquer dúvida da IA deve paralisar a entrada.
+            _veredito_ia = ai_result.get("veredito", "")
+            if _veredito_ia in ("BLOQUEAR", "AGUARDAR"):
+                _close_reason = "BLOQUEADO_IA" if _veredito_ia == "BLOQUEAR" else "AGUARDADO_IA"
+                # Registra no histórico para rastreabilidade
                 try:
                     from services.trade_log import save_auto_trade, close_auto_trade
                     blocked_id = save_auto_trade(
@@ -746,13 +807,13 @@ def api_autotrade_execute():
                         score        = score,
                         ai_validated = True,
                         ai_confidence= ai_result.get("confianca"),
-                        ai_veredito  = "BLOQUEAR",
+                        ai_veredito  = _veredito_ia,
                         ai_motivo    = ai_result.get("motivo", "")[:200],
                     )
                     close_auto_trade(
                         trade_id     = blocked_id,
                         exit_price   = entrada or 0,
-                        close_reason = "BLOQUEADO_IA",
+                        close_reason = _close_reason,
                         pnl_pts      = 0,
                         pnl_brl      = 0.0,
                     )
@@ -764,14 +825,46 @@ def api_autotrade_execute():
                     notify_ia_blocked(tv_symbol, acao, score, ai_result.get("motivo", ""))
                 except Exception:
                     pass
+                _msg_prefix = "IA bloqueou" if _veredito_ia == "BLOQUEAR" else "IA pediu aguardar"
                 return jsonify({
                     "ok":    False,
                     "result": None,
-                    "error": f"IA bloqueou o trade: {ai_result.get('motivo', '')}",
+                    "error": f"{_msg_prefix} o trade: {ai_result.get('motivo', '')}",
                     "ai": ai_result,
                 })
         except Exception as ai_exc:
             logger.warning("AI validator falhou, continuando: %s", ai_exc)
+
+    # ── Partial-close mode: 3 contratos, TPs calculados pelo R/R do SL ──────
+    # TPs derivados do risco real (distância entrada→SL), nunca do sinal.
+    # MT5 TP = TP1 (safety net): se o monitor bg não disparar a tempo,
+    # MT5 fecha os 3 no TP1 — lucro assegurado.
+    _pcm_tp1 = None    # TP1 (1:1 R/R sobre SL) — safety net no MT5
+    _pcm_tp2 = None    # TP2 (1.5:1 R/R sobre SL) — alvo do contrato restante
+    try:
+        from services import partial_close_manager as pcm
+        if pcm.is_enabled() and acao in ("COMPRA", "VENDA") and sl:
+            _entrada_f = float(entrada) if entrada else 0.0
+            _sl_f      = float(sl)
+            volume     = float(pcm.ENTRY_VOLUME)   # 3 contratos
+            if _entrada_f:
+                # TPs calculados puramente pelo R/R — ignora TP do sinal
+                _pcm_tp1, _pcm_tp2 = pcm.calc_tp_from_rr(_entrada_f, _sl_f, acao)
+            else:
+                # Ordem a mercado: sem entrada → adota TP do sinal como TP1 provisório
+                _pcm_tp1 = float(tp1) if tp1 else None
+                _pcm_tp2 = None
+            # MT5 TP aponta para TP1 calculado (safety net para todos os 3 contratos)
+            if _pcm_tp1:
+                tp1 = _pcm_tp1
+            logger.info(
+                "Partial-mode ON: vol=%d  entry=%.0f  sl=%.0f  "
+                "→ TP1(1:1)=%.0f  TP2(1.5:1)=%s",
+                pcm.ENTRY_VOLUME, _entrada_f, _sl_f, _pcm_tp1 or 0,
+                f"{_pcm_tp2:.0f}" if _pcm_tp2 else "recalc pós-execução",
+            )
+    except Exception as _pcm_init_err:
+        logger.warning("Partial-config init falhou: %s", _pcm_init_err)
 
     result, error = execute_trade(
         tv_symbol=tv_symbol,
@@ -809,6 +902,10 @@ def api_autotrade_execute():
     # Registra timestamp para cooldown no servidor
     if result and not error:
         _register_autotrade_ts()
+        # Se o trade ocorreu na janela de abertura (09:00–09:30 BRT), registra proteção especial
+        if _is_abertura_window():
+            _register_abertura_trade()
+            logger.info("Cooldown pós-abertura ativado: trade executado na janela 09:00-09:30 BRT")
 
     # Notifica Telegram se trade executado
     if result and not error:
@@ -1194,6 +1291,77 @@ def api_autotrade_manage():
     })
 
 
+@app.route("/api/autotrade/meta-config", methods=["GET", "POST"])
+def api_autotrade_meta_config():
+    """
+    Configura e consulta a meta diária de P&L.
+
+    GET  → retorna meta, P&L do dia, se foi atingida, se auto-trade está ativo
+    POST → {"meta": 300.0}  — define meta em R$ (0 ou null = desativa)
+    """
+    from services.telegram_commander import (
+        get_meta_diaria, set_meta_diaria,
+        is_autotrade_enabled, set_autotrade_enabled,
+    )
+    from services.trade_log import auto_trades_stats
+
+    if request.method == "POST":
+        body  = request.get_json(silent=True) or {}
+        valor = body.get("meta")
+        if valor is None or float(valor) <= 0:
+            set_meta_diaria(None)
+        else:
+            set_meta_diaria(float(valor))
+        # Se quiserem reativar o auto-trade junto (reset após pausa por meta)
+        if body.get("reativar"):
+            set_autotrade_enabled(True)
+
+    try:
+        stats   = auto_trades_stats(today_only=True)
+        pnl_brl = float(stats.get("pnl_total_brl") or 0.0)
+        total   = int(stats.get("total") or 0)
+    except Exception:
+        pnl_brl = 0.0
+        total   = 0
+
+    meta     = get_meta_diaria()
+    atingida = meta is not None and pnl_brl >= meta
+
+    return jsonify({
+        "ok":              True,
+        "meta":            meta,
+        "pnl_brl_hoje":    round(pnl_brl, 2),
+        "trades_hoje":     total,
+        "meta_atingida":   atingida,
+        "autotrade_ativo": is_autotrade_enabled(),
+    })
+
+
+@app.route("/api/autotrade/partial-config", methods=["GET", "POST"])
+def api_autotrade_partial_config():
+    """
+    GET  → retorna estado atual do modo 3-contratos (enabled, tp1_rr, tp2_rr)
+    POST → {"enabled": true|false}  — ativa ou desativa o modo partial-close
+    """
+    from services import partial_close_manager as pcm
+
+    if request.method == "POST":
+        body    = request.get_json(silent=True) or {}
+        enabled = bool(body.get("enabled", False))
+        pcm.set_enabled(enabled)
+        logger.info("Partial-close 3-contratos via dashboard: %s", "ON" if enabled else "OFF")
+
+    return jsonify({
+        "ok":             True,
+        "enabled":        pcm.is_enabled(),
+        "tp1_rr":         pcm.TP1_RR,
+        "tp2_rr":         pcm.TP2_RR,
+        "entry_volume":   pcm.ENTRY_VOLUME,
+        "partial_volume": pcm.PARTIAL_CLOSE_VOLUME,
+        "state":          {k: pcm.get_state(k) for k in list(pcm._state.keys())},
+    })
+
+
 @app.route("/api/autotrade/close", methods=["POST"])
 def api_autotrade_close():
     """Fecha todas as posições abertas pelo bot para o símbolo dado."""
@@ -1329,7 +1497,9 @@ def api_autotrade_report():
         """, (date_from.isoformat(), date_to.isoformat())).fetchall()
 
     trades = [dict(r) for r in rows]
-    reais  = [t for t in trades if t.get("close_reason") != "BLOQUEADO_IA"]
+    # Exclui BLOQUEADO_IA e AGUARDADO_IA — nenhum desses foi executado de verdade
+    _excluidos = {"BLOQUEADO_IA", "AGUARDADO_IA"}
+    reais  = [t for t in trades if t.get("close_reason") not in _excluidos]
     fechados = [t for t in reais if t.get("closed_at")]
     abertos  = [t for t in reais if not t.get("closed_at")]
 
@@ -1611,6 +1781,13 @@ def api_verify_mt5_batch():
 init_db()
 init_mt5_signals()
 init_auto_trades()
+
+# ── Inicia monitor de fechamento parcial (thread daemon bg a cada 2s) ─────────
+try:
+    from services.partial_close_monitor import start_monitor as _start_pcm
+    _start_pcm()
+except Exception as _pcm_start_err:
+    logger.warning("partial_close_monitor não pôde ser iniciado: %s", _pcm_start_err)
 
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False, host="0.0.0.0", port=int(os.getenv("PORT", "5000")))

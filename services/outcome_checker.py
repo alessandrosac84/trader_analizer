@@ -23,7 +23,7 @@ def _infer_mt5_symbol(ativo: str) -> "str | None":
     a = str(ativo).upper().strip()
     # Futuros B3
     if "WIN" in a:
-        return os.getenv("WIN_MT5_SYMBOL", "WINM26")
+        return os.getenv("WIN_MT5_SYMBOL", "WINQ26")
     if "WDO" in a:
         return os.getenv("WDO_MT5_SYMBOL", "WDOM26")
     # Ações e outros — usa direto

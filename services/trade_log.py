@@ -9,7 +9,10 @@ Ciclo de vida de um trade:
 A tabela auto_trades fica no mesmo SQLite do projeto (data/trade_ai.db).
 """
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+
+# Fuso horário BRT (UTC-3) — timestamps salvos no horário local de Brasília
+_BRT = timezone(timedelta(hours=-3))
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +100,7 @@ def save_auto_trade(
     Salva um novo trade automatico.
     Retorna o ID do registro criado.
     """
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(_BRT).isoformat()
     with _conn() as conn:
         cur = conn.execute("""
             INSERT INTO auto_trades
@@ -128,7 +131,7 @@ def close_auto_trade(
     close_reason: 'TP1' | 'TP2' | 'TP3' | 'STOP' | 'MANUAL' | 'TRAILING' |
                   'REVERSAO' | 'TEMPO' | 'BREAKEVEN'
     """
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(_BRT).isoformat()
     with _conn() as conn:
         row = conn.execute("SELECT id FROM auto_trades WHERE id=?", (trade_id,)).fetchone()
         if not row:
@@ -199,9 +202,10 @@ def auto_trades_stats(today_only: bool = False) -> dict:
             rows = conn.execute("SELECT * FROM auto_trades").fetchall()
     rows = [dict(r) for r in rows]
 
-    # Separa bloqueados IA dos demais (bloqueados não têm P&L real)
-    bloqueados = [r for r in rows if r.get("close_reason") == "BLOQUEADO_IA"]
-    reais      = [r for r in rows if r.get("close_reason") != "BLOQUEADO_IA"]
+    # Separa sinais não-executados dos demais (bloqueados/aguardados não têm P&L real)
+    _nao_executados = {"BLOQUEADO_IA", "AGUARDADO_IA"}
+    bloqueados = [r for r in rows if r.get("close_reason") in _nao_executados]
+    reais      = [r for r in rows if r.get("close_reason") not in _nao_executados]
 
     total    = len(rows)
     abertos  = sum(1 for r in reais if not r.get("closed_at"))
@@ -221,7 +225,7 @@ def auto_trades_stats(today_only: bool = False) -> dict:
         "total":         total,
         "abertos":       abertos,
         "fechados":      fechados,
-        "bloqueados_ia": len(bloqueados),
+        "bloqueados_ia": len(bloqueados),   # inclui BLOQUEADO_IA + AGUARDADO_IA
         "wins":          len(gains),
         "losses":        len(losses),
         "win_rate_pct":  round(len(gains) / fechados * 100) if fechados else 0,

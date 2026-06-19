@@ -2,12 +2,12 @@
 market_service.py - Dados de mercado via MetaTrader5 (primario) + Yahoo Finance (fallback).
 
 Prioridade de fonte de dados:
-  1. MetaTrader5 (XP) - WINM26/WDOM26 em tempo real, volume real, VWAP funcional
+  1. MetaTrader5 (XP) - WINQ26/WDON26 em tempo real, volume real, VWAP funcional
   2. Yahoo Finance    - fallback para acoes B3 e quando MT5 nao esta disponivel
   3. Finnhub         - noticias e sentimento (requer FINNHUB_API_KEY no .env)
 
 Variaveis de ambiente (.env):
-  WIN_MT5_SYMBOL=WINM26   # atualizar ao rolar contrato (ex: WINQ26 em set/2026)
+  WIN_MT5_SYMBOL=WINQ26   # atualizar ao rolar contrato (ex: WINV26 em out/2026)
   WDO_MT5_SYMBOL=WDOM26
   FINNHUB_API_KEY=...
 """
@@ -33,7 +33,7 @@ except ImportError:
     logger.warning("MetaTrader5 nao instalado -- usando Yahoo Finance como fallback.")
 
 # Simbolos do contrato atual (atualizar ao rolar)
-WIN_MT5_SYMBOL = os.getenv("WIN_MT5_SYMBOL", "WINM26")
+WIN_MT5_SYMBOL = os.getenv("WIN_MT5_SYMBOL", "WINQ26")
 WDO_MT5_SYMBOL = os.getenv("WDO_MT5_SYMBOL", "WDOM26")
 
 # Mapeamento TradingView -> MT5 (apenas futuros B3 disponiveis na XP)

@@ -195,10 +195,12 @@ def handle_sc_command(token: str, chat_id: str, text: str) -> None:
     elif cmd == "/sc_on":
         try:
             from blueprints.scalper_bp import _auto
-            _auto["enabled"] = True
-            _auto["signal_count"] = 0
+            _auto["enabled"]            = True
+            _auto["signal_count"]       = 0
+            _auto["paused_until"]       = 0.0   # limpa pausa automática
+            _auto["consecutive_losses"] = 0     # reseta contador
             notify_auto_changed(True, "via Telegram")
-            reply("⚡ <b>SCALPER</b> — 🤖 Auto-Trade <b>ATIVADO</b>")
+            reply("⚡ <b>SCALPER</b> — 🤖 Auto-Trade <b>ATIVADO</b>\n✅ Pausa automática removida (contador zerado)")
         except Exception as exc:
             reply(f"❌ Erro: {exc}")
 

@@ -248,7 +248,7 @@ def get_log_summary() -> dict:
             "by_score":  score_ranges,
             "last_trades": [
                 {k: r.get(k) for k in ["datetime_brt","direcao","resultado","profit","score","vwap_context","session","exit_reason"]}
-                for r in rows[-20:]
+                for r in rows
             ][::-1],
         }
     except Exception as exc:

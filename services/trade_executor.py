@@ -23,7 +23,7 @@ B3_CLOSE       = dt_time(17, 30)
 
 # Mapeamento TV_SYMBOL -> MT5_SYMBOL para order_send
 _TV_TO_MT5_TRADE = {
-    "BMFBOVESPA:WIN1!": os.getenv("WIN_MT5_SYMBOL", "WINM26"),
+    "BMFBOVESPA:WIN1!": os.getenv("WIN_MT5_SYMBOL", "WINQ26"),
     "BMFBOVESPA:WDO1!": os.getenv("WDO_MT5_SYMBOL", "WDOM26"),
     "BMFBOVESPA:PETR4": "PETR4",
     "BMFBOVESPA:RADL3": "RADL3",
@@ -292,6 +292,144 @@ def modify_position_sl(tv_symbol: str, new_sl: float) -> "tuple[bool, str | None
         return False, f"MT5 retcode {r.retcode if r else 'None'}: {r.comment if r else ''}"
     except Exception as exc:
         return False, str(exc)
+
+
+def modify_position_sltp(
+    tv_symbol: str,
+    new_sl: float,
+    new_tp: float,
+) -> "tuple[bool, str | None]":
+    """
+    Modifica SL e TP de uma posição aberta simultaneamente.
+    Usado pelo partial_close_monitor após fechar 2 contratos:
+      - new_sl = entry_price (breakeven)
+      - new_tp = tp2         (alvo final para o contrato restante)
+    """
+    open_pos, err = get_open_positions(tv_symbol)
+    if err:
+        return False, err
+    if not open_pos:
+        return False, "Nenhuma posição aberta."
+
+    try:
+        import MetaTrader5 as mt5
+        if not mt5.initialize(**_mt5_init_kwargs()):
+            return False, f"MT5 não inicializado: {mt5.last_error()}"
+
+        mt5_symbol = _mt5_symbol(tv_symbol) or tv_symbol
+        pos = open_pos[0]
+        req = {
+            "action":   mt5.TRADE_ACTION_SLTP,
+            "symbol":   mt5_symbol,
+            "position": pos["ticket"],
+            "sl":       float(new_sl),
+            "tp":       float(new_tp),
+        }
+        r = mt5.order_send(req)
+        mt5.shutdown()
+        if r and r.retcode == mt5.TRADE_RETCODE_DONE:
+            logger.info(
+                "modify_position_sltp: %s SL=%.0f TP=%.0f OK",
+                tv_symbol, new_sl, new_tp,
+            )
+            return True, None
+        return False, f"MT5 retcode {r.retcode if r else 'None'}: {r.comment if r else ''}"
+    except Exception as exc:
+        return False, str(exc)
+
+
+def close_partial_position(
+    tv_symbol: str,
+    volume_to_close: float,
+) -> "tuple[dict | None, str | None]":
+    """
+    Fecha PARCIALMENTE uma posição aberta, reduzindo `volume_to_close` contratos.
+
+    Usado na estratégia 3-contratos: fecha 2 no TP1, mantém 1 até TP2.
+    Não altera nem prejudica o comportamento das posições de 1 contrato.
+
+    Retorna (result_dict | None, error_msg | None).
+    """
+    open_pos, err = get_open_positions(tv_symbol)
+    if err:
+        return None, err
+    if not open_pos:
+        return None, "Nenhuma posição aberta para fechamento parcial."
+
+    try:
+        import MetaTrader5 as mt5
+        if not mt5.initialize(**_mt5_init_kwargs()):
+            return None, f"MT5 não inicializado: {mt5.last_error()}"
+
+        mt5_symbol   = _mt5_symbol(tv_symbol) or tv_symbol
+        pos          = open_pos[0]
+        actual_vol   = float(pos.get("volume", 1.0))
+        vol_close    = min(float(volume_to_close), actual_vol)
+
+        tick = mt5.symbol_info_tick(mt5_symbol)
+        if tick is None:
+            mt5.shutdown()
+            return None, f"Tick não disponível para '{mt5_symbol}'."
+
+        close_type = mt5.ORDER_TYPE_SELL if pos["type"] == 0 else mt5.ORDER_TYPE_BUY
+        price      = tick.bid             if pos["type"] == 0 else tick.ask
+
+        # Filling mode
+        _FILL_IOC = getattr(mt5, "SYMBOL_FILLING_IOC", 2)
+        _FILL_FOK = getattr(mt5, "SYMBOL_FILLING_FOK", 1)
+        filling   = mt5.ORDER_FILLING_RETURN
+        try:
+            sym_info = mt5.symbol_info(mt5_symbol)
+            if sym_info:
+                if sym_info.filling_mode & _FILL_IOC:
+                    filling = mt5.ORDER_FILLING_IOC
+                elif sym_info.filling_mode & _FILL_FOK:
+                    filling = mt5.ORDER_FILLING_FOK
+        except Exception:
+            pass
+
+        req = {
+            "action":       mt5.TRADE_ACTION_DEAL,
+            "symbol":       mt5_symbol,
+            "volume":       vol_close,
+            "type":         close_type,
+            "position":     pos["ticket"],
+            "price":        price,
+            "deviation":    30,
+            "magic":        MAGIC_NUMBER,
+            "comment":      BOT_COMMENT + "-partial",
+            "type_time":    mt5.ORDER_TIME_GTC,
+            "type_filling": filling,
+        }
+
+        r = mt5.order_send(req)
+        mt5.shutdown()
+
+        if r is None:
+            return None, "order_send retornou None."
+        if r.retcode != mt5.TRADE_RETCODE_DONE:
+            return None, f"MT5 retcode {r.retcode}: {r.comment}"
+
+        out = {
+            "order":          r.order,
+            "deal":           r.deal,
+            "volume_closed":  vol_close,
+            "price":          r.price,
+            "retcode":        r.retcode,
+        }
+        logger.info(
+            "PARTIAL-CLOSE: ticket=%s vol=%.1f price=%.0f order=%s",
+            pos["ticket"], vol_close, r.price, r.order,
+        )
+        return out, None
+
+    except Exception as exc:
+        logger.exception("close_partial_position erro: %s", exc)
+        try:
+            import MetaTrader5 as mt5; mt5.shutdown()
+        except Exception:
+            pass
+        return None, str(exc)
 
 
 def close_all_positions(tv_symbol: str) -> "tuple[list, str | None]":

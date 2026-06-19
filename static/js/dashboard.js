@@ -3582,13 +3582,42 @@ function loadAutoTradesHistory() {
       if (emptyEl) emptyEl.hidden = true;
       if (wrapEl)  wrapEl.hidden  = false;
 
+      // ── Helpers BRT: converte ISO UTC para horário de Brasília (UTC-3) ──────
+      function _brtTime(iso) {
+        if (!iso) return "—";
+        var d = new Date(iso);
+        if (isNaN(d.getTime())) return iso.slice(11, 19);
+        d = new Date(d.getTime() - 3 * 3600 * 1000);
+        return String(d.getUTCHours()).padStart(2, "0") + ":" +
+               String(d.getUTCMinutes()).padStart(2, "0") + ":" +
+               String(d.getUTCSeconds()).padStart(2, "0");
+      }
+      function _brtDate(iso) {
+        if (!iso) return "—";
+        var d = new Date(iso);
+        if (isNaN(d.getTime())) return iso.slice(0, 10);
+        d = new Date(d.getTime() - 3 * 3600 * 1000);
+        return d.getUTCFullYear() + "-" +
+               String(d.getUTCMonth() + 1).padStart(2, "0") + "-" +
+               String(d.getUTCDate()).padStart(2, "0");
+      }
+      function _brtDatetime(iso) {
+        if (!iso) return "—";
+        return _brtDate(iso) + " " + _brtTime(iso);
+      }
+      // (YYYY-MM-DD HH:MM) -> slice(5) dá MM-DD HH:MM para tabela compacta
+      function _brtShort(iso) {
+        var full = _brtDatetime(iso);
+        return full === "—" ? "—" : full.slice(5, 16);
+      }
+
       if (!bodyEl) return;
       bodyEl.innerHTML = items.map(function (t) {
         var isOpen     = !t.closed_at;
         var acao       = t.acao || "—";
         var acaoCls    = acao === "COMPRA" ? "rec-buy" : "rec-sell";
-        var hora       = t.opened_at ? t.opened_at.slice(11, 19) : "—";
-        var data       = t.opened_at ? t.opened_at.slice(0, 10) : "—";
+        var hora       = t.opened_at ? _brtTime(t.opened_at)    : "—";
+        var data       = t.opened_at ? _brtDate(t.opened_at)   : "—";
         var pnlPts     = t.pnl_pts;
         var pnlBrl     = t.pnl_brl;
         var pnlPtsStr  = isOpen ? "<em>aberto</em>" :
@@ -4212,6 +4241,7 @@ function loadAutoTradesHistory() {
     "BREAKEVEN": "⚖️ Breakeven", "REVERSAO": "↩️ Reversão",
     "FECHADO_MT5": "📋 MT5 fechou", "FECHADO_MT5_GAIN": "📋 MT5 (lucro)",
     "FECHADO_MT5_STOP": "📋 MT5 (perda)", "BLOQUEADO_IA": "🚫 Bloqueado IA",
+    "AGUARDADO_IA": "⏸ Aguardado IA",
     "TEMPO": "⏱ Tempo"
   };
 
@@ -4223,7 +4253,7 @@ function loadAutoTradesHistory() {
     if (!tbody) return;
     tbody.innerHTML = "";
 
-    var reais = trades.filter(function (t) { return t.close_reason !== "BLOQUEADO_IA"; });
+    var reais = trades.filter(function (t) { return t.close_reason !== "BLOQUEADO_IA" && t.close_reason !== "AGUARDADO_IA"; });
     if (reais.length === 0) {
       if (sec) sec.style.display = "none";
       if (empty) empty.style.display = "";
@@ -4233,7 +4263,7 @@ function loadAutoTradesHistory() {
     if (empty) empty.style.display = "none";
 
     reais.forEach(function (t) {
-      var dt   = (t.opened_at || "").slice(0, 16).replace("T", " ");
+      var dt   = _brtShort(t.opened_at || "");
       var pts  = t.pnl_pts !== null && t.pnl_pts !== undefined;
       var brl  = t.pnl_brl !== null && t.pnl_brl !== undefined;
       var ptsStr = pts ? ((t.pnl_pts >= 0 ? "+" : "") + Math.round(t.pnl_pts) + " pts") : (t.closed_at ? "—" : "<em style='color:var(--text-muted)'>aberto</em>");
@@ -4242,7 +4272,7 @@ function loadAutoTradesHistory() {
       var ia = t.ai_confidence ? (t.ai_veredito === "EXECUTAR" ? "<span style='color:#22c55e'>✓ " + t.ai_confidence + "%</span>" : "<span style='color:#ef4444'>✗ " + t.ai_veredito + "</span>") : "—";
       var row = document.createElement("tr");
       row.innerHTML =
-        "<td style='white-space:nowrap;font-size:.8rem'>" + dt.slice(5) + "</td>" +
+        "<td style='white-space:nowrap;font-size:.8rem'>" + dt + "</td>" +
         "<td><span style='color:" + (t.acao === "COMPRA" ? "#22c55e" : "#ef4444") + ";font-weight:600'>" + (t.acao || "—") + "</span></td>" +
         "<td>" + (t.score !== null && t.score !== undefined ? "|" + Math.abs(t.score) + "|" : "—") + "</td>" +
         "<td>" + (t.entry_price ? Math.round(t.entry_price) : "—") + "</td>" +
@@ -4308,6 +4338,7 @@ function loadAutoTradesHistory() {
         loadReport();
       });
     });
+    var prev = el("tr-prev"); if (prev) prev.addEventListener("click", function () { stepDate(-1); loadReport(); });
     var next = el("tr-next"); if (next) next.addEventListener("click", function () { stepDate(+1); loadReport(); });
     var today = el("tr-today"); if (today) today.addEventListener("click", function () { _refDate = new Date(); loadReport(); });
     var ref = el("tr-refresh"); if (ref) ref.addEventListener("click", loadReport);

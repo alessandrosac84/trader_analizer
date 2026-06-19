@@ -6,6 +6,7 @@
   <title>Trade AI — Dashboard B3</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=8" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/trade-view.css') }}?v=4" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/monitor-enhanced.css') }}?v=1" />
 </head>
 <body>
   <div class="shell">
@@ -415,7 +416,7 @@
         <!-- Grafico LightweightCharts (MT5) -->
         <div class="monitor-chart-wrap card">
           <div class="monitor-chart-header" style="display:flex;align-items:center;justify-content:space-between;padding:0.5rem 1rem;">
-            <span id="mt5-chart-label" style="font-weight:600">Grafico MT5 &mdash; WINM26 (15m)</span>
+            <span id="mt5-chart-label" style="font-weight:600">Grafico MT5 &mdash; WINQ26 (15m)</span>
             <div style="display:flex;gap:0.5rem;font-size:0.8rem;">
               <span style="color:#f0c420">&#9632; EMA9</span>
               <span style="color:#2196F3">&#9632; EMA21</span>
@@ -550,7 +551,48 @@
               <button id="at-close-btn" class="btn btn-ghost btn-sm" title="Fechar todas as posições abertas pelo bot">
                 ✖ Fechar Posições
               </button>
+              <!-- ══ Modo 3-contratos (partial-close) — estrutura própria, isolada ══ -->
+              <button id="at-partial-toggle" class="btn btn-ghost btn-sm"
+                      title="3 contratos: TP1=1:1 R/R (fecha 2), TP2=1.5:1 R/R (1 restante) — ambos calculados pelo SL"
+                      style="border:1px solid #6b7280;font-size:.78rem;padding:.25rem .7rem">
+                📊 3-Contr: <span id="at-partial-label">OFF</span>
+              </button>
+              <!-- ══ Meta diária — proteção de lucro, isolada ══ -->
+              <span id="meta-pnl-badge"
+                    title="P&L do dia vs meta"
+                    style="font-size:.78rem;padding:.25rem .7rem;border-radius:4px;border:1px solid #6b7280;
+                           background:transparent;cursor:pointer;user-select:none"
+                    onclick="document.getElementById('meta-panel').style.display=
+                      document.getElementById('meta-panel').style.display==='none'?'flex':'none'">
+                🎯 Meta: <span id="meta-pnl-label">–</span>
+              </span>
             </div>
+          </div>
+          <!-- ══ Painel de meta diária (expansível) ══ -->
+          <div id="meta-panel"
+               style="display:none;align-items:center;gap:.5rem;margin-top:.4rem;
+                      padding:.4rem .6rem;background:var(--bg-secondary,#1a1a2e);
+                      border-radius:6px;border:1px solid #374151;flex-wrap:wrap">
+            <span style="font-size:.78rem;color:var(--text-muted)">Meta R$:</span>
+            <input id="meta-input" type="number" min="0" step="50" placeholder="ex: 300"
+                   style="width:90px;padding:.2rem .4rem;border-radius:4px;
+                          border:1px solid #4b5563;background:var(--bg-card,#111827);
+                          color:var(--text-primary,#f9fafb);font-size:.82rem" />
+            <button id="meta-set-btn" class="btn btn-ghost btn-sm"
+                    style="font-size:.76rem;padding:.2rem .6rem;border:1px solid #4b5563">
+              Definir
+            </button>
+            <button id="meta-clear-btn" class="btn btn-ghost btn-sm"
+                    style="font-size:.76rem;padding:.2rem .6rem;border:1px solid #4b5563">
+              Cancelar meta
+            </button>
+            <span id="meta-reativar-wrap" style="display:none">
+              <button id="meta-reativar-btn" class="btn btn-ghost btn-sm"
+                      style="font-size:.76rem;padding:.2rem .6rem;border:1px solid #22c55e;color:#22c55e">
+                ▶ Reativar auto-trade
+              </button>
+            </span>
+            <span id="meta-status-inline" style="font-size:.76rem;color:var(--text-muted)"></span>
           </div>
           <!-- Status de execução -->
           <div id="at-status" style="margin-top:.6rem;font-size:.82rem;color:var(--text-muted);min-height:1.2em"></div>
@@ -1220,6 +1262,369 @@
     };
   </script>
   <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=40" defer></script>
+
+  <!-- ══ Monitor Enhanced — visual-only script (zero JS logic changes) ══ -->
+  <script>
+  (function () {
+    'use strict';
+
+    function $id(id) { return document.getElementById(id); }
+
+    function watch(el, fn) {
+      if (!el) return;
+      fn();
+      new MutationObserver(fn).observe(el, { childList: true, characterData: true, subtree: true });
+    }
+
+    /* 1. Manage panel P&L color */
+    function setupManagePnL() {
+      ['mgmt-pnl-pts', 'mgmt-pnl-brl'].forEach(function (id) {
+        var el = $id(id);
+        if (!el) return;
+        watch(el, function () {
+          var t = el.textContent || '';
+          el.classList.remove('me-positive', 'me-negative');
+          if (/\+\d/.test(t))                                  el.classList.add('me-positive');
+          else if (/-\d/.test(t) && t.trim() !== '—')     el.classList.add('me-negative');
+        });
+      });
+    }
+
+    /* 2. Stats row P&L color */
+    function setupStatsPnL() {
+      ['at-stat-pnl-pts', 'at-stat-pnl-brl'].forEach(function (id) {
+        var el = $id(id);
+        if (!el) return;
+        watch(el, function () {
+          var t = el.textContent || '';
+          el.style.color = /\+\d/.test(t)                              ? '#3ecf8e'
+                         : (/-\d/.test(t) && t.trim() !== '—')    ? '#f47171'
+                         : '';
+        });
+      });
+    }
+
+    /* 3. Win rate progress bar under the Win% card */
+    function setupWinRateBar() {
+      var statEl = $id('at-stat-winrate');
+      if (!statEl || !statEl.parentElement) return;
+      var wrap = document.createElement('div');
+      wrap.id  = 'me-winrate-bar-wrap';
+      var bar  = document.createElement('div');
+      bar.id   = 'me-winrate-bar';
+      wrap.appendChild(bar);
+      statEl.parentElement.appendChild(wrap);
+      watch(statEl, function () {
+        var pct = parseFloat(statEl.textContent) || 0;
+        bar.style.width      = Math.min(100, pct) + '%';
+        bar.style.background = pct >= 55 ? '#3ecf8e' : pct >= 40 ? '#e8c547' : '#f47171';
+      });
+    }
+
+    /* 4. Outcome cards mini progress bars */
+    function setupOutcomeBars() {
+      [
+        { id: 'mt5-oc-tp1-pct',  color: '#3ecf8e' },
+        { id: 'mt5-oc-tp2-pct',  color: '#3b82f6' },
+        { id: 'mt5-oc-tp3-pct',  color: '#a855f7' },
+        { id: 'mt5-oc-stop-pct', color: '#f47171' }
+      ].forEach(function (item) {
+        var el = $id(item.id);
+        if (!el || !el.parentElement) return;
+        var wrap = document.createElement('div');
+        wrap.className = 'me-card-bar-wrap';
+        var bar = document.createElement('div');
+        bar.className = 'me-card-bar';
+        bar.style.background = item.color;
+        bar.style.width = '0%';
+        wrap.appendChild(bar);
+        el.parentElement.appendChild(wrap);
+        watch(el, function () {
+          bar.style.width = Math.min(100, parseFloat(el.textContent) || 0) + '%';
+        });
+      });
+    }
+
+    /* 5. Recommendation box colored border */
+    function setupRecBox() {
+      var lblEl = $id('mgmt-rec-label');
+      var boxEl = $id('mgmt-rec-box');
+      if (!lblEl || !boxEl) return;
+      watch(lblEl, function () {
+        var t = (lblEl.textContent || '').toUpperCase();
+        boxEl.classList.remove('me-rec-hold', 'me-rec-close', 'me-rec-move');
+        if (!t || t === '—') return;
+        if (/FECHAR|ENCERR|SAIR/.test(t))                       boxEl.classList.add('me-rec-close');
+        else if (/MOVER|AJUST|BREAKEVEN|BREAKEV/.test(t))       boxEl.classList.add('me-rec-move');
+        else                                                     boxEl.classList.add('me-rec-hold');
+      });
+    }
+
+    /* 6. Auto-trade toggle visual ON state */
+    function setupAutoToggle() {
+      var btn = $id('at-toggle');
+      if (!btn) return;
+      watch(btn, function () {
+        btn.classList.toggle('me-at-on', (btn.textContent || '').toUpperCase().includes(' ON'));
+      });
+    }
+
+    /* 7. History table row colors */
+    function setupHistoryColors() {
+      var tbody = $id('at-history-body');
+      if (!tbody) return;
+      function colorRows() {
+        tbody.querySelectorAll('tr').forEach(function (tr) {
+          tr.classList.remove('me-row-win', 'me-row-loss', 'me-row-blocked');
+          var cells = tr.querySelectorAll('td');
+          if (!cells.length) return;
+          var iaCell  = cells[cells.length - 1];  /* IA column — last */
+          var pnlCell = cells[9];                  /* P&L pts column   */
+          if (iaCell && /bloqueado/i.test(iaCell.textContent)) {
+            tr.classList.add('me-row-blocked');
+          } else if (pnlCell) {
+            var raw = (pnlCell.textContent || '').replace(/[^\d.+\-]/g, '');
+            var n   = parseFloat(raw);
+            if (raw && !isNaN(n)) tr.classList.add(n >= 0 ? 'me-row-win' : 'me-row-loss');
+          }
+        });
+      }
+      new MutationObserver(colorRows).observe(tbody, { childList: true, subtree: true });
+      colorRows();
+    }
+
+    /* 8. Chart legend pills */
+    function setupChartPills() {
+      var header = document.querySelector('.monitor-chart-header');
+      if (!header) return;
+      header.querySelectorAll('div > span[style*="color"]').forEach(function (s) {
+        if (s.getAttribute('data-me')) return;
+        s.className = 'me-legend-pill';
+        s.style.border       = '1px solid ' + s.style.color;
+        s.style.borderRadius = '4px';
+        s.style.padding      = '1px 7px';
+        s.style.background   = 'transparent';
+        s.setAttribute('data-me', '1');
+      });
+    }
+
+    /* 9. Status bar live dot */
+    function setupStatusDot() {
+      var bar = document.querySelector('#tab-mt5 .monitor-status-bar');
+      if (!bar) return;
+      var dot = document.createElement('span');
+      dot.className    = 'me-status-dot';
+      dot.style.display = 'none';
+      bar.insertBefore(dot, bar.firstChild);
+      function update() {
+        var active = /ativo|atualiz/i.test(bar.textContent || '');
+        dot.style.display = active ? 'inline-block' : 'none';
+      }
+      new MutationObserver(update).observe(bar, { childList: true, characterData: true, subtree: true });
+      update();
+    }
+
+    /* ── init ── */
+    function init() {
+      try { setupManagePnL();     } catch(e) { /* silent */ }
+      try { setupStatsPnL();      } catch(e) {}
+      try { setupWinRateBar();    } catch(e) {}
+      try { setupOutcomeBars();   } catch(e) {}
+      try { setupRecBox();        } catch(e) {}
+      try { setupAutoToggle();    } catch(e) {}
+      try { setupHistoryColors(); } catch(e) {}
+      try { setupStatusDot();     } catch(e) {}
+      setTimeout(function () { try { setupChartPills(); } catch(e) {} }, 700);
+    }
+
+    if (document.readyState === 'complete') { init(); }
+    else { window.addEventListener('load', init); }
+  })();
+  </script>
+
+  <!-- ══ Partial-Close 3-contratos — script isolado (não toca em dashboard.js) ══ -->
+  <script>
+  (function () {
+    'use strict';
+    var BTN_ID   = 'at-partial-toggle';
+    var LABEL_ID = 'at-partial-label';
+    var API      = '/api/autotrade/partial-config';
+    var _enabled = false;
+
+    function applyState(enabled) {
+      _enabled = enabled;
+      var btn   = document.getElementById(BTN_ID);
+      var label = document.getElementById(LABEL_ID);
+      if (!btn || !label) return;
+      if (enabled) {
+        label.textContent  = 'ON ✅';
+        btn.style.borderColor = '#3ecf8e';
+        btn.style.color       = '#3ecf8e';
+        btn.title = '3 contratos ATIVO — entra com 3, fecha 2 no TP1, mantém 1 até TP2';
+      } else {
+        label.textContent  = 'OFF';
+        btn.style.borderColor = '#6b7280';
+        btn.style.color       = '';
+        btn.title = '3 contratos: fecha 2 no TP1, mantém 1 até TP2 (2× distância do TP1)';
+      }
+    }
+
+    function fetchStatus() {
+      fetch(API)
+        .then(function (r) { return r.json(); })
+        .then(function (d) { if (d.ok) applyState(d.enabled); })
+        .catch(function () {});
+    }
+
+    function toggle() {
+      fetch(API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: !_enabled }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d.ok) {
+            applyState(d.enabled);
+            var rr = d.enabled ? ' (TP1=' + d.tp1_rr + ':1 R/R, TP2=' + d.tp2_rr + ':1 R/R sobre SL)' : '';
+            var atStatus = document.getElementById('at-status');
+            if (atStatus) {
+              atStatus.textContent = d.enabled
+                ? '📊 Modo 3-contratos ATIVADO' + rr + ' — TPs calculados pelo SL de cada trade.'
+                : '📊 Modo 3-contratos DESATIVADO — próxima entrada usará 1 contrato.';
+              atStatus.style.color = d.enabled ? 'var(--success)' : 'var(--text-muted)';
+            }
+          }
+        })
+        .catch(function () {});
+    }
+
+    function init() {
+      var btn = document.getElementById(BTN_ID);
+      if (btn) { btn.addEventListener('click', toggle); }
+      fetchStatus();
+    }
+
+    if (document.readyState === 'complete') { init(); }
+    else { window.addEventListener('load', init); }
+  })();
+  </script>
+
+  <!-- ══ Meta diária — script isolado (não toca em dashboard.js) ══ -->
+  <script>
+  (function () {
+    'use strict';
+    var API      = '/api/autotrade/meta-config';
+    var _meta    = null;   // null = sem meta
+    var _pnl     = 0;
+    var _atingida= false;
+
+    function badge() { return document.getElementById('meta-pnl-badge'); }
+    function label() { return document.getElementById('meta-pnl-label'); }
+    function statusInline() { return document.getElementById('meta-status-inline'); }
+    function reativarWrap() { return document.getElementById('meta-reativar-wrap'); }
+
+    function applyState(d) {
+      _meta     = d.meta;
+      _pnl      = d.pnl_brl_hoje || 0;
+      _atingida = d.meta_atingida || false;
+
+      var lb = label();
+      if (!lb) return;
+
+      var pnlStr  = (_pnl >= 0 ? '+' : '') + 'R$' + _pnl.toFixed(0);
+      var metaStr = _meta ? ' / R$' + _meta.toFixed(0) : '';
+      lb.textContent = pnlStr + metaStr;
+
+      // Cor do badge: verde = lucro, vermelho = prejuízo, laranja = perto da meta
+      var b = badge();
+      if (b) {
+        var pct = _meta ? _pnl / _meta : null;
+        if (_atingida) {
+          b.style.borderColor = '#22c55e'; b.style.color = '#22c55e';
+        } else if (pct !== null && pct >= 0.7) {
+          b.style.borderColor = '#f59e0b'; b.style.color = '#f59e0b'; // 70%+ → aviso
+        } else if (_pnl > 0) {
+          b.style.borderColor = '#3ecf8e'; b.style.color = '#3ecf8e';
+        } else if (_pnl < 0) {
+          b.style.borderColor = '#ef4444'; b.style.color = '#ef4444';
+        } else {
+          b.style.borderColor = '#6b7280'; b.style.color = '';
+        }
+      }
+
+      // Preenche input com meta atual
+      var inp = document.getElementById('meta-input');
+      if (inp && _meta) inp.value = _meta;
+
+      // Mostra botão de reativar se auto-trade pausado por meta
+      var rw = reativarWrap();
+      if (rw) rw.style.display = (_atingida && !d.autotrade_ativo) ? 'inline' : 'none';
+
+      // Status inline
+      var si = statusInline();
+      if (si) {
+        if (_atingida) {
+          si.textContent = '🏆 Meta atingida! Auto-trade pausado.';
+          si.style.color  = '#22c55e';
+        } else if (_meta) {
+          var falta = _meta - _pnl;
+          si.textContent = 'Faltam R$' + falta.toFixed(0) + ' para a meta.';
+          si.style.color  = '#9ca3af';
+        } else {
+          si.textContent = 'Sem meta configurada.';
+          si.style.color  = '#6b7280';
+        }
+      }
+    }
+
+    function fetchStatus() {
+      fetch(API)
+        .then(function (r) { return r.json(); })
+        .then(function (d) { if (d.ok) applyState(d); })
+        .catch(function () {});
+    }
+
+    function setMeta(valor, extra) {
+      var body = Object.assign({ meta: valor }, extra || {});
+      fetch(API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (d) { if (d.ok) applyState(d); })
+        .catch(function () {});
+    }
+
+    function init() {
+      var setBtn = document.getElementById('meta-set-btn');
+      if (setBtn) setBtn.addEventListener('click', function () {
+        var inp = document.getElementById('meta-input');
+        var v   = parseFloat(inp ? inp.value : 0);
+        if (v > 0) setMeta(v);
+      });
+
+      var clrBtn = document.getElementById('meta-clear-btn');
+      if (clrBtn) clrBtn.addEventListener('click', function () {
+        setMeta(0);
+        var inp = document.getElementById('meta-input');
+        if (inp) inp.value = '';
+      });
+
+      var reBtn = document.getElementById('meta-reativar-btn');
+      if (reBtn) reBtn.addEventListener('click', function () {
+        setMeta(_meta, { reativar: true });   // mantém meta mas reativa
+      });
+
+      fetchStatus();
+      setInterval(fetchStatus, 30000);   // atualiza P&L do dia a cada 30s
+    }
+
+    if (document.readyState === 'complete') { init(); }
+    else { window.addEventListener('load', init); }
+  })();
+  </script>
 
   <!-- Modal confirmação operação manual -->
   <div id="manual-confirm-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;align-items:center;justify-content:center">

@@ -130,11 +130,57 @@ _session = {
 
 # Estado do auto-trade
 _auto = {
-    "enabled":       False,
-    "signal_count":  0,
-    "last_signal":   "",
-    "last_trade_ts": 0.0,
+    "enabled":            False,
+    "signal_count":       0,
+    "last_signal":        "",
+    "last_trade_ts":      0.0,
+    # ── Proteção por sequência de stops ───────────────────────────────────
+    "consecutive_losses": 0,      # stops seguidos (resetado no WIN ou BE)
+    "paused_until":       0.0,    # timestamp Unix — auto bloqueado enquanto time() < paused_until
+    # ── Proteção direcional ───────────────────────────────────────────────
+    "last_trade_dir":     "",     # direção do último trade aberto
+    "dir_loss_streak":    {"COMPRA": 0, "VENDA": 0},  # LOSSes consecutivos por direção
 }
+
+# ── Parâmetros da pausa automática ───────────────────────────────────────────
+_pause_cfg = {
+    "max_consecutive_losses": 3,
+    "pause_duration_sec":     1800,
+}
+
+
+# ── Helper: atualiza contador de stops consecutivos ──────────────────────────
+def _update_consecutive_losses(profit: float) -> None:
+    direction = _auto.get("last_trade_dir", "")
+    if profit >= -0.01:  # WIN ou BE
+        _auto["consecutive_losses"] = 0
+        if direction in _auto["dir_loss_streak"]:
+            _auto["dir_loss_streak"][direction] = 0
+        return
+    # SL confirmado
+    _auto["consecutive_losses"] += 1
+    if direction in _auto["dir_loss_streak"]:
+        _auto["dir_loss_streak"][direction] += 1
+        logger.info("Scalper dir_loss_streak[%s] = %d",
+                    direction, _auto["dir_loss_streak"][direction])
+    n   = _pause_cfg["max_consecutive_losses"]
+    dur = _pause_cfg["pause_duration_sec"]
+    if _auto["consecutive_losses"] >= n:
+        _auto["paused_until"] = time.time() + dur
+        logger.warning("Scalper: %d stops consecutivos — pausado por %ds (ate %s)",
+                       _auto["consecutive_losses"], dur,
+                       datetime.fromtimestamp(_auto["paused_until"]).strftime("%H:%M"))
+        try:
+            from services.scalper_telegram import _send_async
+            mins = dur // 60
+            _send_async(
+                "Scalper Pausa Automatica\n"
+                f"{_auto['consecutive_losses']} stops seguidos.\n"
+                f"Auto-trade pausado por {mins} minutos.\n"
+                "Use /sc_on para reativar."
+            )
+        except Exception:
+            pass
 
 
 # Pagina
@@ -222,6 +268,7 @@ def api_scalper_close():
             _session["wins"] += 1
         else:
             _session["losses"] += 1
+        _update_consecutive_losses(profit)
         # Log + notificação da saída manual
         _safe_log_exit(symbol, info.get("price", 0), profit, "manual")
         _safe_notify_exit(symbol, info, profit, "manual")
@@ -237,7 +284,17 @@ def api_scalper_auto_state():
         _auto["enabled"]      = bool(body.get("enabled", False))
         _auto["signal_count"] = 0
         _auto["last_signal"]  = ""
-    return jsonify({"ok": True, "enabled": _auto["enabled"]})
+    now_ts = time.time()
+    paused = _auto["paused_until"] > now_ts
+    return jsonify({
+        "ok":                 True,
+        "enabled":            _auto["enabled"],
+        "consecutive_losses": _auto["consecutive_losses"],
+        "paused":             paused,
+        "paused_until":       _auto["paused_until"],
+        "paused_remaining_s": max(0, int(_auto["paused_until"] - now_ts)) if paused else 0,
+        "dir_loss_streak":    _auto["dir_loss_streak"],
+    })
 
 
 # Auto-trade: verifica sinal e executa se regras OK
@@ -267,6 +324,13 @@ def api_scalper_auto_check():
         return _deny("Auto-trade desabilitado.")
     if not b3_open:
         return _deny("Fora do horario B3.")
+
+    # ── Pausa automática por stops consecutivos ───────────────────────────
+    if _auto["paused_until"] > time.time():
+        remaining = int(_auto["paused_until"] - time.time())
+        mins, secs = remaining // 60, remaining % 60
+        n = _pause_cfg["max_consecutive_losses"]
+        return _deny(f"Pausa automatica apos {n} stops seguidos. Retorna em {mins}m{secs:02d}s")
 
     # Limite diário de trades automáticos
     if _session["trades"] >= max_daily:
@@ -338,18 +402,34 @@ def api_scalper_auto_check():
         if sv_blocked:
             _auto["signal_count"] = 0
             return _deny(
-                f"🚫 Hard-block: Delta {sv_cum_bias} ({sv_cum_pct:.0f}% C) "
-                f"— fluxo acumulado contra {signal}"
+                f"Hard-block: Delta {sv_cum_bias} ({sv_cum_pct:.0f}% C) "
+                f"fluxo acumulado contra {signal}"
             )
+
+        # ── Uplift direcional: após 2+ LOSSes na mesma direção ───────────
+        dir_streak = _auto["dir_loss_streak"].get(signal, 0)
+        if dir_streak >= 2:
+            uplift   = 5
+            required = score_min_sv + uplift
+            if sv_score < required:
+                _auto["signal_count"] = 0
+                return _deny(
+                    f"Uplift direcional: {dir_streak} LOSSes em {signal}. "
+                    f"Score {sv_score:.0f} < exigido {required} (min {score_min_sv}+{uplift})"
+                )
+            logger.info("Uplift direcional APROVADO: %s streak=%d score=%.0f >= %d",
+                        signal, dir_streak, sv_score, required)
+
     except Exception as _sv_exc:
         logger.warning("Validação server-side ignorada: %s", _sv_exc)
 
     result, err = execute_scalper_trade(symbol, signal, volume, tp_ticks, sl_ticks, use_atr_sizing)
     if result and not err:
         _session["trades"] += 1
-        _auto["last_trade_ts"] = time.time()
-        _auto["signal_count"]  = 0
-        _auto["last_signal"]   = ""
+        _auto["last_trade_ts"]  = time.time()
+        _auto["last_trade_dir"] = signal
+        _auto["signal_count"]   = 0
+        _auto["last_signal"]    = ""
         _session["history"].append({
             "time":  datetime.now().strftime("%H:%M:%S"),
             "acao":  signal, "auto": True,
@@ -389,9 +469,44 @@ def api_scalper_session_reset():
     _session["breakevens"] = 0
     _session["pnl"]       = 0.0
     _session["history"]   = []
-    _auto["signal_count"] = 0
-    _auto["last_signal"]  = ""
+    _auto["signal_count"]       = 0
+    _auto["last_signal"]        = ""
+    _auto["consecutive_losses"] = 0
+    _auto["paused_until"]       = 0.0
+    _auto["dir_loss_streak"]    = {"COMPRA": 0, "VENDA": 0}
     return jsonify({"ok": True})
+
+
+# Pausa: reset manual
+@scalper_bp.route("/api/scalper/reset-pause", methods=["POST"])
+def api_scalper_reset_pause():
+    _auto["paused_until"]       = 0.0
+    _auto["consecutive_losses"] = 0
+    _auto["dir_loss_streak"]    = {"COMPRA": 0, "VENDA": 0}
+    logger.info("Scalper: pausa automatica removida manualmente.")
+    return jsonify({"ok": True, "message": "Pausa removida. Auto-trade liberado."})
+
+
+# Pausa: configuração
+@scalper_bp.route("/api/scalper/pause-config", methods=["GET", "POST"])
+def api_scalper_pause_config():
+    if request.method == "POST":
+        body = request.get_json(silent=True) or {}
+        if "max_consecutive_losses" in body:
+            v = int(body["max_consecutive_losses"])
+            _pause_cfg["max_consecutive_losses"] = max(1, min(10, v))
+        if "pause_duration_sec" in body:
+            v = int(body["pause_duration_sec"])
+            _pause_cfg["pause_duration_sec"] = max(60, min(7200, v))
+    now_ts = time.time()
+    return jsonify({
+        "ok":                     True,
+        "max_consecutive_losses": _pause_cfg["max_consecutive_losses"],
+        "pause_duration_sec":     _pause_cfg["pause_duration_sec"],
+        "pause_duration_min":     _pause_cfg["pause_duration_sec"] // 60,
+        "paused_until":           _auto["paused_until"],
+        "paused_remaining_s":     max(0, int(_auto["paused_until"] - now_ts)),
+    })
 
 
 # Registro de fechamento via TP/SL
@@ -409,6 +524,7 @@ def api_scalper_register_close():
         _session["wins"] += 1
     else:
         _session["losses"] += 1
+    _update_consecutive_losses(profit)
 
     logger.info("Scalper fechamento registrado: reason=%s profit=%.2f symbol=%s", reason, profit, symbol)
     if symbol:
