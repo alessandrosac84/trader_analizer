@@ -87,12 +87,19 @@ def get_open_positions(tv_symbol: str = None) -> "tuple[list, str | None]":
 
         ours = [dict(p._asdict()) for p in positions if p.magic == MAGIC_NUMBER]
 
-        # Fallback: se não achou por símbolo, busca TODAS as posições do bot
-        # (cobre casos de nome de símbolo ligeiramente diferente no servidor)
+        # Fallback: se não achou por símbolo exato, busca por prefixo do símbolo MT5.
+        # Isso cobre casos onde o nome do contrato mudou (ex: WINQ26 → WINZ26).
+        # IMPORTANTE: filtra pelo prefixo para não contaminar outros ativos simultaneamente.
         if not ours and tv_symbol:
+            mt5_sym = _mt5_symbol(tv_symbol)
+            # Prefixo = primeiros 3 chars do símbolo MT5 (WIN, WDO, PET, EUR, XAU…)
+            prefix = mt5_sym[:3].upper() if mt5_sym else None
             all_pos = mt5.positions_get()
-            if all_pos:
-                ours = [dict(p._asdict()) for p in all_pos if p.magic == MAGIC_NUMBER]
+            if all_pos and prefix:
+                ours = [
+                    dict(p._asdict()) for p in all_pos
+                    if p.magic == MAGIC_NUMBER and p.symbol.upper().startswith(prefix)
+                ]
 
         mt5.shutdown()
         return ours, None

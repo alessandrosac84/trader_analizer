@@ -28,6 +28,53 @@ _autotrade_enabled = True
 _meta_diaria_brl   = None   # None = sem meta definida
 _lock = threading.Lock()
 
+# ── Símbolos monitorados (Monitor MT5 + Scalper) ───────────────────────────
+_MONITORED_SYMBOLS = [
+    "BMFBOVESPA:WIN1!",
+    "BMFBOVESPA:WDO1!",
+    "BMFBOVESPA:PETR4",
+]
+
+_SYM_LABEL = {
+    "BMFBOVESPA:WIN1!":  "WIN",
+    "BMFBOVESPA:WDO1!":  "WDO",
+    "BMFBOVESPA:PETR4":  "PETR4",
+}
+
+_ALIAS_TO_SYM = {
+    "WIN":   "BMFBOVESPA:WIN1!",
+    "WDO":   "BMFBOVESPA:WDO1!",
+    "PETR4": "BMFBOVESPA:PETR4",
+    "PETR":  "BMFBOVESPA:PETR4",
+}
+
+
+def _sym_label(tv_symbol: str) -> str:
+    """Retorna rótulo curto do símbolo (ex: WIN, WDO, PETR4)."""
+    return _SYM_LABEL.get(tv_symbol.upper(), tv_symbol.split(":")[-1])
+
+
+def _calc_pts(tv_symbol: str, profit: float, volume: float) -> str:
+    """Converte P&L em BRL para pontos conforme o ativo."""
+    sym = tv_symbol.upper()
+    try:
+        if "WIN" in sym:
+            pts = round(profit / (0.20 * volume)) if volume else None
+        elif "WDO" in sym:
+            pts = round(profit / (10.0 * volume)) if volume else None
+        else:
+            return "—"
+        if pts is None:
+            return "—"
+        return f"{'+' if pts >= 0 else ''}{int(pts)} pts"
+    except Exception:
+        return "—"
+
+
+def _resolve_sym(arg: str) -> "str | None":
+    """Resolve alias curto (WIN, WDO, PETR4) para tv_symbol completo."""
+    return _ALIAS_TO_SYM.get((arg or "").upper().strip())
+
 
 def is_autotrade_enabled() -> bool:
     with _lock:
@@ -159,136 +206,173 @@ def _handle_command(token: str, chat_id: str, allowed_chat_id: str, text: str) -
         )
 
     elif cmd in ("/trade", "/posicao", "/pos"):
-        # Mostra situação do trade em andamento
-        TV_SYMBOL = "BMFBOVESPA:WIN1!"
+        # Mostra situação de todos os trades abertos (multi-símbolo)
         try:
             from services.trade_log import get_open_auto_trade
             from services.trade_executor import get_open_positions
             import datetime
 
-            log = get_open_auto_trade(TV_SYMBOL)
-            positions, _ = get_open_positions(TV_SYMBOL)
+            blocos = []
+            for sym in _MONITORED_SYMBOLS:
+                log       = get_open_auto_trade(sym)
+                positions, _ = get_open_positions(sym)
+                if not log and not positions:
+                    continue
 
-            if not log and not positions:
+                label = _sym_label(sym)
+
+                # Tempo em aberto
+                tempo_txt = "—"
+                if log and log.get("opened_at"):
+                    try:
+                        opened  = datetime.datetime.fromisoformat(log["opened_at"])
+                        minutos = int((datetime.datetime.now() - opened).total_seconds() / 60)
+                        tempo_txt = f"{minutos // 60}h {minutos % 60}min" if minutos >= 60 else f"{minutos} min"
+                    except Exception:
+                        pass
+
+                # P&L em tempo real via MT5
+                pnl_pts_rt = "—"
+                pnl_brl_rt = "—"
+                price_atual = "—"
+                pnl_icon   = "📊"
+                if positions:
+                    pos    = positions[0]
+                    profit = pos.get("profit")
+                    price_atual = pos.get("price_current") or "—"
+                    try:
+                        price_atual = int(price_atual) if price_atual != "—" else "—"
+                    except Exception:
+                        pass
+                    if profit is not None:
+                        pnl_brl_rt = f"R${profit:+.2f}"
+                        volume     = pos.get("volume", 1)
+                        pnl_pts_rt = _calc_pts(sym, profit, volume)
+                        pnl_icon   = "📈" if profit >= 0 else "📉"
+
+                acao      = (log or {}).get("acao") or (positions[0].get("type_desc", "—") if positions else "—")
+                entrada   = (log or {}).get("entry_price")
+                sl        = (log or {}).get("sl_initial")
+                tp1       = (log or {}).get("tp1_initial")
+                acao_icon = "📈" if acao == "COMPRA" else "📉"
+
+                pts_str = f" | {pnl_pts_rt}" if pnl_pts_rt != "—" else ""
+                blocos.append(
+                    f"{acao_icon} <b>[{label}] TRADE EM ANDAMENTO</b>\n"
+                    f"━━━━━━━━━━━━━━━━━━\n"
+                    f"🔀 <b>Direção:</b> {acao}\n"
+                    f"💰 <b>Entrada:</b> {int(entrada) if entrada else '—'}\n"
+                    f"📍 <b>Preço atual:</b> {price_atual}\n"
+                    f"🛑 <b>Stop:</b> {int(sl) if sl else '—'}   "
+                    f"🎯 <b>TP1:</b> {int(tp1) if tp1 else '—'}\n"
+                    f"⏱ <b>Tempo aberto:</b> {tempo_txt}\n"
+                    f"━━━━━━━━━━━━━━━━━━\n"
+                    f"{pnl_icon} <b>P&L atual:</b> {pnl_brl_rt}{pts_str}"
+                )
+
+            if not blocos:
                 _reply(token, chat_id, "📭 <b>Nenhum trade aberto no momento.</b>")
-                return
-
-            # Tempo em aberto
-            tempo_txt = "—"
-            if log and log.get("opened_at"):
-                try:
-                    opened = datetime.datetime.fromisoformat(log["opened_at"])
-                    minutos = int((datetime.datetime.now() - opened).total_seconds() / 60)
-                    if minutos >= 60:
-                        tempo_txt = f"{minutos // 60}h {minutos % 60}min"
-                    else:
-                        tempo_txt = f"{minutos} min"
-                except Exception:
-                    pass
-
-            # P&L em tempo real via MT5
-            pnl_pts_rt = "—"
-            pnl_brl_rt = "—"
-            price_atual = "—"
-            if positions:
-                pos = positions[0]
-                profit = pos.get("profit")
-                price_atual = int(pos.get("price_current", 0)) or "—"
-                if profit is not None:
-                    pnl_brl_rt = f"R${profit:+.2f}"
-                    # Calcula pts: 1 contrato WIN mini = R$0,20/ponto
-                    volume = pos.get("volume", 1)
-                    pts = round(profit / (0.20 * volume)) if volume else "—"
-                    if isinstance(pts, (int, float)):
-                        pnl_pts_rt = f"{'+' if pts >= 0 else ''}{int(pts)} pts"
-                    pnl_icon = "📈" if (profit or 0) >= 0 else "📉"
+            else:
+                msg = "\n\n".join(blocos)
+                if len(blocos) > 1:
+                    msg += "\n\nUse /fechar WIN | /fechar WDO | /fechar PETR4 para fechar individualmente."
                 else:
-                    pnl_icon = "📊"
+                    msg += "\n\nUse /fechar para encerrar este trade."
+                _reply(token, chat_id, msg)
 
-            acao      = (log or {}).get("acao", positions[0].get("type_desc", "—") if positions else "—")
-            entrada   = (log or {}).get("entry_price")
-            sl        = (log or {}).get("sl_initial")
-            tp1       = (log or {}).get("tp1_initial")
-            acao_icon = "📈" if acao == "COMPRA" else "📉"
-
-            _reply(token, chat_id,
-                f"{acao_icon} <b>TRADE EM ANDAMENTO</b>\n"
-                f"━━━━━━━━━━━━━━━━━━\n"
-                f"🔀 <b>Direção:</b> {acao}\n"
-                f"💰 <b>Entrada:</b> {int(entrada) if entrada else '—'}\n"
-                f"📍 <b>Preço atual:</b> {price_atual}\n"
-                f"🛑 <b>Stop:</b> {int(sl) if sl else '—'}   "
-                f"🎯 <b>TP1:</b> {int(tp1) if tp1 else '—'}\n"
-                f"⏱ <b>Tempo aberto:</b> {tempo_txt}\n"
-                f"━━━━━━━━━━━━━━━━━━\n"
-                f"{pnl_icon} <b>P&L atual:</b> {pnl_pts_rt} | {pnl_brl_rt}\n\n"
-                f"Use /fechar para encerrar este trade."
-            )
         except Exception as exc:
             logger.warning("Erro ao buscar trade: %s", exc)
             _reply(token, chat_id, f"❌ Erro ao buscar trade: {exc}")
 
     elif cmd in ("/fechar", "/close", "/sair"):
-        TV_SYMBOL = "BMFBOVESPA:WIN1!"
+        # /fechar         → fecha TODAS as posições abertas
+        # /fechar WIN     → fecha só WIN
+        # /fechar WDO     → fecha só WDO
+        # /fechar PETR4   → fecha só PETR4
         try:
             from services.trade_executor import get_open_positions, close_all_positions
             from services.trade_log import get_open_auto_trade, close_auto_trade
-            import datetime
 
-            positions, err = get_open_positions(TV_SYMBOL)
-            if err or not positions:
-                _reply(token, chat_id, "📭 <b>Nenhuma posição aberta para fechar.</b>")
-                return
+            parts = (text or "").strip().split()
+            arg   = parts[1] if len(parts) > 1 else None
 
-            _reply(token, chat_id, "⏳ Fechando posição no MT5...")
+            if arg:
+                sym_resolved = _resolve_sym(arg)
+                if not sym_resolved:
+                    _reply(token, chat_id, f"❌ Símbolo não reconhecido: <code>{arg}</code>\nUse: WIN, WDO ou PETR4")
+                    return
+                alvos = [sym_resolved]
+            else:
+                alvos = _MONITORED_SYMBOLS
 
-            results, err2 = close_all_positions(TV_SYMBOL)
-            if err2:
-                _reply(token, chat_id, f"❌ Erro ao fechar: {err2}")
-                return
+            resultados = []
+            alguma_posicao = False
 
-            # Registra no banco
-            log = get_open_auto_trade(TV_SYMBOL)
-            pos = positions[0]
-            exit_price = pos.get("price_current") or pos.get("price_open")
-            profit = pos.get("profit", 0)
-            volume = pos.get("volume", 1)
-            pts = round(profit / (0.20 * volume)) if volume else 0
+            for sym in alvos:
+                label = _sym_label(sym)
+                positions, err = get_open_positions(sym)
+                if err or not positions:
+                    continue
 
-            if log:
-                close_auto_trade(
-                    trade_id     = log["id"],
-                    exit_price   = exit_price,
-                    close_reason = "MANUAL",
-                    pnl_pts      = pts,
-                    pnl_brl      = profit,
-                )
-                # Notifica fechamento
-                try:
-                    from services.telegram_notifier import notify_trade_closed
-                    notify_trade_closed(
-                        tv_symbol    = TV_SYMBOL,
-                        acao         = log.get("acao", "—"),
-                        entry_price  = log.get("entry_price"),
+                alguma_posicao = True
+                _reply(token, chat_id, f"⏳ Fechando posição <b>{label}</b> no MT5...")
+
+                results, err2 = close_all_positions(sym)
+                if err2:
+                    resultados.append(f"❌ <b>{label}</b>: Erro ao fechar — {err2}")
+                    continue
+
+                log        = get_open_auto_trade(sym)
+                pos        = positions[0]
+                exit_price = pos.get("price_current") or pos.get("price_open")
+                profit     = pos.get("profit", 0)
+                volume     = pos.get("volume", 1)
+                pts_str    = _calc_pts(sym, profit, volume)
+
+                if log:
+                    pnl_pts_val = None
+                    try:
+                        sym_u = sym.upper()
+                        if "WIN" in sym_u:
+                            pnl_pts_val = round(profit / (0.20 * volume)) if volume else None
+                        elif "WDO" in sym_u:
+                            pnl_pts_val = round(profit / (10.0 * volume)) if volume else None
+                    except Exception:
+                        pass
+                    close_auto_trade(
+                        trade_id     = log["id"],
                         exit_price   = exit_price,
                         close_reason = "MANUAL",
-                        pnl_pts      = pts,
+                        pnl_pts      = pnl_pts_val,
                         pnl_brl      = profit,
                     )
-                except Exception:
-                    pass
+                    try:
+                        from services.telegram_notifier import notify_trade_closed
+                        notify_trade_closed(
+                            tv_symbol    = sym,
+                            acao         = log.get("acao", "—"),
+                            entry_price  = log.get("entry_price"),
+                            exit_price   = exit_price,
+                            close_reason = "MANUAL",
+                            pnl_pts      = pnl_pts_val,
+                            pnl_brl      = profit,
+                        )
+                    except Exception:
+                        pass
 
-            resultado = "✅ GAIN" if profit >= 0 else "❌ STOP"
-            pnl_brl_txt = f"R${profit:+.2f}"
-            pnl_pts_txt = f"{'+' if pts >= 0 else ''}{int(pts)} pts"
+                resultado   = "✅ GAIN" if profit >= 0 else "❌ STOP"
+                exit_str    = int(exit_price) if exit_price else "—"
+                pts_display = f" | {pts_str}" if pts_str != "—" else ""
+                resultados.append(
+                    f"✋ <b>[{label}] {resultado}</b>\n"
+                    f"📍 Saída: {exit_str}   💰 R${profit:+.2f}{pts_display}"
+                )
+                logger.info("Trade %s fechado manualmente via Telegram.", label)
 
-            _reply(token, chat_id,
-                f"✋ <b>TRADE FECHADO MANUALMENTE — {resultado}</b>\n"
-                f"━━━━━━━━━━━━━━━━━━\n"
-                f"📍 <b>Saída:</b> {int(exit_price) if exit_price else '—'}\n"
-                f"📈 <b>Resultado:</b> {pnl_pts_txt} | {pnl_brl_txt}"
-            )
-            logger.info("Trade fechado manualmente via Telegram.")
+            if not alguma_posicao:
+                _reply(token, chat_id, "📭 <b>Nenhuma posição aberta para fechar.</b>")
+            elif resultados:
+                _reply(token, chat_id, "\n\n".join(resultados))
 
         except Exception as exc:
             logger.warning("Erro ao fechar trade via Telegram: %s", exc)
@@ -325,67 +409,98 @@ def _handle_command(token: str, chat_id: str, allowed_chat_id: str, text: str) -
         logger.info("Auto-trade pausado pelo resto do dia via Telegram.")
 
     elif cmd in ("/mover_stop", "/breakeven", "/be"):
-        TV_SYMBOL = "BMFBOVESPA:WIN1!"
+        # /be WIN | /be WDO | /be PETR4 — move stop para breakeven no ativo indicado
+        # /be — se só houver 1 posição aberta, aplica a ela; senão pede especificação
         try:
             from services.trade_log import get_open_auto_trade
             from services.trade_executor import get_open_positions, modify_position_sl
 
-            log = get_open_auto_trade(TV_SYMBOL)
-            positions, _ = get_open_positions(TV_SYMBOL)
+            parts = (text or "").strip().split()
+            arg   = parts[1] if len(parts) > 1 else None
+
+            if arg:
+                sym_resolved = _resolve_sym(arg)
+                if not sym_resolved:
+                    _reply(token, chat_id, f"❌ Símbolo não reconhecido: <code>{arg}</code>\nUse: /be WIN | /be WDO | /be PETR4")
+                    return
+                alvos = [sym_resolved]
+            else:
+                # Auto-detecta: busca todos com posição aberta
+                alvos = []
+                from services.trade_executor import get_open_positions as _gop
+                for sym in _MONITORED_SYMBOLS:
+                    pos, _ = _gop(sym)
+                    if pos:
+                        alvos.append(sym)
+                if len(alvos) == 0:
+                    _reply(token, chat_id, "📭 <b>Nenhuma posição aberta para mover o stop.</b>")
+                    return
+                if len(alvos) > 1:
+                    labels = " | ".join(f"/be {_sym_label(s)}" for s in alvos)
+                    _reply(token, chat_id, f"⚠️ Há múltiplas posições abertas. Especifique:\n{labels}")
+                    return
+
+            sym   = alvos[0]
+            label = _sym_label(sym)
+            log   = get_open_auto_trade(sym)
+            positions, _ = get_open_positions(sym)
 
             if not positions:
-                _reply(token, chat_id, "📭 <b>Nenhuma posição aberta para mover o stop.</b>")
+                _reply(token, chat_id, f"📭 <b>Nenhuma posição aberta em {label}.</b>")
                 return
 
-            entry = log.get("entry_price") if log else None
-            if not entry:
-                entry = positions[0].get("price_open")
-
+            entry = (log.get("entry_price") if log else None) or positions[0].get("price_open")
             if not entry:
                 _reply(token, chat_id, "❌ Não foi possível determinar o preço de entrada.")
                 return
 
-            pos = positions[0]
+            pos    = positions[0]
             profit = pos.get("profit", 0)
             if profit <= 0:
                 _reply(token, chat_id,
-                    f"⚠️ Trade está negativo (R${profit:+.2f}).\n"
+                    f"⚠️ <b>[{label}]</b> Trade está negativo (R${profit:+.2f}).\n"
                     f"Só é seguro mover para breakeven quando estiver positivo.\n"
-                    f"Confirma mesmo assim? Envie /be_confirmar"
+                    f"Confirma mesmo assim? Envie /be_confirmar {_sym_label(sym)}"
                 )
                 return
 
-            ok, err = modify_position_sl(TV_SYMBOL, float(entry))
+            ok, err = modify_position_sl(sym, float(entry))
             if ok:
                 _reply(token, chat_id,
-                    f"✅ <b>Stop movido para BREAKEVEN</b>\n"
+                    f"✅ <b>[{label}] Stop movido para BREAKEVEN</b>\n"
                     f"━━━━━━━━━━━━━━━━━━\n"
                     f"📍 Novo stop: {int(entry)}\n"
                     f"🔒 Trade garantido no zero a zero."
                 )
             else:
-                _reply(token, chat_id, f"❌ Erro ao mover stop: {err}")
+                _reply(token, chat_id, f"❌ Erro ao mover stop em {label}: {err}")
 
         except Exception as exc:
             logger.warning("Erro ao mover stop: %s", exc)
             _reply(token, chat_id, f"❌ Erro: {exc}")
 
     elif cmd == "/be_confirmar":
-        TV_SYMBOL = "BMFBOVESPA:WIN1!"
+        # /be_confirmar WIN | /be_confirmar WDO | /be_confirmar PETR4
         try:
             from services.trade_log import get_open_auto_trade
             from services.trade_executor import get_open_positions, modify_position_sl
-            log = get_open_auto_trade(TV_SYMBOL)
-            positions, _ = get_open_positions(TV_SYMBOL)
+
+            parts = (text or "").strip().split()
+            arg   = parts[1] if len(parts) > 1 else None
+            sym   = _resolve_sym(arg) if arg else "BMFBOVESPA:WIN1!"
+            label = _sym_label(sym)
+
+            log       = get_open_auto_trade(sym)
+            positions, _ = get_open_positions(sym)
             if not positions:
-                _reply(token, chat_id, "📭 Nenhuma posição aberta.")
+                _reply(token, chat_id, f"📭 Nenhuma posição aberta em {label}.")
                 return
             entry = (log.get("entry_price") if log else None) or positions[0].get("price_open")
-            ok, err = modify_position_sl(TV_SYMBOL, float(entry))
+            ok, err = modify_position_sl(sym, float(entry))
             if ok:
-                _reply(token, chat_id, f"✅ Stop movido para {int(entry)} (breakeven confirmado).")
+                _reply(token, chat_id, f"✅ <b>[{label}]</b> Stop movido para {int(entry)} (breakeven confirmado).")
             else:
-                _reply(token, chat_id, f"❌ Erro: {err}")
+                _reply(token, chat_id, f"❌ Erro em {label}: {err}")
         except Exception as exc:
             _reply(token, chat_id, f"❌ Erro: {exc}")
 
@@ -394,7 +509,7 @@ def _handle_command(token: str, chat_id: str, allowed_chat_id: str, text: str) -
             from services.trade_log import auto_trades_stats
             from services.telegram_notifier import notify_daily_summary
             stats = auto_trades_stats(today_only=True)
-            notify_daily_summary(stats, tv_symbol="BMFBOVESPA:WIN1!")
+            notify_daily_summary(stats, tv_symbol="WIN+WDO+PETR4")
             logger.info("Resumo forçado via Telegram.")
         except Exception as exc:
             _reply(token, chat_id, f"❌ Erro ao gerar resumo: {exc}")
@@ -435,17 +550,21 @@ def _handle_command(token: str, chat_id: str, allowed_chat_id: str, text: str) -
             "🤖 <b>Comandos disponíveis:</b>\n\n"
             "📊 <b>Informação</b>\n"
             "/status — Bot ativo/pausado + P&L do dia\n"
-            "/trade — Trade em andamento (P&L, tempo, preço)\n"
+            "/trade — Todos os trades abertos (WIN + WDO + PETR4)\n"
             "/resumo — Resumo completo do dia agora\n\n"
             "⚙️ <b>Controle do bot</b>\n"
             "/stop — Pausa novos trades\n"
             "/ativar — Reativa o auto-trade\n"
             "/pausar_hoje — Pausa hoje, reativa amanhã às 08:50\n"
             "/meta 500 — Para automaticamente ao ganhar R$500\n\n"
-            "🔧 <b>Gestão de posição</b>\n"
-            "/trade — Ver trade aberto + P&L atual\n"
-            "/mover_stop — Move stop para breakeven (entrada)\n"
-            "/fechar — Fecha o trade agora\n\n"
+            "🔧 <b>Gestão de posição (multi-ativo)</b>\n"
+            "/fechar — Fecha TODAS as posições abertas\n"
+            "/fechar WIN — Fecha só o WIN\n"
+            "/fechar WDO — Fecha só o WDO\n"
+            "/fechar PETR4 — Fecha só o PETR4\n"
+            "/be WIN — Move stop para breakeven no WIN\n"
+            "/be WDO — Move stop para breakeven no WDO\n"
+            "/be PETR4 — Move stop para breakeven no PETR4\n\n"
             "/help — Esta mensagem"
         )
 

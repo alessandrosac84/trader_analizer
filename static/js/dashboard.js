@@ -2838,6 +2838,11 @@
   var tradeMode          = "SCAN";   // "SCAN" | "MANAGE"
   var _lastAutoTradeMs   = 0;        // timestamp da última tentativa de auto-trade
   var _AUTO_DEBOUNCE_MS  = 15 * 60 * 1000; // 15 min — evita re-entrada imediata
+  // Período de graça pós-execute: ignora respostas SCAN sem closed_trade durante
+  // 30s após um execute bem-sucedido. Protege contra race-condition onde o MT5
+  // ainda não registrou a nova posição quando fetchManage dispara imediatamente.
+  var _lastExecuteMs     = 0;
+  var _EXECUTE_GRACE_MS  = 30 * 1000;  // 30s de graça após execute
   window._getTradeMode    = function () { return tradeMode; };
   window._getAutoEnabled  = function () { return autoTradeEnabled; };
   window._getLastTradeMs  = function () { return _lastAutoTradeMs; };
@@ -2858,7 +2863,13 @@
   }
 
   function getSym() {
-    return (window.mt5MonitorGetSym && window.mt5MonitorGetSym()) || "BMFBOVESPA:WIN1!";
+    // Le o instrumento selecionado no monitor (mesmo seletor do fetchSignals).
+    // window.mt5MonitorGetSym era referenciado mas nunca definido -- causava
+    // fetchManage sempre com WIN1! independente do ativo monitorado.
+    // #mt5-instrument e o seletor real do dashboard (unico seletor de ativo existente)
+    var sel = document.getElementById("mt5-instrument");
+    if (sel && sel.value) return sel.value;
+    return "BMFBOVESPA:WIN1!";
   }
   function getIvl() {
     var s = el("mt5-interval");
@@ -3019,14 +3030,35 @@
     var sym = getSym();
     var ivl = getIvl();
     fetch("/api/autotrade/manage?tv_symbol=" + encodeURIComponent(sym) + "&interval=" + ivl)
-      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      })
       .then(function (d) {
         if (!d.ok) {
-          // Erro no manage — não faz nada, próximo ciclo tentará novamente
+          // Erro no manage (ex: MT5 falhou ao buscar posicoes)
+          // NOTA: o servidor ja verifica o DB quando MT5 falha -- se ha trade aberto,
+          // ele retorna ok:true/MANAGE. Se chegou aqui com ok:false, nao ha trade.
           logger.warn && logger.warn("[Manage] erro:", d.error);
+          if (tradeMode === "MANAGE") {
+            // Ja em MANAGE: mostra aviso mas nao sai do modo
+            setStatus("\u26a0\ufe0f MANAGE \u2014 falha ao atualizar: " + (d.error || "erro desconhecido") + ". Tentando novamente...");
+          } else {
+            // Em SCAN com erro MT5: servidor ja verifica DB; ok:false = sem trade.
+            logger.warn && logger.warn("[Manage] erro em SCAN (MT5 indisponivel): " + (d.error || "desconhecido"));
+          }
           return;
         }
         if (d.mode === "SCAN") {
+          // Período de graça pós-execute: se um execute ocorreu nos últimos 30s e o
+          // servidor não reportou um fechamento real (closed_trade), ignora o SCAN.
+          // Isso cobre a race-condition onde o MT5 ainda não registrou a nova posição
+          // quando fetchManage dispara imediatamente após o execute.
+          var _msSinceExecute = Date.now() - _lastExecuteMs;
+          if (!d.closed_trade && _msSinceExecute < _EXECUTE_GRACE_MS) {
+            logger.warn && logger.warn("[Manage] SCAN ignorado — graca pos-execute (" + Math.round(_msSinceExecute / 1000) + "s < 30s).");
+            return;
+          }
           // Posicao foi fechada — volta para SCAN
           enterScanMode();
           renderPositions([]);
@@ -3114,7 +3146,13 @@
           }
         }
       })
-      .catch(function () {});
+      .catch(function (err) {
+        // Falha de rede ou 500 no servidor
+        logger.warn && logger.warn("[Manage] fetch falhou:", err && err.message);
+        if (tradeMode === "MANAGE") {
+          setStatus("\u26a0\ufe0f MANAGE \u2014 sem resposta do servidor. Verificando na proxima tentativa...");
+        }
+      });
   }
 
   // ── Ticker rápido de P&L (1s) — atualiza preço atual e P&L sem análise completa ──
@@ -3376,6 +3414,8 @@
           _activeEntry  = parseFloat(sig.entrada) || null;
           _activeAcao   = sig.acao || null;
           _activeVolume = parseFloat(volume) || 1;
+          // Marca timestamp do execute para período de graça no fetchManage
+          _lastExecuteMs = Date.now();
           enterManageMode();
           startManagePolling(30);
           loadAutoTradesHistory();

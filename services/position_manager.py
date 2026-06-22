@@ -63,6 +63,16 @@ def analyze_position(
     sl = float(sl_raw) if sl_raw else None
     tp = float(tp_raw) if tp_raw else None
 
+    # Sanitiza direcao do TP: ignora TP na direcao errada para nao disparar tp1_reached falsamente.
+    # BUY: TP deve ser > entrada. SELL: TP deve ser < entrada.
+    if tp is not None and entry:
+        if is_buy and tp <= entry:
+            logger.warning("TP %s <= entrada %s para COMPRA - TP ignorado.", tp, entry)
+            tp = None
+        elif not is_buy and tp >= entry:
+            logger.warning("TP %s >= entrada %s para VENDA - TP ignorado.", tp, entry)
+            tp = None
+
     # ── P&L em pontos ──────────────────────────────────────────────────────
     pnl_pts = _pts(current - entry) if is_buy else _pts(entry - current)
 

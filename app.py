@@ -63,23 +63,22 @@ _app_initialized = False
 
 # ── Debounce e cooldown de auto-trade no servidor ─────────────────────────
 import time as _time
-_last_autotrade_ts   = 0.0   # epoch da última execução de trade
+_last_autotrade_ts   = {}   # tv_symbol -> epoch da última execução de trade
 _AUTOTRADE_COOLDOWN  = 15 * 60  # 15 min entre trades (segundos)
 
-def _autotrade_in_cooldown() -> bool:
-    return (_time.time() - _last_autotrade_ts) < _AUTOTRADE_COOLDOWN
+def _autotrade_in_cooldown(sym: str) -> bool:
+    return (_time.time() - _last_autotrade_ts.get(sym, 0.0)) < _AUTOTRADE_COOLDOWN
 
-def _register_autotrade_ts():
-    global _last_autotrade_ts
-    _last_autotrade_ts = _time.time()
+def _register_autotrade_ts(sym: str):
+    _last_autotrade_ts[sym] = _time.time()
 
-def _cooldown_remaining_min() -> int:
-    rem = _AUTOTRADE_COOLDOWN - (_time.time() - _last_autotrade_ts)
+def _cooldown_remaining_min(sym: str) -> int:
+    rem = _AUTOTRADE_COOLDOWN - (_time.time() - _last_autotrade_ts.get(sym, 0.0))
     return max(0, int(rem / 60))
 
 # ── Cooldown especial: proteção pós-abertura (09:00–09:30 BRT) ────────────────
 _ABERTURA_COOLDOWN_SEC  = 20 * 60   # 20 min de proteção após trade na abertura
-_last_abertura_trade_ts = 0.0       # epoch do último trade executado na janela
+_last_abertura_trade_ts = {}        # tv_symbol -> epoch do último trade na janela
 
 def _is_abertura_window() -> bool:
     """Retorna True se o horário BRT atual está na janela 09:00–09:30."""
@@ -87,25 +86,26 @@ def _is_abertura_window() -> bool:
     brt = datetime.now(timezone(timedelta(hours=-3)))
     return brt.hour == 9 and brt.minute < 30
 
-def _abertura_cooldown_active() -> bool:
+def _abertura_cooldown_active(sym: str) -> bool:
     """Retorna True se um trade foi feito na abertura e o cooldown ainda está ativo."""
-    if _last_abertura_trade_ts == 0.0:
+    ts = _last_abertura_trade_ts.get(sym, 0.0)
+    if ts == 0.0:
         return False
-    return (_time.time() - _last_abertura_trade_ts) < _ABERTURA_COOLDOWN_SEC
+    return (_time.time() - ts) < _ABERTURA_COOLDOWN_SEC
 
-def _abertura_cooldown_remaining_min() -> int:
-    rem = _ABERTURA_COOLDOWN_SEC - (_time.time() - _last_abertura_trade_ts)
+def _abertura_cooldown_remaining_min(sym: str) -> int:
+    rem = _ABERTURA_COOLDOWN_SEC - (_time.time() - _last_abertura_trade_ts.get(sym, 0.0))
     return max(0, int(rem / 60))
 
-def _register_abertura_trade():
+def _register_abertura_trade(sym: str):
     """Registra que um trade foi executado na janela de abertura."""
-    global _last_abertura_trade_ts
-    _last_abertura_trade_ts = _time.time()
+    _last_abertura_trade_ts[sym] = _time.time()
 
 # ── Confirmação de fechamento — evita fechar por leitura instável do MT5 ──
 # Exige N leituras consecutivas sem posição antes de registrar o fechamento.
 _no_position_count   = {}   # tv_symbol -> int
-_NO_POSITION_CONFIRM = 3    # leituras consecutivas sem posição para confirmar fechamento
+_NO_POSITION_CONFIRM = 5    # leituras consecutivas sem posição para confirmar fechamento
+                            # (aumentado de 3→5: MT5 pode levar 1-2 ciclos para registrar nova posição)
                             # 3 = ~9s com ticker rápido (XP/B3 estável) — era 8 só pra MetaQuotes instável
 
 @app.before_request
@@ -745,17 +745,21 @@ def api_autotrade_execute():
     except Exception as _meta_exc:
         logger.warning("Verificação de meta falhou (não bloqueia): %s", _meta_exc)
 
+    # Lê o símbolo antecipadamente para aplicar cooldowns por ativo
+    _early_body  = request.get_json(silent=True, force=True) or {}
+    _sym_key     = (_early_body.get("tv_symbol") or "").strip().upper() or "DEFAULT"
+
     # Cooldown no servidor — evita re-entrada mesmo se o JS resetar o debounce
-    if _autotrade_in_cooldown():
-        rem = _cooldown_remaining_min()
+    if _autotrade_in_cooldown(_sym_key):
+        rem = _cooldown_remaining_min(_sym_key)
         return jsonify({
             "ok": False, "result": None,
             "error": f"Cooldown ativo no servidor — próxima entrada em ~{rem} min.",
         })
 
     # Proteção pós-abertura: após trade executado entre 09:00-09:30 BRT, aguarda 20 min
-    if _abertura_cooldown_active():
-        rem = _abertura_cooldown_remaining_min()
+    if _abertura_cooldown_active(_sym_key):
+        rem = _abertura_cooldown_remaining_min(_sym_key)
         return jsonify({
             "ok": False, "result": None,
             "error": f"Cooldown pós-abertura ativo — proteção de 20 min após trade na janela 09:00-09:30. Próxima entrada em ~{rem} min.",
@@ -764,7 +768,7 @@ def api_autotrade_execute():
     from services.trade_executor import execute_trade, DEFAULT_VOLUME, SCORE_MIN
     from services.signal_validator_ai import validate_signal_with_ai
     from services.trade_log import save_auto_trade
-    body = request.get_json(silent=True) or {}
+    body = _early_body  # reutiliza o body já lido
 
     tv_symbol = body.get("tv_symbol", "")
     acao      = body.get("acao", "")
@@ -899,13 +903,19 @@ def api_autotrade_execute():
         except Exception as log_exc:
             logger.warning("Falha ao salvar trade no log: %s", log_exc)
 
-    # Registra timestamp para cooldown no servidor
+    # Registra timestamp para cooldown no servidor (por símbolo)
     if result and not error:
-        _register_autotrade_ts()
+        _register_autotrade_ts(_sym_key)
         # Se o trade ocorreu na janela de abertura (09:00–09:30 BRT), registra proteção especial
         if _is_abertura_window():
-            _register_abertura_trade()
-            logger.info("Cooldown pós-abertura ativado: trade executado na janela 09:00-09:30 BRT")
+            _register_abertura_trade(_sym_key)
+            logger.info("Cooldown pós-abertura ativado para %s: trade executado na janela 09:00-09:30 BRT", _sym_key)
+        # CRÍTICO: reseta o contador de confirmação de fechamento para o símbolo.
+        # Sem isso, se _no_position_count estiver em 2 no momento do execute e o
+        # fetchManage disparar logo após (antes de o MT5 registrar a nova posição),
+        # a contagem chega a 3 e o trade recém-aberto é falsamente fechado no DB.
+        _no_position_count[tv_symbol] = 0
+        logger.info("_no_position_count[%s] resetado após execute bem-sucedido.", tv_symbol)
 
     # Notifica Telegram se trade executado
     if result and not error:
@@ -1051,6 +1061,17 @@ def api_autotrade_manage():
     # Verifica posicoes abertas pelo bot
     positions, err = get_open_positions(tv_symbol)
     if err:
+        # MT5 com erro de conexao — verifica DB antes de retornar falha.
+        # Se ha trade aberto no DB, retorna MANAGE (confiar no DB > erro MT5).
+        # Isso evita que instabilidade de conexao MT5 prenda a UI em SCAN.
+        logger.warning("Manage: get_open_positions erro: %s", err)
+        _open_log_fallback = get_open_auto_trade(tv_symbol)
+        if _open_log_fallback:
+            logger.warning("Manage: MT5 erro mas ha trade aberto no DB (id=%d) — retornando MANAGE.",
+                           _open_log_fallback["id"])
+            return jsonify({"ok": True, "mode": "MANAGE",
+                            "position": None, "analysis": None,
+                            "trade_log": _open_log_fallback, "signal": None})
         return jsonify({"ok": False, "error": err})
 
     def _detect_close_reason(exit_price, open_log):
@@ -1069,24 +1090,28 @@ def api_autotrade_manage():
         tp1   = open_log.get("tp1_initial")
         entry = open_log.get("entry_price")
         acao  = open_log.get("acao", "")
-        tol   = 50  # tolerância de 50 pontos (WIN mini)
+        # Tolerância por símbolo: WIN=50pts, WDO=5pts, outros=0.5% da entrada
+        sym_up = (open_log.get("tv_symbol") or tv_symbol or "").upper()
+        if "WIN" in sym_up:
+            tol = 50
+        elif "WDO" in sym_up:
+            tol = 5
+        else:
+            tol = float(entry) * 0.005 if entry else 0.5
 
         if sl  and abs(exit_price - float(sl))  <= tol:
             return "STOP"
         if tp1 and abs(exit_price - float(tp1)) <= tol:
             return "TP1"
 
-        # Sem bater exatamente SL ou TP — tenta inferir pela direção
+        # Sem bater exatamente SL ou TP — infere pela direção
         if entry:
-            entry_f = float(entry)
-            exit_f  = float(exit_price)
             if acao == "COMPRA":
-                lucro = exit_f > entry_f
+                lucro = float(exit_price) > float(entry)
             elif acao == "VENDA":
-                lucro = exit_f < entry_f
+                lucro = float(exit_price) < float(entry)
             else:
                 lucro = None
-
             if lucro is True:
                 return "FECHADO_MT5_GAIN"
             elif lucro is False:
@@ -1095,12 +1120,29 @@ def api_autotrade_manage():
         return "FECHADO_MT5"
 
     def _calc_pnl(exit_price, open_log):
+        """
+        P&L por símbolo:
+          WIN  → R$0,20 por ponto por contrato
+          WDO  → R$10,00 por ponto por contrato
+          Outros (ações) → diferença de preço × volume em BRL
+        """
         pnl_pts, pnl_brl = None, None
         if exit_price and open_log.get("entry_price"):
-            entry = float(open_log["entry_price"])
-            pnl_pts = round(exit_price - entry) if open_log.get("acao") == "COMPRA" else round(entry - exit_price)
-            vol = float(open_log.get("volume") or 1.0)
-            pnl_brl = round(pnl_pts * 0.20 * vol, 2)
+            entry  = float(open_log["entry_price"])
+            acao   = open_log.get("acao", "COMPRA")
+            vol    = float(open_log.get("volume") or 1.0)
+            diff   = (exit_price - entry) if acao == "COMPRA" else (entry - exit_price)
+            sym_up = (open_log.get("tv_symbol") or tv_symbol or "").upper()
+            if "WIN" in sym_up:
+                pnl_pts = round(diff)
+                pnl_brl = round(pnl_pts * 0.20 * vol, 2)
+            elif "WDO" in sym_up:
+                pnl_pts = round(diff)
+                pnl_brl = round(pnl_pts * 10.0 * vol, 2)
+            else:
+                # Ações: BRL direto (diferença de preço × volume)
+                pnl_pts = None
+                pnl_brl = round(diff * vol, 2)
         return pnl_pts, pnl_brl
 
     def _get_exit_price(tv_symbol):
@@ -1126,14 +1168,17 @@ def api_autotrade_manage():
         # Só registra fechamento após N leituras consecutivas sem posição.
         _no_position_count[tv_symbol] = _no_position_count.get(tv_symbol, 0) + 1
         if _no_position_count[tv_symbol] < _NO_POSITION_CONFIRM:
-            logger.info("Manage: sem posição (leitura %d/%d) — aguardando confirmação.",
+            logger.info("Manage: sem posicao (leitura %d/%d) — aguardando confirmacao.",
                         _no_position_count[tv_symbol], _NO_POSITION_CONFIRM)
             open_log = get_open_auto_trade(tv_symbol)
             if open_log:
-                # Ainda retorna MANAGE para não interromper o ciclo
+                # Há trade aberto no DB — MT5 pode estar com lag. Mantém MANAGE.
                 return jsonify({"ok": True, "mode": "MANAGE",
                                 "position": None, "analysis": None,
                                 "trade_log": open_log, "signal": None})
+            # Sem trade no DB: retorna SCAN normalmente.
+            # O JS tem um período de graça pós-execute que ignora este SCAN
+            # se o execute ocorreu nos últimos 30s (evita flip race-condition).
             return jsonify({"ok": True, "mode": "SCAN",
                             "position": None, "analysis": None, "signal": None,
                             "closed_trade": None})
@@ -1201,21 +1246,28 @@ def api_autotrade_manage():
     position = positions[0]
 
     # Busca dados de mercado para gerar sinal tecnico atual
-    df, data_err = get_candles(tv_symbol, tv_interval=interval)
     current_signal = None
     atr = None
-    if df is not None and not df.empty:
-        current_signal = generate_signal(df)
-        if current_signal:
-            atr = current_signal.get("atr")
+    try:
+        df, data_err = get_candles(tv_symbol, tv_interval=interval)
+        if df is not None and not df.empty:
+            current_signal = generate_signal(df)
+            if current_signal:
+                atr = current_signal.get("atr")
+    except Exception as _sig_exc:
+        logger.warning("Manage: erro ao buscar/gerar sinal para %s: %s", tv_symbol, _sig_exc)
 
     # Analisa a posicao
-    analysis = analyze_position(
-        position=position,
-        current_signal=current_signal,
-        atr=atr,
-        interval_min=interval_min,
-    )
+    analysis = None
+    try:
+        analysis = analyze_position(
+            position=position,
+            current_signal=current_signal,
+            atr=atr,
+            interval_min=interval_min,
+        )
+    except Exception as _ana_exc:
+        logger.warning("Manage: erro ao analisar posição %s: %s", tv_symbol, _ana_exc)
 
     # Recupera o log do trade aberto para contexto
     from services.trade_log import save_auto_trade
@@ -1290,6 +1342,94 @@ def api_autotrade_manage():
         "trade_log":  open_log,
     })
 
+
+@app.route("/api/autotrade/fix-corrupt-pnl", methods=["POST"])
+def api_fix_corrupt_pnl():
+    """
+    Corrige registros com P&L obviamente errado (resultado de bug do fallback multi-símbolo).
+    Zera pnl_pts e pnl_brl de trades onde pnl_pts > 10000 (impossível em day trade real).
+    """
+    from services.db import _conn as _db_conn
+    try:
+        with _db_conn() as conn:
+            rows = conn.execute(
+                "SELECT id, tv_symbol, entry_price, exit_price, pnl_pts, pnl_brl "
+                "FROM auto_trades WHERE pnl_pts > 10000 OR pnl_pts < -10000"
+            ).fetchall()
+            ids_corrigidos = []
+            for row in rows:
+                conn.execute(
+                    "UPDATE auto_trades SET pnl_pts=NULL, pnl_brl=NULL, close_reason='DADOS_CORROMPIDOS' WHERE id=?",
+                    (row[0],)
+                )
+                ids_corrigidos.append({
+                    "id": row[0], "tv_symbol": row[1],
+                    "entry_price": row[2], "exit_price": row[3],
+                    "pnl_pts_anterior": row[4], "pnl_brl_anterior": row[5],
+                })
+                logger.info("Registro corrompido zerado: id=%d tv=%s pnl_pts_era=%s", row[0], row[1], row[4])
+        return jsonify({"ok": True, "corrigidos": ids_corrigidos, "total": len(ids_corrigidos)})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)})
+
+
+@app.route("/api/autotrade/fix-wdo-pnl", methods=["POST"])
+def api_fix_wdo_pnl():
+    """
+    Recalcula pnl_brl dos trades WDO fechados usando a fórmula correta (R$10/ponto).
+    A fórmula antiga usava R$0,20/ponto (fórmula do WIN), gerando valores 50x menores.
+    Também recalcula trades com pnl_brl absurdo (> 10.000) zerando-os como corrompidos.
+    """
+    from services.db import _conn as _db_conn
+    try:
+        with _db_conn() as conn:
+            rows = conn.execute("""
+                SELECT id, tv_symbol, acao, entry_price, exit_price, pnl_pts, pnl_brl, volume
+                FROM auto_trades
+                WHERE (tv_symbol LIKE '%WDO%' OR tv_symbol LIKE '%wdo%')
+                  AND pnl_pts IS NOT NULL
+                  AND closed_at IS NOT NULL
+                  AND close_reason NOT IN ('BLOQUEADO_IA','AGUARDADO_IA','DADOS_CORROMPIDOS')
+            """).fetchall()
+
+            corrigidos = []
+            for row in rows:
+                rid, sym, acao, entry, exit_p, pts, brl, vol = (
+                    row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7]
+                )
+                pts_f  = float(pts  or 0)
+                vol_f  = float(vol  or 1.0)
+
+                # Ignorar registros corrompidos (pts absurdo — tratados pelo fix-corrupt-pnl)
+                if abs(pts_f) > 10000:
+                    continue
+
+                # Recalcular com fórmula correta: R$10/ponto × volume
+                novo_brl = round(pts_f * 10.0 * vol_f, 2)
+                brl_atual = float(brl or 0)
+
+                if abs(novo_brl - brl_atual) < 0.01:
+                    continue  # já está correto
+
+                conn.execute(
+                    "UPDATE auto_trades SET pnl_brl=? WHERE id=?",
+                    (novo_brl, rid)
+                )
+                corrigidos.append({
+                    "id": rid, "tv_symbol": sym,
+                    "pnl_pts": pts_f,
+                    "pnl_brl_antigo": brl_atual,
+                    "pnl_brl_novo": novo_brl,
+                })
+                logger.info(
+                    "WDO P&L recalculado: id=%d pnl_pts=%.0f brl_antigo=%.2f brl_novo=%.2f",
+                    rid, pts_f, brl_atual, novo_brl,
+                )
+
+        return jsonify({"ok": True, "corrigidos": corrigidos, "total": len(corrigidos)})
+    except Exception as exc:
+        logger.exception("Erro ao corrigir P&L WDO")
+        return jsonify({"ok": False, "error": str(exc)})
 
 @app.route("/api/autotrade/meta-config", methods=["GET", "POST"])
 def api_autotrade_meta_config():
@@ -1723,7 +1863,6 @@ def api_save_mt5_signal():
 def api_mt5_signals_history():
     limit = min(int(request.args.get("limit", 100)), 200)
     return jsonify({"ok": True, "items": list_mt5_signals(limit)})
-
 
 @app.route("/api/monitor/signals/stats")
 def api_mt5_signals_stats():
