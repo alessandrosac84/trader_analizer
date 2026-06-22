@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Motor de Inteligência</title>
+<style>
+  :root {
+    --bg:        #0d0d0d;
+    --surface:   #141414;
+    --card:      #1a1a1a;
+    --border:    #2a2a2a;
+    --green:     #00c853;
+    --red:       #ff1744;
+    --yellow:    #ffd600;
+    --blue:      #2979ff;
+    --purple:    #7c4dff;
+    --muted:     #666;
+    --text:      #e0e0e0;
+    --subtext:   #999;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; }
+
+  /* ── Navbar ──────────────────────────────────────────── */
+  .navbar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .navbar .brand { font-size: 18px; font-weight: 700; color: var(--purple); }
+  .navbar a { color: var(--muted); text-decoration: none; font-size: 13px; }
+  .navbar a:hover { color: var(--text); }
+  .navbar a.active { color: var(--purple); }
+  .nav-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+  .last-update { font-size: 11px; color: var(--muted); }
+
+  /* ── Layout ──────────────────────────────────────────── */
+  .page { max-width: 1280px; margin: 0 auto; padding: 24px 20px; }
+  .page-title { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .page-sub   { color: var(--subtext); font-size: 13px; margin-bottom: 24px; }
+
+  /* ── Tabs ────────────────────────────────────────────── */
+  .tabs { display: flex; gap: 4px; margin-bottom: 24px; border-bottom: 1px solid var(--border); padding-bottom: 0; }
+  .tab-btn {
+    padding: 10px 18px; border: none; background: none; color: var(--muted);
+    cursor: pointer; font-size: 13px; border-bottom: 2px solid transparent;
+    margin-bottom: -1px; transition: all 0.15s;
+  }
+  .tab-btn.active { color: var(--purple); border-bottom-color: var(--purple); }
+  .tab-btn:hover  { color: var(--text); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ── Cards / grids ───────────────────────────────────── */
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; margin-bottom: 24px; }
+  .kpi {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px;
+  }
+  .kpi-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+  .kpi-value { font-size: 24px; font-weight: 700; }
+  .kpi-sub   { font-size: 11px; color: var(--subtext); margin-top: 4px; }
+
+  /* ── Recomendações ───────────────────────────────────── */
+  .recs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; margin-bottom: 24px; }
+  .rec-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px;
+  }
+  .rec-card h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin-bottom: 10px; }
+  .rec-value { font-size: 28px; font-weight: 800; margin-bottom: 4px; }
+  .rec-desc  { font-size: 12px; color: var(--subtext); }
+  .badge {
+    display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600;
+  }
+  .badge-green  { background: rgba(0,200,83,.15); color: var(--green); }
+  .badge-red    { background: rgba(255,23,68,.15); color: var(--red); }
+  .badge-yellow { background: rgba(255,214,0,.15); color: var(--yellow); }
+  .badge-blue   { background: rgba(41,121,255,.15); color: var(--blue); }
+  .badge-purple { background: rgba(124,77,255,.15); color: var(--purple); }
+  .badge-gray   { background: rgba(100,100,100,.15); color: var(--muted); }
+
+  /* ── Tabelas ─────────────────────────────────────────── */
+  .section-title {
+    font-size: 14px; font-weight: 600; color: var(--subtext);
+    text-transform: uppercase; letter-spacing: .5px;
+    margin-bottom: 12px; margin-top: 24px;
+  }
+  .data-table {
+    width: 100%; border-collapse: collapse; background: var(--card);
+    border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+  }
+  .data-table th {
+    padding: 10px 14px; font-size: 11px; text-transform: uppercase;
+    letter-spacing: .5px; color: var(--muted); background: var(--surface);
+    text-align: left; border-bottom: 1px solid var(--border);
+  }
+  .data-table td { padding: 10px 14px; border-bottom: 1px solid #1f1f1f; font-size: 13px; }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table tr:hover td { background: rgba(255,255,255,.02); }
+  .wr-bar-wrap { width: 100px; height: 6px; background: #222; border-radius: 3px; display: inline-block; vertical-align: middle; }
+  .wr-bar      { height: 6px; border-radius: 3px; }
+
+  /* ── Chart canvas ────────────────────────────────────── */
+  .chart-wrap { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px; margin-bottom: 24px; }
+  .chart-wrap canvas { width: 100% !important; }
+
+  /* ── Botões ──────────────────────────────────────────── */
+  .btn {
+    padding: 8px 18px; border-radius: 8px; border: none; cursor: pointer;
+    font-size: 13px; font-weight: 600; transition: opacity .15s;
+  }
+  .btn:hover { opacity: .85; }
+  .btn-primary  { background: var(--purple); color: #fff; }
+  .btn-outline  { background: transparent; border: 1px solid var(--border); color: var(--text); }
+
+  /* ── AI Supervisor ───────────────────────────────────── */
+  .verdict-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-bottom: 24px; }
+  .verdict-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px;
+  }
+  .verdict-card .v-name { font-weight: 700; font-size: 15px; margin-bottom: 8px; }
+  .verdict-card .v-row  { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; color: var(--subtext); }
+  .verdict-card .v-row span:last-child { color: var(--text); }
+
+  /* ── Market Engine ───────────────────────────────────── */
+  .engine-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-bottom: 24px; }
+  .engine-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px;
+  }
+  .engine-card .e-name { font-size: 12px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .engine-card .e-pnl  { font-size: 24px; font-weight: 800; }
+  .engine-card .e-row  { display: flex; justify-content: space-between; font-size: 12px; margin-top: 6px; color: var(--subtext); }
+  .engine-card .e-row span:last-child { color: var(--text); }
+  .priority-rank { display: flex; flex-direction: column; gap: 8px; }
+  .priority-item {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 14px; display: flex; align-items: center; gap: 10px;
+  }
+  .rank-num { font-size: 18px; font-weight: 800; color: var(--purple); min-width: 28px; }
+  .rank-name { font-weight: 600; }
+  .rank-stats { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  /* ── Drawdown chart ──────────────────────────────────── */
+  .drawdown-legend { display: flex; gap: 16px; margin-bottom: 10px; font-size: 12px; }
+  .dleg { display: flex; align-items: center; gap: 6px; }
+  .dleg-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+  /* ── Loading / empty ─────────────────────────────────── */
+  .loading { color: var(--muted); font-size: 13px; padding: 20px 0; }
+  .empty-state { text-align: center; padding: 40px; color: var(--muted); }
+  .empty-state h3 { font-size: 16px; margin-bottom: 8px; color: var(--subtext); }
+
+  /* ── Component badge ─────────────────────────────────── */
+  .comp-bar-wrap { width: 80px; height: 6px; background: #222; border-radius: 3px; display: inline-block; vertical-align: middle; }
+  .comp-bar { height: 6px; border-radius: 3px; }
+  .arrow-up   { color: var(--green); }
+  .arrow-down { color: var(--red); }
+  .arrow-flat { color: var(--muted); }
+</style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar">
+  <span class="brand">⚡ Motor de Inteligência</span>
+  <a href="/market-center">Market Center</a>
+  <a href="/analytics">Analytics</a>
+  <a href="/intelligence" class="active">Inteligência</a>
+  <div class="nav-right">
+    <span class="last-update" id="lastUpdate">–</span>
+    <button class="btn btn-primary" onclick="loadAll()">↺ Atualizar</button>
+  </div>
+</nav>
+
+<div class="page">
+  <div class="page-title">Motor de Inteligência</div>
+  <div class="page-sub">5 Evoluções: Score · Pesos Dinâmicos · Regime Manager · AI Supervisor · Market Engine</div>
+
+  <!-- KPI bar -->
+  <div class="kpi-grid" id="kpiBar">
+    <div class="kpi"><div class="kpi-label">Confiança Geral</div><div class="kpi-value" id="k-conf">–</div><div class="kpi-sub">volume de dados</div></div>
+    <div class="kpi"><div class="kpi-label">Trades Resolvidos</div><div class="kpi-value" id="k-total">–</div><div class="kpi-sub">com resultado</div></div>
+    <div class="kpi"><div class="kpi-label">Score Mínimo Rec.</div><div class="kpi-value" id="k-minscore">–</div><div class="kpi-sub">para operar</div></div>
+    <div class="kpi"><div class="kpi-label">Regimes Bloqueados</div><div class="kpi-value" id="k-regbloq">–</div><div class="kpi-sub">por win rate baixo</div></div>
+    <div class="kpi"><div class="kpi-label">Força Mínima Rec.</div><div class="kpi-value" id="k-minstrength">–</div><div class="kpi-sub">signal_strength</div></div>
+    <div class="kpi"><div class="kpi-label">P&L Hoje (Total)</div><div class="kpi-value" id="k-pnl">–</div><div class="kpi-sub">todos instrumentos</div></div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('recomendacoes')">🎯 Recomendações</button>
+    <button class="tab-btn" onclick="switchTab('score')">📊 Score</button>
+    <button class="tab-btn" onclick="switchTab('pesos')">⚖️ Pesos Dinâmicos</button>
+    <button class="tab-btn" onclick="switchTab('regimes')">🌊 Regimes</button>
+    <button class="tab-btn" onclick="switchTab('supervisor')">🤖 AI Supervisor</button>
+    <button class="tab-btn" onclick="switchTab('engine')">🚀 Market Engine</button>
+  </div>
+
+  <!-- ── Tab: Recomendações ─────────────────────────────────────────────── -->
+  <div class="tab-panel active" id="tab-recomendacoes">
+    <div class="recs-grid" id="recCards">
+      <div class="loading">Carregando recomendações...</div>
+    </div>
+  </div>
+
+  <!-- ── Tab: Score ─────────────────────────────────────────────────────── -->
+  <div class="tab-panel" id="tab-score">
+    <div class="section-title">Win Rate por Score</div>
+    <div id="scoreTableWrap"><div class="loading">Carregando...</div></div>
+  </div>
+
+  <!-- ── Tab: Pesos Dinâmicos ───────────────────────────────────────────── -->
+  <div class="tab-panel" id="tab-pesos">
+    <div class="section-title">Correlação por Componente do Score</div>
+    <div id="weightsTableWrap"><div class="loading">Carregando...</div></div>
+    <div class="section-title">Confluências mais eficazes</div>
+    <div id="confluencesTableWrap"><div class="loading">Carregando...</div></div>
+  </div>
+
+  <!-- ── Tab: Regimes ───────────────────────────────────────────────────── -->
+  <div class="tab-panel" id="tab-regimes">
+    <div class="section-title">Viabilidade por Regime de Mercado</div>
+    <div id="regimesTableWrap"><div class="loading">Carregando...</div></div>
+    <div class="section-title">Win Rate por Força do Sinal</div>
+    <div id="strengthTableWrap"><div class="loading">Carregando...</div></div>
+  </div>
+
+  <!-- ── Tab: AI Supervisor ─────────────────────────────────────────────── -->
+  <div class="tab-panel" id="tab-supervisor">
+    <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
+      <button class="btn btn-outline" onclick="loadAISupervisor('today')" id="sbtn-today">Hoje</button>
+      <button class="btn btn-outline" onclick="loadAISupervisor('week')"  id="sbtn-week">Semana</button>
+      <button class="btn btn-outline" onclick="loadAISupervisor('month')" id="sbtn-month">Mês</button>
+      <button class="btn btn-outline" onclick="loadAISupervisor('all')"   id="sbtn-all">Tudo</button>
+    </div>
+    <div class="section-title">Desempenho por Veredicto da IA</div>
+    <div class="verdict-grid" id="verdictCards"><div class="loading">Carregando...</div></div>
+    <div class="section-title">TP / FP / FN</div>
+    <div class="kpi-grid" id="fpfnGrid"></div>
+    <div class="section-title">Win Rate por Nível de Confiança da IA</div>
+    <div id="confidenceTableWrap"><div class="loading">Carregando...</div></div>
+    <div class="section-title">Decisões Recentes</div>
+    <div id="decisionsTableWrap"><div class="loading">Carregando...</div></div>
+  </div>
+
+  <!-- ── Tab: Market Engine ─────────────────────────────────────────────── -->
+  <div class="tab-panel" id="tab-engine">
+    <div style="display:flex;gap:12px;margin-bottom:4px;flex-wrap:wrap;align-items:center;">
+      <button class="btn btn-outline" onclick="loadEngine('today')" id="ebtn-today">Hoje</button>
+      <button class="btn btn-outline" onclick="loadEngine('week')"  id="ebtn-week">Semana</button>
+      <button class="btn btn-outline" onclick="loadEngine('month')" id="ebtn-month">Mês</button>
+      <button class="btn btn-outline" onclick="loadEngine('all')"   id="ebtn-all">Tudo</button>
+      <span id="ebtn-default-label" style="font-size:11px;color:var(--muted);margin-left:4px">Padrão: WIN=Mês · WDO=Semana · Scalper=Hoje</span>
+    </div>
+    <div class="section-title">P&L por Instrumento</div>
+    <div class="engine-grid" id="engineCards"><div class="loading">Carregando...</div></div>
+    <div class="section-title">Ranking de Prioridade</div>
+    <div class="priority-rank" id="priorityRank"></div>
+    <div class="section-title">Curva de Capital Semanal</div>
+    <div class="chart-wrap">
+      <div class="drawdown-legend">
+        <div class="dleg"><div class="dleg-dot" style="background:#2979ff"></div><span>Monitor (WIN/WDO)</span></div>
+        <div class="dleg"><div class="dleg-dot" style="background:#00c853"></div><span>Scalper</span></div>
+        <div class="dleg"><div class="dleg-dot" style="background:#ffd600"></div><span>Total</span></div>
+      </div>
+      <canvas id="drawdownChart" height="200"></canvas>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script>
+// ============================================================
+//  Estado global
+// ============================================================
+let _chart = null;
+
+// ============================================================
+//  Tabs
+// ============================================================
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach((b, i) => {
+    const panels = ['recomendacoes','score','pesos','regimes','supervisor','engine'];
+    b.classList.toggle('active', panels[i] === name);
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+// ============================================================
+//  Helpers de formatação
+// ============================================================
+function wr(v) {
+  if (v == null) return '–';
+  const c = v >= 60 ? 'var(--green)' : v >= 45 ? 'var(--yellow)' : 'var(--red)';
+  return `<span style="color:${c};font-weight:700">${v}%</span>`;
+}
+function pnlColor(v) {
+  if (v == null || v === undefined) return '–';
+  const c = v >= 0 ? 'var(--green)' : 'var(--red)';
+  const sign = v >= 0 ? '+' : '';
+  return `<span style="color:${c}">${sign}${v}</span>`;
+}
+function pnlBRL(v) {
+  if (v == null) return '–';
+  const c = v >= 0 ? 'var(--green)' : 'var(--red)';
+  const sign = v >= 0 ? '+' : '';
+  return `<span style="color:${c}">R$ ${sign}${v.toFixed(2)}</span>`;
+}
+function confBadge(c) {
+  const m = {alta:'badge-green', media:'badge-yellow', baixa:'badge-red', insuficiente:'badge-red', aguardando_dados:'badge-gray'};
+  return `<span class="badge ${m[c]||'badge-gray'}">${(c||'–').toUpperCase()}</span>`;
+}
+function statusBadge(s) {
+  const m = {
+    priorizar:'badge-green', neutro:'badge-blue', bloquear:'badge-red',
+    aguardando_dados:'badge-gray', evitar:'badge-red',
+    alta:'badge-green', media:'badge-yellow', baixa:'badge-red',
+    excelente:'badge-green', bom:'badge-green', regular:'badge-yellow',
+    ruim:'badge-red', muito_restritivo:'badge-red',
+    STOP_DIARIO:'badge-red', ALERTA:'badge-yellow', NORMAL:'badge-green',
+    aumentar:'badge-green', manter:'badge-blue', reduzir:'badge-red',
+  };
+  return `<span class="badge ${m[s]||'badge-gray'}">${(s||'–').replace(/_/g,' ').toUpperCase()}</span>`;
+}
+function wrBar(v, max=100) {
+  const pct = Math.min(100, (v/max)*100);
+  const c = v >= 60 ? 'var(--green)' : v >= 45 ? 'var(--yellow)' : 'var(--red)';
+  return `<div class="wr-bar-wrap"><div class="wr-bar" style="width:${pct}%;background:${c}"></div></div>`;
+}
+function corrBar(v) {
+  const abs = Math.min(100, Math.abs(v || 0));
+  const c   = v >= 0 ? 'var(--green)' : 'var(--red)';
+  return `<div class="comp-bar-wrap"><div class="comp-bar" style="width:${abs}%;background:${c}"></div></div>`;
+}
+
+// ============================================================
+//  Carrega tudo
+// ============================================================
+async function loadAll() {
+  const now = new Date().toLocaleTimeString('pt-BR');
+  document.getElementById('lastUpdate').textContent = 'Atualizado: ' + now;
+  await Promise.all([
+    loadRecommendations(),
+    loadScore(),
+    loadWeights(),
+    loadConfluences(),
+    loadRegimes(),
+    loadStrength(),
+    loadAISupervisor('month'),   // padrao: ultimo mes
+    loadEngine(null),
+    loadDrawdown(),
+  ]);
+}
+
+// ============================================================
+//  Tab Recomendações
+// ============================================================
+async function loadRecommendations() {
+  const r = await fetch('/api/intelligence/recommendations').then(r => r.json()).catch(() => ({}));
+
+  // KPI bar
+  const confMap = {alta:'var(--green)', media:'var(--yellow)', baixa:'var(--red)', insuficiente:'var(--red)'};
+  document.getElementById('k-conf').textContent     = (r.overall_confidence || '–').toUpperCase();
+  document.getElementById('k-conf').style.color     = confMap[r.overall_confidence] || 'var(--muted)';
+  document.getElementById('k-total').textContent    = r.total_resolved_trades ?? '–';
+  document.getElementById('k-minscore').textContent = r.min_score ?? '–';
+  document.getElementById('k-regbloq').textContent  = (r.blocked_regimes || []).length;
+  document.getElementById('k-minstrength').textContent = r.min_strength ?? '–';
+
+  // Cards
+  let html = '';
+
+  // Score mínimo
+  html += `<div class="rec-card">
+    <h4>Score Mínimo Recomendado</h4>
+    <div class="rec-value" style="color:var(--purple)">${r.min_score ?? '–'}</div>
+    <div class="rec-desc">Confiança: ${confBadge(r.score_confidence)}</div>
+    <div class="rec-desc" style="margin-top:6px">Opere apenas trades com score ≥ ${r.min_score ?? '?'}</div>
+  </div>`;
+
+  // Força mínima
+  html += `<div class="rec-card">
+    <h4>Força do Sinal Mínima</h4>
+    <div class="rec-value" style="color:var(--blue)">${r.min_strength ?? '–'}</div>
+    <div class="rec-desc">Confiança: ${confBadge(r.strength_confidence)}</div>
+    <div class="rec-desc" style="margin-top:6px">signal_strength ≥ ${r.min_strength ?? '?'}</div>
+  </div>`;
+
+  // Regimes bloqueados
+  const blocked = r.blocked_regimes || [];
+  html += `<div class="rec-card">
+    <h4>Regimes para Bloquear</h4>
+    <div class="rec-value" style="color:var(--red)">${blocked.length}</div>
+    <div class="rec-desc" style="margin-top:6px">
+      ${blocked.length ? blocked.map(b => `<span class="badge badge-red" style="margin:2px">${b}</span>`).join('') : '<span style="color:var(--muted)">Nenhum ainda</span>'}
+    </div>
+  </div>`;
+
+  // Regimes a priorizar
+  const prio = r.prioritize_regimes || [];
+  html += `<div class="rec-card">
+    <h4>Regimes para Priorizar</h4>
+    <div class="rec-value" style="color:var(--green)">${prio.length}</div>
+    <div class="rec-desc" style="margin-top:6px">
+      ${prio.length ? prio.map(p => `<span class="badge badge-green" style="margin:2px">${p}</span>`).join('') : '<span style="color:var(--muted)">Aguardando dados</span>'}
+    </div>
+  </div>`;
+
+  // Componentes com peso alto
+  const top = r.top_components || [];
+  html += `<div class="rec-card">
+    <h4>Aumentar Peso</h4>
+    <div class="rec-value" style="color:var(--green)">${top.length}</div>
+    <div class="rec-desc" style="margin-top:6px">
+      ${top.length ? top.map(c => `<span class="badge badge-green" style="margin:2px">${c.component}</span> <span style="color:var(--green);font-size:11px">+${c.correlation}%</span><br>`).join('') : '<span style="color:var(--muted)">Aguardando dados</span>'}
+    </div>
+  </div>`;
+
+  // Componentes com peso baixo
+  const drop = r.drop_components || [];
+  html += `<div class="rec-card">
+    <h4>Reduzir Peso</h4>
+    <div class="rec-value" style="color:var(--red)">${drop.length}</div>
+    <div class="rec-desc" style="margin-top:6px">
+      ${drop.length ? drop.map(c => `<span class="badge badge-red" style="margin:2px">${c.component}</span> <span style="color:var(--red);font-size:11px">${c.correlation}%</span><br>`).join('') : '<span style="color:var(--muted)">Aguardando dados</span>'}
+    </div>
+  </div>`;
+
+  document.getElementById('recCards').innerHTML = html;
+}
+
+// ============================================================
+//  Tab Score
+// ============================================================
+async function loadScore() {
+  const d = await fetch('/api/intelligence/score-performance').then(r => r.json()).catch(() => ({}));
+  const rows = d.rows || [];
+
+  if (!rows.length) {
+    document.getElementById('scoreTableWrap').innerHTML = '<div class="empty-state"><h3>Sem dados</h3><p>Execute trades e sincronize outcomes para ver análise de score.</p></div>';
+    return;
+  }
+
+  let html = `<table class="data-table">
+    <thead><tr>
+      <th>Score</th><th>Trades</th><th>Wins</th><th>Losses</th>
+      <th>Win Rate</th><th>Avg P&L (pts)</th><th>Avg P&L (R$)</th>
+    </tr></thead><tbody>`;
+
+  rows.forEach(r => {
+    const recMark = (r.win_rate >= 55 && r.total >= 5) ? '✅' : '';
+    html += `<tr>
+      <td><strong>${r.score}</strong> ${recMark}</td>
+      <td>${r.total}</td>
+      <td style="color:var(--green)">${r.wins}</td>
+      <td style="color:var(--red)">${r.losses}</td>
+      <td>${wr(r.win_rate)} ${wrBar(r.win_rate)}</td>
+      <td>${pnlColor(r.avg_pnl)}</td>
+      <td>${r.avg_brl != null ? pnlBRL(r.avg_brl) : '–'}</td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+
+  const rec = d.recommendation || {};
+  if (rec.min_score) {
+    html = `<div style="background:rgba(124,77,255,.1);border:1px solid var(--purple);border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px">
+      <strong style="color:var(--purple)">Recomendação:</strong> Opere somente com score ≥ <strong>${rec.min_score}</strong>
+      (confiança: ${confBadge(rec.confidence)} · ${rec.total_samples || 0} amostras)
+    </div>` + html;
+  }
+
+  document.getElementById('scoreTableWrap').innerHTML = html;
+}
+
+// ============================================================
+//  Tab Pesos Dinâmicos
+// ============================================================
+async function loadWeights() {
+  const d = await fetch('/api/intelligence/weights').then(r => r.json()).catch(() => ({}));
+  const rows = d.rows || [];
+
+  if (!rows.length) {
+    document.getElementById('weightsTableWrap').innerHTML = '<div class="empty-state"><h3>Sem dados</h3><p>Necessário score_breakdown preenchido nos trades resolvidos.</p></div>';
+    return;
+  }
+
+  let html = `<table class="data-table">
+    <thead><tr>
+      <th>Componente</th><th>WR quando +</th><th>WR quando 0/-</th>
+      <th>Correlação</th><th>Amostras</th><th>Sugestão</th>
+    </tr></thead><tbody>`;
+
+  rows.forEach(r => {
+    const arrow = r.correlation >= 20 ? '<span class="arrow-up">▲</span>' :
+                  r.correlation <= -10 ? '<span class="arrow-down">▼</span>' :
+                  '<span class="arrow-flat">–</span>';
+    html += `<tr>
+      <td><strong>${r.component}</strong></td>
+      <td>${wr(r.pos_win_rate)}</td>
+      <td>${wr(r.neg_win_rate)}</td>
+      <td>${arrow} ${corrBar(r.correlation)} <span style="font-size:11px;color:var(--subtext)">${r.correlation > 0 ? '+' : ''}${r.correlation}%</span></td>
+      <td style="color:var(--muted)">${r.total_samples}</td>
+      <td>${statusBadge(r.suggestion)}</td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+  document.getElementById('weightsTableWrap').innerHTML = html;
+}
+
+async function loadConfluences() {
+  const d = await fetch('/api/intelligence/confluences').then(r => r.json()).catch(() => ({}));
+  const rows = (d.rows || []).slice(0, 20);
+
+  if (!rows.length) {
+    document.getElementById('confluencesTableWrap').innerHTML = '<div class="empty-state"><h3>Sem dados</h3></div>';
+    return;
+  }
+
+  let html = `<table class="data-table">
+    <thead><tr><th>Confluência</th><th>Trades</th><th>Wins</th><th>Win Rate</th></tr></thead><tbody>`;
+
+  rows.forEach(r => {
+    html += `<tr>
+      <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.confluence}">${r.confluence}</td>
+      <td>${r.total}</td>
+      <td style="color:var(--green)">${r.wins}</td>
+      <td>${wr(r.win_rate)} ${wrBar(r.win_rate)}</td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+  document.getElementById('confluencesTableWrap').innerHTML = html;
+}
+
+// ============================================================
+//  Tab Regimes
+// ============================================================
+async function loadRegimes() {
+  const d = await fetch('/api/intelligence/regimes').then(r => r.json()).catch(() => ({}));
+  const rows = d.rows || [];
+
+  if (!rows.length) {
+    document.getElementById('regimesTableWrap').innerHTML = '<div class="empty-state"><h3>Sem dados</h3></div>';
+    return;
+  }
+
+  let html = `<table class="data-table">
+    <thead><tr>
+      <th>Regime</th><th>Trades</th><th>Wins</th><th>Losses</th>
+      <th>Win Rate</th><th>Avg P&L (pts)</th><th>Status</th><th>Confiança</th>
+    </tr></thead><tbody>`;
+
+  rows.forEach(r => {
+    html += `<tr>
+      <td><strong>${r.regime || '–'}</strong></td>
+      <td>${r.total}</td>
+      <td style="color:var(--green)">${r.wins}</td>
+      <td style="color:var(--red)">${r.losses}</td>
+      <td>${wr(r.win_rate)} ${wrBar(r.win_rate)}</td>
+      <td>${pnlColor(r.avg_pnl)}</td>
+      <td>${statusBadge(r.status)}</td>
+      <td>${confBadge(r.confidence)}</td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+  document.getElementById('regimesTableWrap').innerHTML = html;
+}
+
+async function loadStrength() {
+  const d = await fetch('/api/intelligence/strength').then(r => r.json()).catch(() => ({}));
+  const rows = d.rows || [];
+
+  if (!rows.length) {
+    document.getElementById('strengthTableWrap').innerHTML = '<div class="empty-state"><h3>Sem dados</h3></div>';
+    return;
+  }
+
+  let html = `<table class="data-table">
+    <thead><tr><th>Faixa de Força</th><th>Trades</th><th>Wins</th><th>Win Rate</th><th>Avg P&L</th><th>Status</th></tr></thead><tbody>`;
+
+  rows.forEach(r => {
+    html += `<tr>
+      <td>${r.range}</td>
+      <td>${r.total}</td>
+      <td style="color:var(--green)">${r.wins}</td>
+      <td>${wr(r.win_rate)} ${wrBar(r.win_rate)}</td>
+      <td>${pnlColor(r.avg_pnl)}</td>
+      <td>${statusBadge(r.status)}</td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+  document.getElementById('strengthTableWrap').innerHTML = html;
+}
+
+// ============================================================
+//  Tab AI Supervisor
+// ============================================================
+async function loadAISupervisor(period) {
+  // Destaca botão ativo; sem period = padrão 'month'
+  const activePeriod = period || 'month';
+  ['today','week','month','all'].forEach(p => {
+    const b = document.getElementById('sbtn-' + p);
+    if (!b) return;
+    const active = p === activePeriod;
+    b.style.borderColor = active ? 'var(--purple)' : 'var(--border)';
+    b.style.color       = active ? 'var(--purple)' : 'var(--text)';
+  });
+
+  const url = `/api/intelligence/ai-supervisor?period=${activePeriod}`;
+  const d = await fetch(url).then(r => r.json()).catch(() => ({}));
+  const vs = d.performance?.verdict_summary || {};
+  const fp = d.fp_fn_summary || {};
+  const conf = d.confidence || [];
+
+  // Verdict cards
+  let vcHtml = '';
+  if (!Object.keys(vs).length) {
+    vcHtml = '<div class="empty-state"><h3>Sem dados de veredicto</h3></div>';
+  } else {
+    Object.entries(vs).forEach(([v, s]) => {
+      const isExec = v === 'EXECUTAR';
+      vcHtml += `<div class="verdict-card">
+        <div class="v-name">${v}</div>`;
+
+      if (isExec) {
+        vcHtml += `
+          <div class="v-row"><span>Trades:</span><span>${s.total || 0}</span></div>
+          <div class="v-row"><span>Wins:</span><span style="color:var(--green)">${s.wins || 0}</span></div>
+          <div class="v-row"><span>Losses:</span><span style="color:var(--red)">${s.losses || 0}</span></div>
+          <div class="v-row"><span>Win Rate:</span><span>${wr(s.win_rate)}</span></div>
+          <div class="v-row"><span>Avg P&L:</span><span>${pnlColor(s.avg_pnl)}</span></div>
+          <div style="margin-top:8px">${statusBadge(s.quality)}</div>`;
+      } else {
+        vcHtml += `
+          <div class="v-row"><span>Bloqueios:</span><span>${s.total || 0}</span></div>
+          <div class="v-row"><span>FN estimados:</span><span style="color:var(--yellow)">${s.estimated_fn || 0}</span></div>
+          <div class="v-row"><span>Taxa FN:</span><span>${s.fn_rate != null ? s.fn_rate + '%' : '–'}</span></div>
+          <div style="margin-top:8px">${statusBadge(s.quality)}</div>`;
+      }
+      vcHtml += '</div>';
+    });
+  }
+  document.getElementById('verdictCards').innerHTML = vcHtml;
+
+  // FP/FN summary KPIs
+  let fpHtml = '';
+  fpHtml += `<div class="kpi"><div class="kpi-label">Verdadeiros Positivos</div><div class="kpi-value" style="color:var(--green)">${fp.true_positives ?? '–'}</div><div class="kpi-sub">EXECUTAR → ganhou</div></div>`;
+  fpHtml += `<div class="kpi"><div class="kpi-label">Falsos Positivos</div><div class="kpi-value" style="color:var(--red)">${fp.false_positives ?? '–'}</div><div class="kpi-sub">EXECUTAR → perdeu</div></div>`;
+  fpHtml += `<div class="kpi"><div class="kpi-label">Precisão</div><div class="kpi-value" style="color:${(fp.precision||0)>=60?'var(--green)':'var(--yellow)'}">${fp.precision != null ? fp.precision + '%' : '–'}</div><div class="kpi-sub">% EXECUTAR corretos</div></div>`;
+  fpHtml += `<div class="kpi"><div class="kpi-label">FN Estimados</div><div class="kpi-value" style="color:var(--yellow)">${fp.false_negatives_estimated ?? '–'}</div><div class="kpi-sub">bloqueou oportunidade boa</div></div>`;
+  fpHtml += `<div class="kpi"><div class="kpi-label">Total Bloqueados</div><div class="kpi-value">${fp.total_blocked ?? '–'}</div><div class="kpi-sub">não executados</div></div>`;
+  fpHtml += `<div class="kpi"><div class="kpi-label">Taxa FN</div><div class="kpi-value" style="color:${(fp.fn_rate||0)<=30?'var(--green)':'var(--red)'}">${fp.fn_rate != null ? fp.fn_rate + '%' : '–'}</div><div class="kpi-sub">bloqueios desnecessários</div></div>`;
+  document.getElementById('fpfnGrid').innerHTML = fpHtml;
+
+  // Confidence table
+  if (!conf.length) {
+    document.getElementById('confidenceTableWrap').innerHTML = '<div class="empty-state"><h3>Sem dados</h3></div>';
+  } else {
+    let cHtml = `<table class="data-table">
+      <thead><tr><th>Confiança IA</th><th>Trades</th><th>Wins</th><th>Win Rate</th><th>Avg P&L</th></tr></thead><tbody>`;
+    conf.forEach(r => {
+      cHtml += `<tr>
+        <td>${r.range}</td>
+        <td>${r.total}</td>
+        <td style="color:var(--green)">${r.wins}</td>
+        <td>${wr(r.win_rate)} ${wrBar(r.win_rate)}</td>
+        <td>${pnlColor(r.avg_pnl)}</td>
+      </tr>`;
+    });
+    cHtml += '</tbody></table>';
+    document.getElementById('confidenceTableWrap').innerHTML = cHtml;
+  }
+
+  // Carrega decisoes recentes com o mesmo periodo
+  await loadDecisions(activePeriod);
+}
+
+async function loadDecisions(period) {
+  const activePeriod = period || 'month';
+  const d = await fetch(`/api/intelligence/ai-decisions?limit=50&period=${activePeriod}`).then(r => r.json()).catch(() => ({}));
+  const rows = d.rows || [];
+
+  if (!rows.length) {
+    document.getElementById('decisionsTableWrap').innerHTML = '<div class="empty-state"><h3>Sem decisões registradas</h3></div>';
+    return;
+  }
+
+  let html = `<table class="data-table">
+    <thead><tr>
+      <th>Data/Hora</th><th>Símbolo</th><th>Direção</th>
+      <th>Veredicto IA</th><th>Confiança</th><th>Score</th>
+      <th>Regime</th><th>Resultado</th>
+    </tr></thead><tbody>`;
+
+  rows.forEach(r => {
+    const dt = (r.created_at || '').slice(0, 16).replace('T', ' ');
+    const res = r.outcome_label === 'WIN' ? '<span style="color:var(--green);font-weight:700">WIN</span>' :
+                r.outcome_label === 'LOSS' ? '<span style="color:var(--red);font-weight:700">LOSS</span>' :
+                r.outcome_label === 'IA_BLOQUEOU' ? '<span style="color:var(--red)">IA BLOQUEOU</span>' :
+                r.outcome_label === 'AGUARDADO'   ? '<span style="color:var(--yellow)">AGUARDADO</span>' :
+                `<span style="color:var(--muted)">${r.outcome_label || '–'}</span>`;
+    const verd = r.ai_verdict === 'EXECUTAR' ? '<span style="color:var(--green)">EXECUTAR</span>' :
+                 r.ai_verdict === 'BLOQUEAR' ? '<span style="color:var(--red)">BLOQUEAR</span>' :
+                 r.ai_verdict === 'AGUARDAR' ? '<span style="color:var(--yellow)">AGUARDAR</span>' :
+                 (r.ai_verdict || '–');
+
+    html += `<tr>
+      <td style="color:var(--muted)">${dt}</td>
+      <td>${r.symbol || '–'}</td>
+      <td>${r.action || '–'}</td>
+      <td>${verd}</td>
+      <td>${r.ai_confidence != null ? r.ai_confidence + '%' : '–'}</td>
+      <td>${r.score ?? '–'}</td>
+      <td style="font-size:11px">${r.market_regime || '–'}</td>
+      <td>${res}</td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+  document.getElementById('decisionsTableWrap').innerHTML = html;
+}
+
+// ============================================================
+//  Tab Market Engine
+// ============================================================
+async function loadEngine(period) {
+  // Destaca botão ativo; sem period = padrão inteligente (sem botão ativo)
+  ['today','week','month','all'].forEach(p => {
+    const b = document.getElementById('ebtn-' + p);
+    if (!b) return;
+    const active = p === period;
+    b.style.borderColor = active ? 'var(--purple)' : 'var(--border)';
+    b.style.color       = active ? 'var(--purple)' : 'var(--text)';
+  });
+  const lbl = document.getElementById('ebtn-default-label');
+  if (lbl) lbl.style.display = period ? 'none' : 'inline';
+
+  const url = period ? `/api/intelligence/market-engine?period=${period}` : '/api/intelligence/market-engine';
+  const d = await fetch(url).then(r => r.json()).catch(() => ({}));
+  const inst = d.instruments || {};
+
+  // KPI p&l — usa today_pnl_brl (P&L do dia, para exibir na barra de KPIs)
+  const todayPnl = d.today_pnl_brl ?? d.total_pnl_brl ?? 0;
+  document.getElementById('k-pnl').textContent = (todayPnl >= 0 ? '+' : '') + 'R$ ' + todayPnl.toFixed(2);
+  document.getElementById('k-pnl').style.color = todayPnl >= 0 ? 'var(--green)' : 'var(--red)';
+
+  // Rótulos de período por instrumento
+  const periodLabels = { WIN: 'Último Mês', WDO: 'Última Semana', SCALPER: 'Hoje' };
+
+  // Engine cards
+  const instruments = ['WIN', 'WDO', 'SCALPER'];
+  let ecHtml = '';
+  instruments.forEach(name => {
+    const s = inst[name] || {};
+    const brl = s.total_brl ?? 0;
+    const label = s.period_label || periodLabels[name] || '';
+    const lossCount = s.losses ?? ((s.total || 0) - (s.wins || 0));
+    const avgPts  = s.avg_pts  != null ? s.avg_pts  : null;
+    const worstPt = s.worst    != null ? s.worst    : null;
+    const bestPt  = s.best     != null ? s.best     : null;
+    ecHtml += `<div class="engine-card">
+      <div class="e-name">${name} <span style="font-size:10px;padding:2px 6px;border-radius:10px;background:var(--card-bg);color:var(--muted);border:1px solid var(--border);margin-left:4px">${label}</span></div>
+      <div class="e-pnl" style="color:${brl >= 0 ? 'var(--green)' : 'var(--red)'}">${brl >= 0 ? '+' : ''}R$ ${brl.toFixed(2)}</div>
+      <div class="e-row"><span>Trades</span><span>${s.total || 0}</span></div>
+      <div class="e-row"><span>Wins / Losses</span><span><span style="color:var(--green)">${s.wins || 0}</span> / <span style="color:var(--red)">${lossCount}</span></span></div>
+      <div class="e-row"><span>Win Rate</span><span>${wr(s.win_rate)}</span></div>
+      ${avgPts  != null ? `<div class="e-row"><span>Média pts</span><span>${pnlColor(avgPts)}</span></div>` : ''}
+      ${worstPt != null ? `<div class="e-row"><span>Pior trade</span><span style="color:var(--red)">${worstPt} pts</span></div>` : ''}
+      ${bestPt  != null ? `<div class="e-row"><span>Melhor trade</span><span style="color:var(--green)">${bestPt} pts</span></div>` : ''}
+    </div>`;
+  });
+
+  // Drawdown status card — sempre usa today_pnl_brl (segurança)
+  const dsColor = {STOP_DIARIO:'var(--red)', ALERTA:'var(--yellow)', NORMAL:'var(--green)'}[d.drawdown_status] || 'var(--muted)';
+  const totalPeriod = d.total_pnl_brl ?? 0;
+  ecHtml += `<div class="engine-card">
+    <div class="e-name">Status do Dia</div>
+    <div class="e-pnl" style="color:${dsColor}">${d.drawdown_status || '–'}</div>
+    <div class="e-row"><span>P&L Hoje</span><span>${pnlBRL(todayPnl)}</span></div>
+    <div class="e-row"><span>P&L do Período</span><span>${pnlBRL(totalPeriod)}</span></div>
+    <div class="e-row"><span>Stop Diário</span><span style="color:var(--red)">R$ ${(d.daily_stop_brl || 0).toFixed(0)}</span></div>
+    <div class="e-row"><span>Operar</span><span style="color:${d.trading_allowed ? 'var(--green)' : 'var(--red)'}">${d.trading_allowed ? 'SIM' : 'NÃO'}</span></div>
+  </div>`;
+
+  document.getElementById('engineCards').innerHTML = ecHtml;
+
+  // Priority ranking
+  const prio = d.priority_ranking || [];
+  let prHtml = '';
+  prio.forEach((item, i) => {
+    const medals = ['🥇','🥈','🥉'];
+    const periodTag = item.period
+      ? `<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:var(--card-bg);color:var(--muted);border:1px solid var(--border);margin-left:6px">${item.period}</span>`
+      : '';
+    prHtml += `<div class="priority-item">
+      <div class="rank-num">${medals[i] || '#' + (i + 1)}</div>
+      <div>
+        <div class="rank-name">${item.instrument}${periodTag}</div>
+        <div class="rank-stats">Win Rate: ${item.win_rate}% · Trades: ${item.total_trades} · P&L: ${pnlBRL(item.total_brl)}</div>
+      </div>
+      <div style="margin-left:auto">${statusBadge(item.priority)}</div>
+    </div>`;
+  });
+  document.getElementById('priorityRank').innerHTML = prHtml || '<div class="empty-state"><h3>Sem dados</h3></div>';
+}
+
+async function loadDrawdown() {
+  const d = await fetch('/api/intelligence/drawdown-history').then(r => r.json()).catch(() => ({}));
+  const weeks = d.weeks || [];
+  if (!weeks.length) return;
+
+  const labels  = weeks.map(w => w.label);
+  const monBRL  = weeks.map(w => w.monitor_brl);
+  const scpBRL  = weeks.map(w => w.scalper_brl);
+  const totBRL  = weeks.map(w => w.total_brl);
+
+  if (_chart) _chart.destroy();
+  const ctx = document.getElementById('drawdownChart').getContext('2d');
+  _chart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Monitor', data: monBRL, backgroundColor: 'rgba(41,121,255,.6)', borderColor: '#2979ff', borderWidth: 1 },
+        { label: 'Scalper', data: scpBRL, backgroundColor: 'rgba(0,200,83,.6)',  borderColor: '#00c853', borderWidth: 1 },
+        { label: 'Total',   data: totBRL, type: 'line', borderColor: '#ffd600', borderWidth: 2, fill: false, pointBackgroundColor: '#ffd600', tension: 0.3 },
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: '#1f1f1f' }, ticks: { color: '#666' } },
+        y: { grid: { color: '#1f1f1f' }, ticks: { color: '#666' } }
+      }
+    }
+  });
+}
+
+// ============================================================
+//  Init
+// ============================================================
+loadAll();
+</script>
+</body>
+</html>

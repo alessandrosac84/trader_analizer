@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Market Center — Trade AI</title>
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #0d1117;
+      --bg2:        #161b22;
+      --bg3:        #21262d;
+      --border:     #30363d;
+      --text:       #e6edf3;
+      --text2:      #8b949e;
+      --blue:       #58a6ff;
+      --green:      #3fb950;
+      --red:        #f85149;
+      --yellow:     #d29922;
+      --purple:     #bc8cff;
+      --cyan:       #39d353;
+      --orange:     #fb8f44;
+      --radius:     10px;
+      --gap:        14px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+      font-size: 13px;
+      min-height: 100vh;
+    }
+
+    /* ── Header ────────────────────────────────────────────────── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 100;
+    }
+    .header-left { display: flex; align-items: center; gap: 12px; }
+    .logo { font-size: 18px; font-weight: 700; color: var(--blue); letter-spacing: -0.5px; }
+    .page-title { color: var(--text2); font-size: 13px; }
+    .header-right { display: flex; align-items: center; gap: 16px; }
+    .last-update { color: var(--text2); font-size: 12px; }
+    #at-badge {
+      padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600;
+      background: #1a2e1a; color: var(--green); border: 1px solid var(--green);
+    }
+    #at-badge.off {
+      background: #2e1a1a; color: var(--red); border-color: var(--red);
+    }
+    .nav-link {
+      color: var(--text2); text-decoration: none; font-size: 12px;
+      padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px;
+      transition: all .15s;
+    }
+    .nav-link:hover { color: var(--blue); border-color: var(--blue); }
+
+    /* ── Grid principal ─────────────────────────────────────────── */
+    .main-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: var(--gap);
+      padding: 20px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    /* ── Cards ──────────────────────────────────────────────────── */
+    .card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    }
+    .card.win-card::before   { background: var(--blue); }
+    .card.wdo-card::before   { background: var(--orange); }
+    .card.scalper-card::before { background: var(--purple); }
+    .card.geral-card::before { background: var(--cyan); }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .card-title {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text2);
+    }
+    .card-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .badge-compra  { background: #1a2e1a; color: var(--green); border: 1px solid var(--green); }
+    .badge-venda   { background: #2e1a1a; color: var(--red);   border: 1px solid var(--red);   }
+    .badge-neutro  { background: #21262d; color: var(--text2); border: 1px solid var(--border); }
+    .badge-manage  { background: #1a1e2e; color: var(--blue);  border: 1px solid var(--blue);  }
+    .badge-paused  { background: #2e2a1a; color: var(--yellow); border: 1px solid var(--yellow); }
+    .badge-sim     { background: #2e2a1a; color: var(--yellow); border: 1px solid var(--yellow); }
+    .badge-on      { background: #1a2e1a; color: var(--green); border: 1px solid var(--green); }
+    .badge-off     { background: #2e1a1a; color: var(--red);   border: 1px solid var(--red);   }
+
+    /* ── Score bar ──────────────────────────────────────────────── */
+    .score-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .score-label { color: var(--text2); font-size: 11px; }
+    .score-value {
+      font-size: 28px;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .score-positive { color: var(--green); }
+    .score-negative { color: var(--red); }
+    .score-neutral  { color: var(--text2); }
+
+    .score-bar-wrap {
+      width: 100%;
+      height: 6px;
+      background: var(--bg3);
+      border-radius: 3px;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+    .score-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width .4s, background .4s;
+    }
+
+    /* ── Métricas de linha ─────────────────────────────────────── */
+    .metrics { display: flex; flex-direction: column; gap: 6px; }
+    .metric-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 5px 8px;
+      background: var(--bg3);
+      border-radius: 6px;
+    }
+    .metric-label { color: var(--text2); font-size: 11px; }
+    .metric-value { font-size: 12px; font-weight: 600; }
+    .positive { color: var(--green); }
+    .negative { color: var(--red);   }
+    .neutral  { color: var(--text2); }
+    .blue     { color: var(--blue);  }
+    .yellow   { color: var(--yellow);}
+    .purple   { color: var(--purple);}
+
+    /* ── Confluências ───────────────────────────────────────────── */
+    .confluences {
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+    .conf-tag {
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 10px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      color: var(--text2);
+      max-width: 160px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .conf-tag.bullish { border-color: #2ea04340; color: var(--green); background: #1a2e1a; }
+    .conf-tag.bearish { border-color: #f8514940; color: var(--red);   background: #2e1a1a; }
+
+    /* ── Recomendação de gestão ────────────────────────────────── */
+    .recommendation {
+      margin-top: 10px;
+      padding: 8px 12px;
+      border-radius: 7px;
+      font-size: 12px;
+      font-weight: 700;
+      text-align: center;
+      letter-spacing: 0.5px;
+    }
+    .rec-manter    { background: #1a2e1a22; border: 1px solid #3fb95044; color: var(--green); }
+    .rec-breakeven { background: #1a1e2e22; border: 1px solid #58a6ff44; color: var(--blue);  }
+    .rec-trailing  { background: #2e2a1a22; border: 1px solid #d2992244; color: var(--yellow);}
+    .rec-fechar    { background: #2e1a1a22; border: 1px solid #f8514944; color: var(--red);   }
+    .rec-reversao  { background: #2e1a2e22; border: 1px solid #bc8cff44; color: var(--purple);}
+
+    /* ── Card Geral — stats grid ──────────────────────────────── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .stat-box {
+      background: var(--bg3);
+      border-radius: 7px;
+      padding: 10px 12px;
+      text-align: center;
+    }
+    .stat-box-label { font-size: 10px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+    .stat-box-value { font-size: 20px; font-weight: 800; line-height: 1; }
+
+    /* ── Progress meta ─────────────────────────────────────────── */
+    .meta-wrap {
+      margin-top: 10px;
+    }
+    .meta-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text2);
+      margin-bottom: 4px;
+    }
+    .meta-bar-wrap {
+      height: 8px;
+      background: var(--bg3);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .meta-bar-fill {
+      height: 100%;
+      background: var(--cyan);
+      border-radius: 4px;
+      transition: width .5s;
+    }
+
+    /* ── Status row ─────────────────────────────────────────────── */
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+
+    /* ── Divider ────────────────────────────────────────────────── */
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 10px 0;
+    }
+
+    /* ── Spinner ────────────────────────────────────────────────── */
+    .spinner {
+      width: 100%; text-align: center; padding: 40px 0;
+      color: var(--text2); font-size: 12px;
+    }
+
+    /* ── Erro ───────────────────────────────────────────────────── */
+    .error-msg {
+      color: var(--red); font-size: 11px; text-align: center; padding: 8px 0;
+    }
+
+    /* ── Footer ─────────────────────────────────────────────────── */
+    .footer {
+      text-align: center;
+      padding: 16px;
+      color: var(--text2);
+      font-size: 11px;
+      border-top: 1px solid var(--border);
+      margin-top: 20px;
+    }
+    .footer a { color: var(--blue); text-decoration: none; }
+
+    /* ── Tooltip badge ───────────────────────────────────────────── */
+    .ia-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 700;
+    }
+    .ia-executar  { background: #1a2e1a; color: var(--green); }
+    .ia-aguardar  { background: #2e2a1a; color: var(--yellow); }
+    .ia-bloquear  { background: #2e1a1a; color: var(--red); }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ─────────────────────────────────────────────────────── -->
+<div class="header">
+  <div class="header-left">
+    <span class="logo">Trade AI</span>
+    <span class="page-title">Market Center</span>
+  </div>
+  <div class="header-right">
+    <span class="last-update" id="last-update-span">Atualizado: <span id="last-ts">—</span></span>
+    <select id="mc-refresh" style="background:var(--bg3);border:1px solid var(--border);color:var(--text2);padding:3px 8px;border-radius:6px;font-size:11px;cursor:pointer;" onchange="setRefreshInterval(this.value)">
+      <option value="10000">10 seg</option>
+      <option value="15000">15 seg</option>
+      <option value="30000" selected>30 seg</option>
+      <option value="60000">1 min</option>
+      <option value="0">Pausado</option>
+    </select>
+    <span id="at-badge">AUTO ON</span>
+    <a href="/dashboard"  class="nav-link">Dashboard</a>
+    <a href="/scalper"    class="nav-link">Scalper</a>
+    <a href="/analytics"  class="nav-link" style="color:var(--purple);border-color:var(--purple)">Analytics</a>
+  </div>
+</div>
+
+<!-- ── Grid principal ─────────────────────────────────────────────── -->
+<div class="main-grid" id="main-grid">
+  <div class="spinner" id="loading">Carregando telemetria...</div>
+</div>
+
+<div class="footer">
+  Trade AI — Market Center &nbsp;|&nbsp;
+  <a href="/api/telemetry/full" target="_blank">API /api/telemetry/full</a> &nbsp;|&nbsp;
+  <a href="/api/telemetry"      target="_blank">API /api/telemetry</a>
+</div>
+
+<script>
+/* ─── Helpers ──────────────────────────────────────────────────────── */
+const $ = id => document.getElementById(id);
+const fmt = (v, dec=0) => v == null ? '—' : Number(v).toFixed(dec);
+const fmtSign = (v, dec=0) => v == null ? '—' : (v >= 0 ? '+' : '') + Number(v).toFixed(dec);
+const fmtPct  = (v) => v == null ? '—' : v + '%';
+
+function scoreClass(score) {
+  if (score == null)  return 'neutral';
+  if (score > 0)      return 'score-positive';
+  if (score < 0)      return 'score-negative';
+  return 'score-neutral';
+}
+
+function scoreBarStyle(score) {
+  if (score == null) return 'width:50%; background:#30363d';
+  const abs = Math.min(Math.abs(score), 12);
+  const pct = Math.round((abs / 12) * 50);
+  const color = score > 0 ? '#3fb950' : score < 0 ? '#f85149' : '#58a6ff';
+  const left  = score >= 0 ? (50) + '%' : (50 - pct) + '%';
+  return `width:${pct}%; margin-left:${score > 0 ? '50%' : (50-pct)+'%'}; background:${color}`;
+}
+
+function actionBadge(action) {
+  if (!action) return `<span class="card-badge badge-neutro">NEUTRO</span>`;
+  const a = action.toUpperCase();
+  if (a === 'COMPRA') return `<span class="card-badge badge-compra">COMPRA</span>`;
+  if (a === 'VENDA')  return `<span class="card-badge badge-venda">VENDA</span>`;
+  return `<span class="card-badge badge-neutro">NEUTRO</span>`;
+}
+
+function pnlColor(v) {
+  if (v == null) return 'neutral';
+  return v > 0 ? 'positive' : v < 0 ? 'negative' : 'neutral';
+}
+
+function recClass(rec) {
+  if (!rec) return '';
+  const r = rec.toUpperCase();
+  if (r.includes('MANTER'))    return 'rec-manter';
+  if (r.includes('BREAKEVEN')) return 'rec-breakeven';
+  if (r.includes('TRAILING'))  return 'rec-trailing';
+  if (r.includes('FECHAR'))    return 'rec-fechar';
+  if (r.includes('REVERS'))    return 'rec-reversao';
+  return 'rec-manter';
+}
+
+function iaBadge(verdict) {
+  if (!verdict) return '';
+  const v = verdict.toUpperCase();
+  if (v === 'EXECUTAR')  return `<span class="ia-badge ia-executar">IA EXECUTAR</span>`;
+  if (v === 'AGUARDAR')  return `<span class="ia-badge ia-aguardar">IA AGUARDAR</span>`;
+  if (v === 'BLOQUEAR')  return `<span class="ia-badge ia-bloquear">IA BLOQUEAR</span>`;
+  if (v === 'RECUPERADO') return `<span class="ia-badge ia-aguardar">RECUPERADO</span>`;
+  return `<span class="ia-badge">${verdict}</span>`;
+}
+
+/* ─── Score Breakdown mini-bar ─────────────────────────────────────── */
+const _BREAKDOWN_LABELS = {
+  ema_alignment: 'EMA 9/21',
+  ema50:         'EMA 50',
+  ema200:        'EMA 200',
+  vwap:          'VWAP',
+  rsi:           'RSI',
+  macd:          'MACD',
+  bollinger:     'Bollinger',
+  volume:        'Volume',
+  candle:        'Candle',
+  htf_1h:        'Trend 1H',
+};
+
+function buildScoreBreakdown(bd, action) {
+  if (!bd || Object.keys(bd).length === 0) return '';
+  const sign = action === 'COMPRA' ? 1 : -1;
+  const entries = Object.entries(bd)
+    .filter(([, v]) => v !== 0)
+    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+  if (!entries.length) return '';
+
+  const rows = entries.map(([key, val]) => {
+    const label  = _BREAKDOWN_LABELS[key] || key;
+    const color  = val > 0 ? 'var(--green)' : 'var(--red)';
+    const prefix = val > 0 ? '+' : '';
+    const barW   = Math.min(Math.abs(val) * 18, 72);
+    return `
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
+        <span style="font-size:10px;color:var(--text2);width:70px;flex-shrink:0">${label}</span>
+        <div style="flex:1;height:4px;background:var(--bg3);border-radius:2px;overflow:hidden">
+          <div style="width:${barW}px;height:100%;background:${color};border-radius:2px"></div>
+        </div>
+        <span style="font-size:10px;font-weight:700;color:${color};width:20px;text-align:right">${prefix}${val}</span>
+      </div>`;
+  }).join('');
+
+  return `
+    <div style="margin-bottom:10px;padding:8px;background:var(--bg3);border-radius:6px">
+      <div style="font-size:9px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Score Breakdown</div>
+      ${rows}
+    </div>`;
+}
+
+/* ─── Build instrument card (WIN / WDO) ───────────────────────────── */
+function buildInstrumentCard(data, cssClass, color) {
+  const score = data.score;
+  const scoreVal = score != null ? (score >= 0 ? '+' + score : '' + score) : '—';
+  const confTags = (data.confluences || []).map(c => {
+    const isBull = /acima|alta|positivo|compra|bull/i.test(c);
+    const isBear = /abaixo|baixa|negativo|venda|bear/i.test(c);
+    const cls = isBull ? 'bullish' : isBear ? 'bearish' : '';
+    return `<span class="conf-tag ${cls}" title="${c}">${c}</span>`;
+  }).join('');
+
+  const posSection = data.position_open ? `
+    <div class="metric-row">
+      <span class="metric-label">Entrada</span>
+      <span class="metric-value blue">${fmt(data.position_entry, 0)}</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Preço atual</span>
+      <span class="metric-value">${fmt(data.position_price, 0)}</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">P&L</span>
+      <span class="metric-value ${pnlColor(data.position_pnl)}">
+        ${fmtSign(data.position_pnl, 2)} R$
+      </span>
+    </div>
+    <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+      ${iaBadge(data.ai_verdict)}
+      ${data.ai_confidence != null ? `<span style="font-size:10px;color:var(--text2);">${data.ai_confidence}% conf.</span>` : ''}
+    </div>
+    ${data.recommendation ? `
+      <div class="recommendation ${recClass(data.recommendation)}">
+        ${data.recommendation}
+        ${data.breakeven_suggested ? '<span style="font-size:10px;opacity:.7;"> · BE sugerido</span>' : ''}
+        ${data.tp1_reached         ? '<span style="font-size:10px;opacity:.7;"> · TP1 ✓</span>' : ''}
+      </div>
+    ` : ''}
+  ` : `
+    <div class="metric-row">
+      <span class="metric-label">Entrada sugerida</span>
+      <span class="metric-value blue">${fmt(data.entry_price, 0)}</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Stop Loss</span>
+      <span class="metric-value negative">${fmt(data.sl, 0)}</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">TP1</span>
+      <span class="metric-value positive">${fmt(data.tp1, 0)}</span>
+    </div>
+  `;
+
+  const indicators = `
+    <div class="metric-row">
+      <span class="metric-label">RSI</span>
+      <span class="metric-value ${data.rsi > 70 ? 'negative' : data.rsi < 30 ? 'positive' : 'neutral'}">${fmt(data.rsi, 1)}</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">ADX</span>
+      <span class="metric-value ${data.adx < 20 ? 'negative' : 'positive'}">${fmt(data.adx, 1)}</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">ATR</span>
+      <span class="metric-value neutral">${fmt(data.atr, 0)}</span>
+    </div>
+  `;
+
+  const poseBadge = data.position_open
+    ? `<span class="card-badge badge-manage">● MANAGE</span>`
+    : actionBadge(data.action);
+
+  return `
+    <div class="card ${cssClass}">
+      <div class="card-header">
+        <span class="card-title" style="color:${color}">${data.symbol}</span>
+        ${poseBadge}
+      </div>
+
+      <!-- Score + Força + Risco -->
+      <div class="score-row">
+        <span class="score-label">Score</span>
+        <span class="score-value ${scoreClass(score)}">${scoreVal}</span>
+      </div>
+      <div class="score-bar-wrap">
+        <div class="score-bar-fill" style="${scoreBarStyle(score)}"></div>
+      </div>
+
+      <!-- Linha institucional: FORÇA / RISCO / REGIME -->
+      <div style="display:flex;gap:6px;margin-bottom:10px">
+        <div style="flex:1;background:var(--bg3);border-radius:6px;padding:6px 8px;text-align:center">
+          <div style="font-size:9px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px">Força</div>
+          <div style="font-size:16px;font-weight:800;color:${data.signal_strength >= 70 ? 'var(--green)' : data.signal_strength >= 45 ? 'var(--yellow)' : 'var(--text2)'}">
+            ${data.signal_strength != null ? data.signal_strength : '—'}
+          </div>
+        </div>
+        <div style="flex:1;background:var(--bg3);border-radius:6px;padding:6px 8px;text-align:center">
+          <div style="font-size:9px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px">Risco</div>
+          <div style="font-size:16px;font-weight:800;color:${data.risk_level >= 60 ? 'var(--red)' : data.risk_level >= 35 ? 'var(--yellow)' : 'var(--green)'}">
+            ${data.risk_level != null ? data.risk_level : '—'}
+          </div>
+        </div>
+        <div style="flex:1;background:var(--bg3);border-radius:6px;padding:6px 8px;text-align:center">
+          <div style="font-size:9px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px">Regime</div>
+          <div style="font-size:10px;font-weight:700;margin-top:3px;color:${
+            data.market_regime === 'TRENDING' ? 'var(--green)' :
+            data.market_regime === 'VOLATILE' ? 'var(--red)' :
+            data.market_regime === 'RANGING'  ? 'var(--yellow)' : 'var(--text2)'}">
+            ${data.market_regime || '—'}
+          </div>
+        </div>
+      </div>
+
+      <!-- Score Breakdown -->
+      ${buildScoreBreakdown(data.score_breakdown, data.action)}
+
+      <!-- Métricas -->
+      <div class="metrics">
+        <div class="metric-row">
+          <span class="metric-label">Tendência</span>
+          <span class="metric-value ${data.trend === 'BULLISH' ? 'positive' : data.trend === 'BEARISH' ? 'negative' : 'neutral'}">${data.trend || '—'}</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">VWAP</span>
+          <span class="metric-value ${data.vwap_bull ? 'positive' : 'negative'}">${data.vwap_bull != null ? (data.vwap_bull ? '▲ ACIMA' : '▼ ABAIXO') : '—'}</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">EMA 9/21</span>
+          <span class="metric-value ${data.ema_alignment ? 'positive' : 'negative'}">${data.ema_alignment != null ? (data.ema_alignment ? '▲ ALINHADO' : '▼ CRUZADO') : '—'}</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">EMA 200</span>
+          <span class="metric-value ${data.ema200_bull ? 'positive' : 'negative'}">${data.ema200_bull != null ? (data.ema200_bull ? '▲ ACIMA' : '▼ ABAIXO') : '—'}</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">MACD</span>
+          <span class="metric-value ${data.macd_positive ? 'positive' : 'negative'}">${data.macd_positive != null ? (data.macd_positive ? '▲ POS' : '▼ NEG') : '—'}</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Volume</span>
+          <span class="metric-value ${data.volume_confirm ? 'positive' : 'neutral'}">${data.volume_confirm != null ? (data.volume_confirm ? '✓ FORTE' : '~ FRACO') : '—'}</span>
+        </div>
+        ${indicators}
+      </div>
+
+      <!-- Posição / Sinal -->
+      <div class="divider"></div>
+      <div class="metrics">
+        ${posSection}
+      </div>
+
+      <!-- Confluências -->
+      ${confTags ? `<div class="confluences">${confTags}</div>` : ''}
+    </div>
+  `;
+}
+
+/* ─── Build Scalper card ───────────────────────────────────────────── */
+function buildScalperCard(s) {
+  const autoBadge = s.auto_enabled
+    ? `<span class="card-badge badge-on">AUTO ON</span>`
+    : `<span class="card-badge badge-off">AUTO OFF</span>`;
+
+  const simBadge = s.sim_mode ? `<span class="card-badge badge-sim">SIM</span>` : '';
+  const pausedBadge = s.paused
+    ? `<span class="card-badge badge-paused">PAUSADO até ${s.paused_until}</span>`
+    : '';
+
+  const posSection = s.position_open && s.position ? `
+    <div class="metric-row">
+      <span class="metric-label">Posição</span>
+      <span class="metric-value ${s.position.type === 0 ? 'positive' : 'negative'}">
+        ${s.position.type === 0 ? 'COMPRA' : 'VENDA'} @ ${fmt(s.position.price_open, 0)}
+      </span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">P&L</span>
+      <span class="metric-value ${pnlColor(s.position.profit)}">
+        ${fmtSign(s.position.profit, 2)} R$
+      </span>
+    </div>
+  ` : `
+    <div class="metric-row">
+      <span class="metric-label">Posição</span>
+      <span class="metric-value neutral">SEM POSIÇÃO</span>
+    </div>
+  `;
+
+  const pnlSessao = s.session && s.session.pnl != null ? s.session.pnl : null;
+
+  return `
+    <div class="card scalper-card">
+      <div class="card-header">
+        <span class="card-title" style="color:var(--purple)">SCALPER</span>
+        <div style="display:flex;gap:5px;flex-wrap:wrap">${autoBadge}${simBadge}${pausedBadge}</div>
+      </div>
+
+      <!-- Score bidirecional -->
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <div style="flex:1;background:var(--bg3);border-radius:7px;padding:8px;text-align:center">
+          <div style="font-size:10px;color:var(--text2);margin-bottom:2px">COMPRA</div>
+          <div style="font-size:22px;font-weight:800;color:var(--green)">
+            ${s.score_compra != null ? s.score_compra : '—'}
+          </div>
+        </div>
+        <div style="flex:1;background:var(--bg3);border-radius:7px;padding:8px;text-align:center">
+          <div style="font-size:10px;color:var(--text2);margin-bottom:2px">VENDA</div>
+          <div style="font-size:22px;font-weight:800;color:var(--red)">
+            ${s.score_venda != null ? s.score_venda : '—'}
+          </div>
+        </div>
+        <div style="flex:1;background:var(--bg3);border-radius:7px;padding:8px;text-align:center">
+          <div style="font-size:10px;color:var(--text2);margin-bottom:2px">VWAP</div>
+          <div style="font-size:13px;font-weight:700;color:var(--cyan);margin-top:4px">
+            ${s.vwap_context || '—'}
+          </div>
+        </div>
+      </div>
+
+      <div class="metrics">
+        ${posSection}
+        <div class="metric-row">
+          <span class="metric-label">Stops seguidos</span>
+          <span class="metric-value ${s.consecutive_losses >= 2 ? 'negative' : 'neutral'}">${s.consecutive_losses}</span>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Sessão -->
+      <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Sessão</div>
+      <div class="metrics">
+        <div class="metric-row">
+          <span class="metric-label">Trades</span>
+          <span class="metric-value">${(s.session || {}).trades || 0}</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">W / L</span>
+          <span class="metric-value">
+            <span class="positive">${(s.session || {}).wins || 0}</span>
+            <span class="neutral"> / </span>
+            <span class="negative">${(s.session || {}).losses || 0}</span>
+          </span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">P&L sessão</span>
+          <span class="metric-value ${pnlColor(pnlSessao)}">${fmtSign(pnlSessao, 2)} R$</span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* ─── Build Geral card ─────────────────────────────────────────────── */
+function buildGeralCard(data) {
+  const d = data.stats && data.stats.day   ? data.stats.day   : {};
+  const w = data.stats && data.stats.week  ? data.stats.week  : {};
+  const at = data.autotrade || {};
+  const meta = at.meta_diaria;
+  const pnlDay = d.pnl_total_brl || 0;
+  const metaPct = meta ? Math.min(100, Math.round(Math.max(0, pnlDay) / meta * 100)) : null;
+
+  // Contar posições abertas
+  const winOpen  = (data.win  || {}).position_open;
+  const wdoOpen  = (data.wdo  || {}).position_open;
+  const scpOpen  = (data.scalper || {}).position_open;
+  const totalOpen = [winOpen, wdoOpen, scpOpen].filter(Boolean).length;
+
+  return `
+    <div class="card geral-card">
+      <div class="card-header">
+        <span class="card-title" style="color:var(--cyan)">GERAL</span>
+        <span id="at-badge-card" class="card-badge ${at.enabled ? 'badge-on' : 'badge-off'}">
+          AUTO ${at.enabled ? 'ON' : 'OFF'}
+        </span>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="stat-box-label">P&L Dia</div>
+          <div class="stat-box-value ${pnlColor(pnlDay)}">${fmtSign(pnlDay, 0)} R$</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-box-label">P&L Semana</div>
+          <div class="stat-box-value ${pnlColor(w.pnl_semana_brl)}">${fmtSign(w.pnl_semana_brl, 0)} R$</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-box-label">Trades Hoje</div>
+          <div class="stat-box-value blue">${d.total || 0}</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-box-label">Win Rate</div>
+          <div class="stat-box-value ${d.win_rate >= 60 ? 'positive' : d.win_rate >= 40 ? 'neutral' : 'negative'}">${d.win_rate != null ? d.win_rate + '%' : '—'}</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-box-label">Drawdown Máx</div>
+          <div class="stat-box-value ${(d.max_drawdown_brl || 0) < -200 ? 'negative' : 'neutral'}">${fmtSign(d.max_drawdown_brl, 0)} R$</div>
+        </div>
+      </div>
+
+      ${metaPct !== null ? `
+      <div class="divider"></div>
+      <div style="font-size:10px;color:var(--text2);margin-bottom:4px">Meta do dia: ${fmtSign(pnlDay, 0)} / ${fmt(meta, 0)} R$ (${metaPct}%)</div>
+      <div style="background:var(--bg3);border-radius:4px;overflow:hidden;height:6px">
+        <div style="width:${metaPct}%;height:100%;background:${metaPct >= 100 ? 'var(--green)' : 'var(--blue)'}"></div>
+      </div>
+      ` : ''}
+
+      <div class="divider"></div>
+      <div class="metrics">
+        <div class="metric-row">
+          <span class="metric-label">Posicoes abertas</span>
+          <span class="metric-value ${totalOpen > 0 ? 'positive' : 'neutral'}">${totalOpen}</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Sequencia perdas</span>
+          <span class="metric-value ${(at.consecutive_losses||0) >= 2 ? 'negative' : 'neutral'}">${at.consecutive_losses || 0}</span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* --- Render all cards ------------------------------------------------ */
+function render(data) {
+  const grid = $('main-grid');
+  if (!grid) return;
+  const loading = $('loading');
+  if (loading) loading.style.display = 'none';
+
+  const atEnabled = (data.autotrade || {}).enabled;
+  const badge = $('at-badge');
+  if (badge) {
+    badge.textContent = 'AUTO ' + (atEnabled ? 'ON' : 'OFF');
+    badge.className = atEnabled ? '' : 'off';
+  }
+
+  let html = '';
+  if (data.win)     html += buildInstrumentCard(data.win,     'win-card',    'var(--blue)');
+  if (data.wdo)     html += buildInstrumentCard(data.wdo,     'wdo-card',    'var(--orange)');
+  if (data.scalper) html += buildScalperCard(data.scalper);
+  html += buildGeralCard(data);
+
+  grid.innerHTML = html;
+}
+
+/* --- Log opportunity to analytics ------------------------------------ */
+function logOpportunity(tvSymbol, side, symData) {
+  if (!symData || !side || side === 'NEUTRO') return;
+  const payload = {
+    tv_symbol:         tvSymbol,
+    symbol_short:      symData.symbol || '',
+    interval:          '15',
+    action:            side,
+    score:             symData.score,
+    score_raw:         symData.score,
+    signal_strength:   symData.signal_strength,
+    risk_level:        symData.risk_level,
+    market_regime:     symData.market_regime,
+    score_breakdown:   symData.score_breakdown || {},
+    confluences:       symData.confluences || [],
+    entry_price:       symData.entry_price,
+    sl:                symData.sl,
+    tp1:               symData.tp1,
+    atr:               symData.atr,
+    adx:               symData.adx,
+    rsi:               symData.rsi,
+    htf_trend:         symData.htf_trend || null,
+    adx_filtered:      symData.adx_filtered || false,
+    directional_block: symData.directional_block || null,
+    ai_verdict:        symData.ai_verdict || null,
+    ai_confidence:     symData.ai_confidence || null,
+  };
+  fetch('/api/analytics/opportunity', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).catch(function() {});
+}
+
+function logOpportunities(d) {
+  if (d.win && d.win.action && d.win.action !== 'NEUTRO') {
+    logOpportunity('BMFBOVESPA:WIN1!', d.win.action, d.win);
+  }
+  if (d.wdo && d.wdo.action && d.wdo.action !== 'NEUTRO') {
+    logOpportunity('BMFBOVESPA:WDO1!', d.wdo.action, d.wdo);
+  }
+}
+
+/* --- Fetch loop ------------------------------------------------------- */
+var _interval_id = null;
+
+async function fetchData() {
+  try {
+    const res  = await fetch('/api/telemetry/full');
+    const data = await res.json();
+    if (data.ok) {
+      render(data);
+      logOpportunities(data);
+      const ts = $('last-ts');
+      if (ts) ts.textContent = new Date().toLocaleTimeString('pt-BR');
+    } else {
+      const grid = $('main-grid');
+      if (grid) grid.innerHTML = '<div class="error-msg">Erro: ' + (data.error || 'desconhecido') + '</div>';
+    }
+  } catch (e) {
+    const grid = $('main-grid');
+    if (grid) grid.innerHTML = '<div class="error-msg">Erro de conexao: ' + e.message + '</div>';
+  }
+}
+
+function setRefreshInterval(ms) {
+  if (_interval_id) { clearInterval(_interval_id); _interval_id = null; }
+  var v = parseInt(ms, 10);
+  if (v > 0) _interval_id = setInterval(fetchData, v);
+  var sel = document.getElementById('mc-refresh');
+  if (sel) sel.value = String(v);
+}
+
+// Inicia e repete a cada 10 segundos
+fetchData();
+setRefreshInterval(10000);
+</script>
+</body>
+</html>

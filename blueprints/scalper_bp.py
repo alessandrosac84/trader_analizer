@@ -119,14 +119,26 @@ def _safe_notify_exit(symbol, info, profit, reason):
 scalper_bp = Blueprint("scalper", __name__, url_prefix="")
 
 # Estado da sessao (em memoria, por processo Flask)
+# Inicializado com os trades de hoje do CSV para sobreviver reinicializacoes.
 _session = {
-    "trades":  0,
-    "wins":    0,
-    "losses":  0,
+    "trades":     0,
+    "wins":       0,
+    "losses":     0,
     "breakevens": 0,
-    "pnl":     0.0,
-    "history": [],
+    "pnl":        0.0,
+    "history":    [],
 }
+try:
+    from services.trade_logger import get_today_session_stats as _gts
+    _s = _gts()
+    _session["trades"]     = _s.get("trades",     0)
+    _session["wins"]       = _s.get("wins",        0)
+    _session["losses"]     = _s.get("losses",      0)
+    _session["breakevens"] = _s.get("breakevens",  0)
+    _session["pnl"]        = _s.get("pnl",         0.0)
+    del _gts, _s
+except Exception:
+    pass  # em caso de erro, mantém zeros — nao quebra o Scalper
 
 # Estado do auto-trade
 _auto = {

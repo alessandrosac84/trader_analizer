@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trade AI | Analytics Dashboard</title>
+  <style>
+    :root {
+      --bg:       #0d0f14;
+      --surface:  #161b25;
+      --border:   #252d3d;
+      --muted:    #8492a6;
+      --text:     #e4eaf4;
+      --green:    #26d97f;
+      --red:      #f04f5a;
+      --yellow:   #f5c842;
+      --blue:     #4a9eff;
+      --purple:   #9b7ff4;
+      --orange:   #ff9a3c;
+      --radius:   10px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 13px;
+      min-height: 100vh;
+    }
+
+    /* ── Top Nav ── */
+    .topnav {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .topnav .logo { font-size: 15px; font-weight: 700; color: var(--blue); }
+    .topnav .sep  { color: var(--border); }
+    .topnav a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      transition: background 0.15s;
+    }
+    .topnav a:hover        { background: var(--border); color: var(--text); }
+    .topnav a.active       { background: var(--border); color: var(--text); }
+    .topnav .spacer        { flex: 1; }
+    .topnav .sync-btn {
+      cursor: pointer;
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      transition: all 0.15s;
+    }
+    .topnav .sync-btn:hover { border-color: var(--blue); color: var(--blue); }
+    .topnav .last-sync { font-size: 11px; color: var(--muted); }
+
+    /* ── Layout ── */
+    .page { padding: 18px 20px; }
+
+    /* ── Summary header ── */
+    .summary-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+    }
+    .kpi-card .kpi-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+    .kpi-card .kpi-value { font-size: 22px; font-weight: 700; }
+    .kpi-card .kpi-sub   { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+    /* ── Section grid ── */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    @media (max-width: 900px) {
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+      font-size: 12px;
+      color: var(--text);
+    }
+    .card-header .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--blue);
+    }
+    .card-body { padding: 0; }
+
+    /* ── Table ── */
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      padding: 8px 14px;
+      font-size: 11px;
+      color: var(--muted);
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      font-weight: 500;
+      background: rgba(255,255,255,0.02);
+    }
+    thead th.right { text-align: right; }
+    tbody tr { border-bottom: 1px solid rgba(255,255,255,0.04); }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: rgba(255,255,255,0.03); }
+    tbody td { padding: 8px 14px; }
+    tbody td.right { text-align: right; }
+    tbody td.center { text-align: center; }
+
+    /* ── Win rate bar ── */
+    .wr-cell { display: flex; align-items: center; gap: 8px; }
+    .wr-bar  {
+      flex: 1; height: 6px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .wr-bar-fill { height: 100%; border-radius: 3px; transition: width 0.4s; }
+    .wr-num  { font-weight: 700; min-width: 36px; text-align: right; }
+
+    /* ── Regime badge ── */
+    .regime-badge {
+      display: inline-block;
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+    .regime-TRENDING  { background: rgba(38,217,127,0.15); color: var(--green); }
+    .regime-RANGING   { background: rgba(74,158,255,0.15); color: var(--blue);  }
+    .regime-VOLATILE  { background: rgba(245,200,66,0.15);  color: var(--yellow);}
+    .regime-LOW_VOLUME{ background: rgba(132,146,166,0.15); color: var(--muted); }
+
+    /* ── Action badge ── */
+    .action-COMPRA { color: var(--green); font-weight: 700; }
+    .action-VENDA  { color: var(--red);   font-weight: 700; }
+    .action-NEUTRO { color: var(--muted); }
+
+    /* ── Win/Loss badge ── */
+    .win-1  { color: var(--green); font-weight: 700; }
+    .win-0  { color: var(--red);   font-weight: 700; }
+    .win-null { color: var(--muted); }
+
+    /* ── Score chip ── */
+    .score-chip {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    /* ── Recent table (full width) ── */
+    .card-full {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 14px;
+    }
+
+    /* ── Loading / empty ── */
+    .loading-row td {
+      text-align: center;
+      padding: 28px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid var(--border);
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Confluences list ── */
+    .conf-tag {
+      display: inline-block;
+      font-size: 10px;
+      background: rgba(255,255,255,0.06);
+      padding: 1px 6px;
+      border-radius: 4px;
+      margin: 1px;
+      color: var(--muted);
+    }
+
+    /* ── PnL coloring ── */
+    .pnl-pos { color: var(--green); }
+    .pnl-neg { color: var(--red);   }
+    .pnl-nil { color: var(--muted); }
+
+    /* ── Strength gradient colors ── */
+    .str-80plus  { color: var(--green);  }
+    .str-60plus  { color: var(--blue);   }
+    .str-40plus  { color: var(--yellow); }
+    .str-low     { color: var(--muted);  }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="topnav">
+  <span class="logo">Trade AI</span>
+  <span class="sep">|</span>
+  <a href="/market-center">Market Center</a>
+  <a href="/analytics" class="active">Analytics</a>
+  <div class="spacer"></div>
+  <button class="sync-btn" onclick="syncOutcomes()">Sincronizar Outcomes</button>
+  <button class="sync-btn" style="border-color:var(--red);color:var(--red);margin-left:6px" onclick="resetLinks()" title="Reseta todos os links para re-sincronizar do zero">Reset Links</button>
+  <span class="last-sync" id="lastSync">-</span>
+</nav>
+
+<!-- PAGE -->
+<div class="page">
+
+  <!-- KPI HEADER -->
+  <div class="summary-row" id="kpiRow">
+    <div class="kpi-card">
+      <div class="kpi-label">Oportunidades</div>
+      <div class="kpi-value" id="kTotal">-</div>
+      <div class="kpi-sub">sinais registrados</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Operadas</div>
+      <div class="kpi-value" id="kTraded">-</div>
+      <div class="kpi-sub">trades executados</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Win Rate</div>
+      <div class="kpi-value" id="kWR" style="color: var(--green)">-</div>
+      <div class="kpi-sub" id="kWRSub">-</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">P&L Total</div>
+      <div class="kpi-value" id="kPnL">-</div>
+      <div class="kpi-sub" id="kPnLPts">-</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Pendentes</div>
+      <div class="kpi-value" id="kPending">-</div>
+      <div class="kpi-sub">sem outcome ainda</div>
+    </div>
+  </div>
+
+  <!-- SCORE + REGIME -->
+  <div class="grid-2">
+
+    <!-- Score performance -->
+    <div class="card">
+      <div class="card-header">
+        <div class="dot" style="background:var(--purple)"></div>
+        Win Rate por Score
+      </div>
+      <div class="card-body">
+        <table>
+          <thead>
+            <tr>
+              <th>Score</th>
+              <th>Total</th>
+              <th>W / L</th>
+              <th class="right">Win Rate</th>
+              <th class="right">PnL Medio (pts)</th>
+            </tr>
+          </thead>
+          <tbody id="tScore">
+            <tr class="loading-row"><td colspan="5"><span class="spinner"></span>carregando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Regime performance -->
+    <div class="card">
+      <div class="card-header">
+        <div class="dot" style="background:var(--yellow)"></div>
+        Win Rate por Market Regime
+      </div>
+      <div class="card-body">
+        <table>
+          <thead>
+            <tr>
+              <th>Regime</th>
+              <th>Total</th>
+              <th>W / L</th>
+              <th class="right">Win Rate</th>
+              <th class="right">PnL Medio (pts)</th>
+            </tr>
+          </thead>
+          <tbody id="tRegime">
+            <tr class="loading-row"><td colspan="5"><span class="spinner"></span>carregando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- STRENGTH + CONFLUENCE -->
+  <div class="grid-2">
+
+    <!-- Signal Strength performance -->
+    <div class="card">
+      <div class="card-header">
+        <div class="dot" style="background:var(--blue)"></div>
+        Win Rate por Signal Strength
+      </div>
+      <div class="card-body">
+        <table>
+          <thead>
+            <tr>
+              <th>Faixa</th>
+              <th>Total</th>
+              <th>W / L</th>
+              <th class="right" colspan="2">Win Rate</th>
+            </tr>
+          </thead>
+          <tbody id="tStrength">
+            <tr class="loading-row"><td colspan="5"><span class="spinner"></span>carregando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Confluence performance -->
+    <div class="card">
+      <div class="card-header">
+        <div class="dot" style="background:var(--green)"></div>
+        Top Confluencias (min. 3 ocorrencias)
+      </div>
+      <div class="card-body">
+        <table>
+          <thead>
+            <tr>
+              <th>Confluencia</th>
+              <th class="right">Total</th>
+              <th class="right" colspan="2">Win Rate</th>
+            </tr>
+          </thead>
+          <tbody id="tConf">
+            <tr class="loading-row"><td colspan="4"><span class="spinner"></span>carregando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- RECENT OPPORTUNITIES -->
+  <div class="card-full">
+    <div class="card-header">
+      <div class="dot" style="background:var(--orange)"></div>
+      Oportunidades Recentes
+      <div style="flex:1"></div>
+      <select id="recentLimit" onchange="loadRecent()"
+        style="background:var(--bg);border:1px solid var(--border);color:var(--muted);
+               padding:3px 8px;border-radius:6px;font-size:11px;cursor:pointer;">
+        <option value="25">25</option>
+        <option value="50" selected>50</option>
+        <option value="100">100</option>
+      </select>
+    </div>
+    <div class="card-body" style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Hora</th>
+            <th>Ativo</th>
+            <th>Acao</th>
+            <th>Score</th>
+            <th>Forca</th>
+            <th>Risco</th>
+            <th>Regime</th>
+            <th>Operou</th>
+            <th>Resultado</th>
+            <th class="right">PnL (pts)</th>
+            <th class="right">PnL (R$)</th>
+            <th>Confluencias</th>
+          </tr>
+        </thead>
+        <tbody id="tRecent">
+          <tr class="loading-row"><td colspan="13"><span class="spinner"></span>carregando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- /page -->
+
+<script>
+// ── Helpers ──────────────────────────────────────────────────────────────
+
+function fmtTime(iso) {
+  if (!iso) return '-';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'}) +
+           ' ' + d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+  } catch(e) { return iso.slice(11,16); }
+}
+
+function wrColor(wr) {
+  if (wr >= 65) return 'var(--green)';
+  if (wr >= 50) return 'var(--yellow)';
+  return 'var(--red)';
+}
+
+function wrBar(wr) {
+  const color = wrColor(wr);
+  return `<div class="wr-cell">
+    <div class="wr-bar"><div class="wr-bar-fill" style="width:${wr}%;background:${color}"></div></div>
+    <span class="wr-num" style="color:${color}">${wr}%</span>
+  </div>`;
+}
+
+function scoreColor(s) {
+  if (s == null) return 'var(--muted)';
+  if (s >= 8)  return 'var(--green)';
+  if (s >= 5)  return 'var(--yellow)';
+  if (s >= 0)  return 'var(--orange)';
+  return 'var(--red)';
+}
+
+function fmtPnl(v, unit) {
+  if (v == null) return '<span class="pnl-nil">-</span>';
+  const cls = v > 0 ? 'pnl-pos' : (v < 0 ? 'pnl-neg' : 'pnl-nil');
+  const pfx = v > 0 ? '+' : '';
+  return `<span class="${cls}">${pfx}${v}${unit || ''}</span>`;
+}
+
+function fmtStrength(v) {
+  if (v == null) return '-';
+  const cls = v >= 80 ? 'str-80plus' : v >= 60 ? 'str-60plus' : v >= 40 ? 'str-40plus' : 'str-low';
+  return `<span class="${cls}">${v}</span>`;
+}
+
+function buildTradedBadge(r) {
+  if (r.was_traded) return '<span style="color:var(--green);font-weight:600">SIM</span>';
+  const cr = (r.close_reason || '').toUpperCase();
+  if (cr === 'IA_BLOQUEOU')   return '<span style="background:#2e1a1a;color:var(--red);padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700">IA BLOQUEOU</span>';
+  if (cr === 'AGUARDADO_IA')  return '<span style="background:#2e2a1a;color:var(--yellow);padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700">AGUARDAR</span>';
+  return '<span style="color:var(--muted)">NAO</span>';
+}
+
+async function fetchJson(url) {
+  const r = await fetch(url);
+  return r.json();
+}
+
+// ── KPI Summary ──────────────────────────────────────────────────────────
+
+async function loadSummary() {
+  try {
+    const res = await fetchJson('/api/analytics/summary');
+    if (!res.ok) return;
+    const d = res.data;
+    document.getElementById('kTotal').textContent   = d.total_opportunities;
+    document.getElementById('kTraded').textContent  = d.traded;
+    document.getElementById('kWR').textContent      = d.win_rate + '%';
+    document.getElementById('kWR').style.color      = wrColor(d.win_rate);
+    document.getElementById('kWRSub').textContent   = `${d.wins}W / ${d.losses}L`;
+    const pnl = d.total_pnl_brl;
+    const pnlEl = document.getElementById('kPnL');
+    pnlEl.textContent  = (pnl >= 0 ? '+' : '') + 'R$ ' + pnl.toFixed(2);
+    pnlEl.style.color  = pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    document.getElementById('kPnLPts').textContent  = `${d.total_pnl_pts > 0 ? '+' : ''}${d.total_pnl_pts} pts`;
+    document.getElementById('kPending').textContent = d.pending;
+  } catch(e) { console.error('loadSummary', e); }
+}
+
+// ── Score table ──────────────────────────────────────────────────────────
+
+async function loadScore() {
+  const tb = document.getElementById('tScore');
+  try {
+    const res = await fetchJson('/api/analytics/score');
+    if (!res.ok || !res.data.length) {
+      tb.innerHTML = '<tr class="loading-row"><td colspan="5">Sem dados ainda</td></tr>';
+      return;
+    }
+    tb.innerHTML = res.data.map(r => {
+      const sc = scoreColor(r.score);
+      return `<tr>
+        <td><span class="score-chip" style="background:${sc}22;color:${sc}">${r.score}</span></td>
+        <td>${r.total}</td>
+        <td><span style="color:var(--green)">${r.wins}</span> / <span style="color:var(--red)">${r.losses}</span></td>
+        <td class="right">${wrBar(r.win_rate)}</td>
+        <td class="right">${fmtPnl(r.avg_pnl_pts)}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tb.innerHTML = '<tr class="loading-row"><td colspan="5">Erro ao carregar</td></tr>';
+  }
+}
+
+// ── Regime table ─────────────────────────────────────────────────────────
+
+async function loadRegime() {
+  const tb = document.getElementById('tRegime');
+  try {
+    const res = await fetchJson('/api/analytics/regime');
+    if (!res.ok || !res.data.length) {
+      tb.innerHTML = '<tr class="loading-row"><td colspan="5">Sem dados ainda</td></tr>';
+      return;
+    }
+    tb.innerHTML = res.data.map(r => `<tr>
+      <td><span class="regime-badge regime-${r.regime}">${r.regime}</span></td>
+      <td>${r.total}</td>
+      <td><span style="color:var(--green)">${r.wins}</span> / <span style="color:var(--red)">${r.losses}</span></td>
+      <td class="right" colspan="2">${wrBar(r.win_rate)}</td>
+    </tr>`).join('');
+  } catch(e) {
+    tb.innerHTML = '<tr class="loading-row"><td colspan="5">Erro ao carregar</td></tr>';
+  }
+}
+
+// ── Strength table ────────────────────────────────────────────────────────
+
+async function loadStrength() {
+  const tb = document.getElementById('tStrength');
+  try {
+    const res = await fetchJson('/api/analytics/strength');
+    if (!res.ok || !res.data.length) {
+      tb.innerHTML = '<tr class="loading-row"><td colspan="5">Sem dados ainda</td></tr>';
+      return;
+    }
+    tb.innerHTML = res.data.map(r => `<tr>
+      <td>${r.range}</td>
+      <td>${r.total}</td>
+      <td><span style="color:var(--green)">${r.wins}</span> / <span style="color:var(--red)">${r.losses}</span></td>
+      <td class="right" colspan="2">${wrBar(r.win_rate)}</td>
+    </tr>`).join('');
+  } catch(e) {
+    tb.innerHTML = '<tr class="loading-row"><td colspan="5">Erro ao carregar</td></tr>';
+  }
+}
+
+// ── Confluence table ──────────────────────────────────────────────────────
+
+async function loadConfluence() {
+  const tb = document.getElementById('tConf');
+  try {
+    const res = await fetchJson('/api/analytics/confluence');
+    if (!res.ok || !res.data.length) {
+      tb.innerHTML = '<tr class="loading-row"><td colspan="4">Sem dados ainda (min. 3 ocorrencias)</td></tr>';
+      return;
+    }
+    tb.innerHTML = res.data.map(r => `<tr>
+      <td style="max-width:260px;word-break:break-word">${r.confluence}</td>
+      <td class="right">${r.total}</td>
+      <td class="right" colspan="2">${wrBar(r.win_rate)}</td>
+    </tr>`).join('');
+  } catch(e) {
+    tb.innerHTML = '<tr class="loading-row"><td colspan="4">Erro ao carregar</td></tr>';
+  }
+}
+
+// ── Recent opportunities ──────────────────────────────────────────────────
+
+async function loadRecent() {
+  const tb    = document.getElementById('tRecent');
+  const limit = document.getElementById('recentLimit').value;
+  tb.innerHTML = '<tr class="loading-row"><td colspan="13"><span class="spinner"></span>carregando...</td></tr>';
+  try {
+    const res = await fetchJson(`/api/analytics/recent?limit=${limit}`);
+    if (!res.ok || !res.data.length) {
+      tb.innerHTML = '<tr class="loading-row"><td colspan="13">Nenhuma oportunidade registrada ainda</td></tr>';
+      return;
+    }
+    tb.innerHTML = res.data.map(r => {
+      const wCls  = r.outcome_win === 1 ? 'win-1' : r.outcome_win === 0 ? 'win-0' : 'win-null';
+      const wTxt  = r.outcome_win === 1 ? 'GANHO' : r.outcome_win === 0 ? 'PERDA' : (r.resolved ? 'NEUTRO' : '-');
+      const aCls  = r.action ? `action-${r.action}` : '';
+      const confs = (r.confluences || []).map(c => `<span class="conf-tag">${c.slice(0,30)}</span>`).join('');
+      const sc    = scoreColor(r.score);
+      return `<tr>
+        <td style="color:var(--muted)">${r.id}</td>
+        <td style="color:var(--muted);white-space:nowrap">${fmtTime(r.created_at)}</td>
+        <td style="font-weight:600">${r.symbol || '-'}</td>
+        <td class="${aCls}">${r.action || '-'}</td>
+        <td><span class="score-chip" style="background:${sc}22;color:${sc}">${r.score ?? '-'}</span></td>
+        <td>${fmtStrength(r.signal_strength)}</td>
+        <td>${r.risk_level ?? '-'}</td>
+        <td><span class="regime-badge regime-${r.market_regime}">${r.market_regime || '-'}</span></td>
+        <td>${buildTradedBadge(r)}</td>
+        <td class="${wCls}">${wTxt}</td>
+        <td class="right">${fmtPnl(r.pnl_pts)}</td>
+        <td class="right">${r.pnl_brl != null ? fmtPnl(r.pnl_brl, '') : '<span class="pnl-nil">-</span>'}</td>
+        <td>${confs || '<span style="color:var(--muted)">-</span>'}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tb.innerHTML = '<tr class="loading-row"><td colspan="13">Erro ao carregar</td></tr>';
+  }
+}
+
+// ── Sync outcomes ─────────────────────────────────────────────────────────
+
+async function syncOutcomes() {
+  const btn = document.querySelector('.sync-btn');
+  btn.textContent = 'Sincronizando...';
+  btn.disabled    = true;
+  try {
+    const res = await fetchJson('/api/analytics/sync-outcomes');
+    if (res.ok) {
+      document.getElementById('lastSync').textContent =
+        `Fechados: ${res.linked} | Bloqueados: ${res.blocked_marked || 0} | Abertos: ${res.open_marked || 0} | Sem match: ${res.skipped} | ${new Date().toLocaleTimeString('pt-BR')}`;
+      await loadAll();
+    } else {
+      document.getElementById('lastSync').textContent = 'Erro: ' + (res.error || '?');
+    }
+  } catch(e) {
+    document.getElementById('lastSync').textContent = 'Erro de rede';
+  } finally {
+    btn.textContent = 'Sincronizar Outcomes';
+    btn.disabled    = false;
+  }
+}
+
+// ── Reset links (para re-sync limpo) ─────────────────────────────────────
+
+async function resetLinks() {
+  if (!confirm('Isso vai apagar todos os links entre oportunidades e trades para re-sincronizar do zero. Continuar?')) return;
+  try {
+    const res = await fetch('/api/analytics/reset-links', { method: 'POST' });
+    const data = await res.json();
+    document.getElementById('lastSync').textContent = data.ok
+      ? 'Links resetados. Clique Sincronizar Outcomes.'
+      : 'Erro: ' + (data.error || '?');
+    if (data.ok) await loadAll();
+  } catch(e) {
+    document.getElementById('lastSync').textContent = 'Erro de rede';
+  }
+}
+
+// ── Load all ──────────────────────────────────────────────────────────────
+
+async function loadAll() {
+  await Promise.all([
+    loadSummary(),
+    loadScore(),
+    loadRegime(),
+    loadStrength(),
+    loadConfluence(),
+    loadRecent(),
+  ]);
+}
+
+// Init
+loadAll();
+
+// Auto-refresh summary + recent every 60s
+setInterval(() => {
+  loadSummary();
+  loadRecent();
+}, 60000);
+</script>
+
+</body>
+</html>

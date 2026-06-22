@@ -254,3 +254,37 @@ def get_log_summary() -> dict:
     except Exception as exc:
         logger.warning("trade_logger.get_log_summary error: %s", exc)
         return {"error": str(exc)}
+
+
+def get_today_session_stats() -> dict:
+    """
+    Le o CSV e retorna os stats do dia atual (BRT) para re-inicializar
+    _session no scalper_bp apos um restart da aplicacao.
+    Filtra por datetime_brt comecando com a data de hoje (YYYY-MM-DD).
+    """
+    try:
+        _ensure_file()
+        _BRT = timezone(timedelta(hours=-3))
+        today = datetime.now(_BRT).strftime("%Y-%m-%d")
+
+        with open(LOG_FILE, "r", encoding="utf-8") as f:
+            rows = [
+                r for r in csv.DictReader(f)
+                if r.get("resultado")
+                and str(r.get("datetime_brt", "")).startswith(today)
+            ]
+
+        def _f(v):
+            try: return float(v)
+            except: return 0.0
+
+        return {
+            "trades":     len(rows),
+            "wins":       sum(1 for r in rows if r["resultado"] == "WIN"),
+            "losses":     sum(1 for r in rows if r["resultado"] == "LOSS"),
+            "breakevens": sum(1 for r in rows if r["resultado"] == "BE"),
+            "pnl":        round(sum(_f(r.get("profit", 0)) for r in rows), 2),
+        }
+    except Exception as exc:
+        logger.warning("get_today_session_stats error: %s", exc)
+        return {"trades": 0, "wins": 0, "losses": 0, "breakevens": 0, "pnl": 0.0}

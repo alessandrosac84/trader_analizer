@@ -30,6 +30,9 @@ SCALPER_SYMBOLS = {
     "WINM26": "WINM26",
     "WDO":    "WDON26",
     "WIN":    "WINM26",
+    # Bitcoin Futuro B3 (mini contrato, 0.01 BTC, horário B3)
+    "BITM26": "BITM26",
+    "BIT":    "BITM26",
     # Forex / Metais (24h)
     "XAUUSD": "XAUUSD",
     "EURUSD": "EURUSD",
@@ -46,18 +49,23 @@ TICK_SIZE_OVERRIDE = {
     "WDON26": 0.5,
     "WDOM26": 0.5,
     "WINM26": 5.0,
+    # BITM26: cotado em BRL/BTC — variação mínima R$100 por BTC
+    # Cada tick = 0.01 BTC × R$100 = R$1,00 por mini contrato
+    "BITM26": 100.0,
     "XAUUSD": 0.01,
     "EURUSD": 0.00010,
     "USDBRL": 0.0010,
 }
 
 # Valor em R$ por tick por contrato (simulacao e exibicao de P&L)
-# WDO: 1 tick (0.5 pts) = R$5,00 por mini contrato
-# WIN: 1 tick (5 pts)   = R$1,00 por mini contrato
+# WDO:   1 tick (0.5 pts)   = R$5,00 por mini contrato
+# WIN:   1 tick (5 pts)     = R$1,00 por mini contrato
+# BITM:  1 tick (R$100 pts) = R$1,00 por mini contrato (0.01 BTC × R$100)
 TICK_VALUE_BRL = {
     "WDON26": 5.0,
     "WDOM26": 5.0,
     "WINM26": 1.0,
+    "BITM26": 1.0,
     "XAUUSD": 1.0,
     "EURUSD": 1.0,
     "USDBRL": 1.0,
@@ -81,6 +89,7 @@ _sim_mode   = False
 
 _SIM_DEFAULT_PRICES = {
     "WDON26": 5850.0,  "WDOM26": 5850.0,  "WINM26": 132000.0,
+    "BITM26": 620000.0,  # BTC aprox. R$620.000 (BTC ~$107k × BRL ~5,80)
     "XAUUSD": 3250.0,  "EURUSD": 1.0850,  "USDBRL": 5.75,
     "GOLD11": 385.0,   "BOVA11": 132.0,   "IVVB11": 320.0,
     "PETR4":  36.0,    "VALE3":  58.0,    "ITUB4":  35.0,

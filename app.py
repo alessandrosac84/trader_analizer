@@ -58,6 +58,15 @@ app.config["MAX_CONTENT_LENGTH"] = Config.MAX_CONTENT_LENGTH
 from blueprints.scalper_bp import scalper_bp
 app.register_blueprint(scalper_bp)
 
+# ── Módulo Telemetria + Market Center (Fases 1-3 — somente leitura) ───────
+from blueprints.telemetry_bp import telemetry_bp, init_analytics_db
+app.register_blueprint(telemetry_bp)
+init_analytics_db()
+
+# ── Motor de Inteligência — Fases 1-5 (somente leitura, novos arquivos) ────
+from blueprints.intelligence_bp import intelligence_bp
+app.register_blueprint(intelligence_bp)
+
 # ── Inicialização única no primeiro request ────────────────────────────────
 _app_initialized = False
 
