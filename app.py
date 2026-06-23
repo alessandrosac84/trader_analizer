@@ -67,6 +67,10 @@ init_analytics_db()
 from blueprints.intelligence_bp import intelligence_bp
 app.register_blueprint(intelligence_bp)
 
+# ── Profit Bridge — Sprint Profit 1 (somente leitura, novos arquivos) ─────
+from blueprints.profit_bp import profit_bp
+app.register_blueprint(profit_bp)
+
 # ── Inicialização única no primeiro request ────────────────────────────────
 _app_initialized = False
 

@@ -1,0 +1,40 @@
+{*
+  TradeAI_Colors_Test.ntsl
+  ========================
+  Testa se RGB() e as constantes de cor funcionam na versão instalada.
+  Use este para descobrir qual sintaxe de cor é suportada.
+*}
+
+Input:
+  i_UsarRGB : Boolean(True);   {* True = testa RGB; False = testa clXxx *}
+
+Var:
+  vCor1 : Integer;
+  vCor2 : Integer;
+  vCor3 : Integer;
+
+Begin
+  If i_UsarRGB Then
+  Begin
+    vCor1 := RGB(0, 200, 83);    {* Verde Trade AI *}
+    vCor2 := RGB(255, 80, 60);   {* Vermelho Trade AI *}
+    vCor3 := RGB(255, 214, 0);   {* Amarelo Trade AI *}
+  End
+  Else
+  Begin
+    vCor1 := clGreen;
+    vCor2 := clRed;
+    vCor3 := clYellow;
+  End;
+
+  If LastBarOnChart Then
+  Begin
+    PlotText(CurrentBar, High * 1.003, "VERDE (COMPRA)", vCor1, 9);
+    PlotText(CurrentBar, High * 1.002, "VERMELHO (VENDA)", vCor2, 9);
+    PlotText(CurrentBar, High * 1.001, "AMARELO (NEUTRO)", vCor3, 9);
+  End;
+
+  Plot1(Close);
+  SetPlotColor(1, clTransparent);
+
+End;

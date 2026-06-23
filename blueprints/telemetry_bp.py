@@ -60,28 +60,32 @@ def api_log_opportunity():
         from services.opportunity_service import log_opportunity
         d = request.get_json(silent=True) or {}
         opp_id = log_opportunity(
-            tv_symbol         = d.get("tv_symbol", ""),
-            symbol_short      = d.get("symbol_short", ""),
-            interval          = str(d.get("interval", "15")),
-            action            = d.get("action"),
-            score             = d.get("score"),
-            score_raw         = d.get("score_raw"),
-            signal_strength   = d.get("signal_strength"),
-            risk_level        = d.get("risk_level"),
-            market_regime     = d.get("market_regime"),
-            score_breakdown   = d.get("score_breakdown"),
-            confluences       = d.get("confluences"),
-            entry_price       = d.get("entry_price"),
-            sl                = d.get("sl"),
-            tp1               = d.get("tp1"),
-            atr               = d.get("atr"),
-            adx               = d.get("adx"),
-            rsi               = d.get("rsi"),
-            htf_trend         = d.get("htf_trend"),
-            adx_filtered      = bool(d.get("adx_filtered", False)),
-            directional_block = d.get("directional_block"),
-            ai_verdict        = d.get("ai_verdict"),
-            ai_confidence     = d.get("ai_confidence"),
+            tv_symbol               = d.get("tv_symbol", ""),
+            symbol_short            = d.get("symbol_short", ""),
+            interval                = str(d.get("interval", "15")),
+            action                  = d.get("action"),
+            score                   = d.get("score"),
+            score_raw               = d.get("score_raw"),
+            signal_strength         = d.get("signal_strength"),
+            risk_level              = d.get("risk_level"),
+            market_regime           = d.get("market_regime"),
+            score_breakdown         = d.get("score_breakdown"),
+            confluences             = d.get("confluences"),
+            entry_price             = d.get("entry_price"),
+            sl                      = d.get("sl"),
+            tp1                     = d.get("tp1"),
+            atr                     = d.get("atr"),
+            adx                     = d.get("adx"),
+            rsi                     = d.get("rsi"),
+            htf_trend               = d.get("htf_trend"),
+            adx_filtered            = bool(d.get("adx_filtered", False)),
+            directional_block       = d.get("directional_block"),
+            ai_verdict              = d.get("ai_verdict"),
+            ai_confidence           = d.get("ai_confidence"),
+            volume_confirm          = d.get("volume_confirm"),
+            volume_ratio            = d.get("volume_ratio"),
+            ai_trader_confidence    = d.get("ai_trader_confidence"),
+            ai_validator_confidence = d.get("ai_validator_confidence"),
         )
         return jsonify({"ok": True, "id": opp_id})
     except Exception as exc:
@@ -181,8 +185,9 @@ def api_analytics_strength():
 def api_analytics_recent():
     try:
         from services.opportunity_service import analytics_recent_opportunities
-        limit = int(request.args.get("limit", 50))
-        return jsonify({"ok": True, "data": analytics_recent_opportunities(limit)})
+        limit       = int(request.args.get("limit", 50))
+        date_filter = request.args.get("date", None)   # 'today' | 'week' | None
+        return jsonify({"ok": True, "data": analytics_recent_opportunities(limit, date_filter)})
     except Exception as exc:
         logger.exception("api_analytics_recent error")
         return jsonify({"ok": False, "error": str(exc)}), 500

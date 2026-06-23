@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Profit Bridge — Trade AI</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #0d0d0d;
+    --card:     #161616;
+    --card2:    #1c1c1c;
+    --border:   #2a2a2a;
+    --text:     #e8e8e8;
+    --muted:    #666;
+    --green:    #00c853;
+    --red:      #ff3d00;
+    --yellow:   #ffd600;
+    --blue:     #2979ff;
+    --purple:   #7c4dff;
+    --font:     'Segoe UI', system-ui, sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 13px;
+    padding: 0 0 40px;
+  }
+
+  /* ── Header ── */
+  .header {
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .header h1 { font-size: 20px; font-weight: 700; }
+  .header p  { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  #lastUpdate { font-size: 11px; color: var(--muted); }
+
+  .btn {
+    padding: 6px 16px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: opacity .15s;
+  }
+  .btn:hover { opacity: .85; }
+  .btn-primary { background: var(--purple); color: #fff; }
+
+  /* ── Layout ── */
+  .page { max-width: 1200px; margin: 0 auto; padding: 24px 16px; }
+
+  /* ── Status cards ── */
+  .status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .stat-label { font-size: 10px; text-transform: uppercase; color: var(--muted); letter-spacing: .05em; }
+  .stat-value { font-size: 24px; font-weight: 700; margin: 6px 0 2px; }
+  .stat-sub   { font-size: 11px; color: var(--muted); }
+
+  /* ── Instrumento grid ── */
+  .inst-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .inst-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .inst-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .inst-name  { font-size: 16px; font-weight: 700; }
+  .inst-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+  }
+  .badge-compra { background: rgba(0,200,83,.15); color: var(--green); border: 1px solid rgba(0,200,83,.3); }
+  .badge-venda  { background: rgba(255,61,0,.15);  color: var(--red);   border: 1px solid rgba(255,61,0,.3); }
+  .badge-neutro { background: rgba(102,102,102,.15); color: var(--muted); border: 1px solid var(--border); }
+
+  .field-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .field-row:last-child { border-bottom: none; }
+  .field-key   { color: var(--muted); }
+  .field-value { font-weight: 600; text-align: right; }
+
+  /* ── Engine card ── */
+  .engine-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 24px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+  }
+  .engine-cell { }
+  .engine-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .engine-value { font-size: 20px; font-weight: 700; margin-top: 4px; }
+
+  /* ── JSON preview ── */
+  .section-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--muted);
+    letter-spacing: .08em;
+    margin-bottom: 10px;
+    margin-top: 24px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  .json-wrap {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    overflow: auto;
+    max-height: 400px;
+  }
+  .json-wrap pre {
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: 11px;
+    line-height: 1.6;
+    color: #cdd9e5;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* ── Log viewer ── */
+  .log-wrap {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    overflow: auto;
+    max-height: 300px;
+  }
+  .log-line {
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: 11px;
+    line-height: 1.7;
+    color: var(--muted);
+    padding: 1px 0;
+  }
+  .log-line.info  { color: #81b4ff; }
+  .log-line.error { color: var(--red); }
+  .log-line.warn  { color: var(--yellow); }
+
+  .pill {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .pill-green  { background: rgba(0,200,83,.15);  color: var(--green); }
+  .pill-red    { background: rgba(255,61,0,.15);   color: var(--red); }
+  .pill-yellow { background: rgba(255,214,0,.12);  color: var(--yellow); }
+
+  .loading { color: var(--muted); font-size: 12px; padding: 16px 0; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>🔌 Profit Bridge</h1>
+    <p>Sprint Profit 1 — camada de integração Trade AI → Profit Chart</p>
+  </div>
+  <div class="header-right">
+    <span id="lastUpdate"></span>
+    <button class="btn btn-primary" onclick="loadAll()">↺ Atualizar</button>
+  </div>
+</div>
+
+<div class="page">
+
+  <!-- ── Status Bridge ── -->
+  <div class="status-grid" id="statusGrid">
+    <div class="loading">Carregando status...</div>
+  </div>
+
+  <!-- ── Engine ── -->
+  <div class="section-title">Motor de Mercado</div>
+  <div class="engine-card" id="engineCard">
+    <div class="loading">Carregando...</div>
+  </div>
+
+  <!-- ── Instrumentos ── -->
+  <div class="section-title">Sinais por Instrumento</div>
+  <div class="inst-grid" id="instGrid">
+    <div class="loading">Carregando...</div>
+  </div>
+
+  <!-- ── JSON preview ── -->
+  <div class="section-title">JSON Gerado — trade_ai_profit.json</div>
+  <div class="json-wrap">
+    <pre id="jsonPreview">Carregando...</pre>
+  </div>
+
+</div><!-- /page -->
+
+<script>
+// ============================================================
+//  Helpers
+// ============================================================
+function pill(ok) {
+  return ok
+    ? '<span class="pill pill-green">✓ ATIVO</span>'
+    : '<span class="pill pill-red">✗ INATIVO</span>';
+}
+
+function fieldRow(key, value, color) {
+  const v = value == null ? '–' : value;
+  const style = color ? ` style="color:${color}"` : '';
+  return `<div class="field-row">
+    <span class="field-key">${key}</span>
+    <span class="field-value"${style}>${v}</span>
+  </div>`;
+}
+
+function actionBadge(action) {
+  if (!action || action === 'NEUTRO') return '<span class="inst-badge badge-neutro">NEUTRO</span>';
+  if (action === 'COMPRA') return '<span class="inst-badge badge-compra">COMPRA</span>';
+  if (action === 'VENDA')  return '<span class="inst-badge badge-venda">VENDA</span>';
+  return `<span class="inst-badge badge-neutro">${action}</span>`;
+}
+
+function fmtPnl(v) {
+  if (v == null) return '–';
+  const c = v >= 0 ? 'var(--green)' : 'var(--red)';
+  const s = v >= 0 ? '+' : '';
+  return `<span style="color:${c}">${s}R$ ${Number(v).toFixed(2)}</span>`;
+}
+
+function fmtPrice(v) {
+  return v != null ? Number(v).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '–';
+}
+
+function bool2(v) {
+  if (v === true)  return '<span style="color:var(--green)">SIM</span>';
+  if (v === false) return '<span style="color:var(--red)">NÃO</span>';
+  return '–';
+}
+
+// ============================================================
+//  Carrega status da bridge
+// ============================================================
+async function loadStatus() {
+  const d = await fetch('/api/profit/status').then(r => r.json()).catch(() => ({}));
+
+  const cards = [
+    { label: 'Bridge',        value: d.running ? '<span style="color:var(--green)">RODANDO</span>' : '<span style="color:var(--red)">PARADA</span>',  sub: d.started_at ? 'Iniciada: ' + (d.started_at || '').slice(0,19).replace('T',' ') : '–' },
+    { label: 'Última Atualiz.', value: d.last_update ? (d.last_update || '').slice(11,19) : '–',    sub: d.last_update ? (d.last_update || '').slice(0,10) : 'nunca' },
+    { label: 'JSON Existe',   value: d.json_exists ? '<span style="color:var(--green)">SIM</span>' : '<span style="color:var(--red)">NÃO</span>', sub: d.json_size ? (d.json_size / 1024).toFixed(1) + ' KB' : '0 KB' },
+    { label: 'Atualizações',  value: `<span style="color:var(--green)">${d.updates_ok || 0}</span> <span style="color:var(--muted)">/</span> <span style="color:var(--red)">${d.updates_fail || 0}</span>`, sub: 'ok / falha' },
+    { label: 'Erro',          value: d.error ? `<span style="color:var(--red);font-size:11px">${d.error.slice(0,40)}</span>` : '<span style="color:var(--green)">Nenhum</span>', sub: '' },
+  ];
+
+  document.getElementById('statusGrid').innerHTML = cards.map(c => `
+    <div class="stat-card">
+      <div class="stat-label">${c.label}</div>
+      <div class="stat-value" style="font-size:16px">${c.value}</div>
+      <div class="stat-sub">${c.sub}</div>
+    </div>
+  `).join('');
+}
+
+// ============================================================
+//  Carrega JSON gerado e monta instrumentos + engine
+// ============================================================
+async function loadJson() {
+  // Lê o JSON diretamente do status endpoint para obter dados ao vivo
+  const d = await fetch('/api/profit/status').then(r => r.json()).catch(() => ({}));
+
+  // Tenta buscar o JSON bruto via endpoint dedicado se existir,
+  // senão usa o endpoint de telemetria para montar os dados
+  let payload = null;
+  try {
+    const r = await fetch('/api/profit/json');
+    if (r.ok) payload = await r.json();
+  } catch (_) {}
+
+  if (!payload) {
+    // Fallback: usa market-engine + status para montar visualização parcial
+    document.getElementById('jsonPreview').textContent = 'JSON ainda não disponível. Aguardando primeira geração pela bridge...';
+    return;
+  }
+
+  // ── Engine card ──
+  const eng = payload.engine || {};
+  const dsColor = eng.daily_stop_hit ? 'var(--red)' : (eng.current_pnl < 0 ? 'var(--yellow)' : 'var(--green)');
+  document.getElementById('engineCard').innerHTML = `
+    <div class="engine-cell">
+      <div class="engine-label">Pode Operar</div>
+      <div class="engine-value" style="color:${eng.can_trade ? 'var(--green)' : 'var(--red)'}">${eng.can_trade ? 'SIM' : 'NÃO'}</div>
+    </div>
+    <div class="engine-cell">
+      <div class="engine-label">Stop Diário</div>
+      <div class="engine-value" style="color:${eng.daily_stop_hit ? 'var(--red)' : 'var(--muted)'}">${eng.daily_stop_hit ? 'ATINGIDO' : 'OK'}</div>
+    </div>
+    <div class="engine-cell">
+      <div class="engine-label">P&L Hoje</div>
+      <div class="engine-value">${fmtPnl(eng.current_pnl)}</div>
+    </div>
+    <div class="engine-cell">
+      <div class="engine-label">Recomendado</div>
+      <div class="engine-value" style="color:var(--purple)">${eng.recommended_instrument || '–'}</div>
+    </div>
+    <div class="engine-cell">
+      <div class="engine-label">Status Drawdown</div>
+      <div class="engine-value" style="font-size:14px;color:${dsColor}">${eng.drawdown_status || '–'}</div>
+    </div>
+  `;
+
+  // ── Instrument cards ──
+  let instHtml = '';
+  ['win', 'wdo'].forEach(key => {
+    const s = payload[key] || {};
+    const name = key.toUpperCase();
+    const posColor = s.position_open ? (s.position_pnl >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--muted)';
+
+    instHtml += `<div class="inst-card">
+      <div class="inst-header">
+        <span class="inst-name">${name}</span>
+        ${actionBadge(s.action)}
+      </div>
+      ${fieldRow('Score', s.score)}
+      ${fieldRow('Força do Sinal', s.signal_strength != null ? s.signal_strength + '%' : '–')}
+      ${fieldRow('Risco', s.risk_level != null ? s.risk_level + '%' : '–', s.risk_level > 50 ? 'var(--red)' : s.risk_level > 25 ? 'var(--yellow)' : 'var(--green)')}
+      ${fieldRow('Regime', s.market_regime || '–')}
+      ${fieldRow('Tendência', s.trend || '–')}
+      ${fieldRow('Confluências', s.confluence_count ?? '–')}
+      ${fieldRow('Entrada', fmtPrice(s.entry_price))}
+      ${fieldRow('Stop', fmtPrice(s.sl))}
+      ${fieldRow('TP1', fmtPrice(s.tp1))}
+      ${fieldRow('TP2', fmtPrice(s.tp2))}
+      <div style="height:8px"></div>
+      ${fieldRow('RSI', s.rsi != null ? Number(s.rsi).toFixed(1) : '–')}
+      ${fieldRow('ADX', s.adx != null ? Number(s.adx).toFixed(1) : '–')}
+      ${fieldRow('VWAP Bull', bool2(s.vwap_bull))}
+      ${fieldRow('EMA Alinhadas', bool2(s.ema_alignment))}
+      ${fieldRow('MACD Positivo', bool2(s.macd_positive))}
+      <div style="height:8px"></div>
+      ${fieldRow('Posição Aberta', bool2(s.position_open))}
+      ${s.position_open ? fieldRow('Direção Posição', s.position_dir || '–') : ''}
+      ${s.position_open ? fieldRow('P&L Posição', fmtPnl(s.position_pnl)) : ''}
+      <div style="margin-top:10px;font-size:10px;color:var(--muted)">
+        Último sinal: ${s.last_signal_at ? s.last_signal_at.slice(0,19).replace('T',' ') : '–'}
+      </div>
+    </div>`;
+  });
+  document.getElementById('instGrid').innerHTML = instHtml;
+
+  // ── JSON preview ──
+  document.getElementById('jsonPreview').textContent = JSON.stringify(payload, null, 2);
+}
+
+// ============================================================
+//  Init
+// ============================================================
+async function loadAll() {
+  document.getElementById('lastUpdate').textContent =
+    'Atualizado: ' + new Date().toLocaleTimeString('pt-BR');
+  await Promise.all([loadStatus(), loadJson()]);
+}
+
+// Auto-refresh a cada 2s
+loadAll();
+setInterval(loadAll, 2000);
+</script>
+</body>
+</html>

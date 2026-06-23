@@ -1,0 +1,192 @@
+{*
+================================================================================
+  TradeAI Commander v1.0
+  Indicador visual para Profit Chart (NTSL - Nelogica Script Language)
+
+  Sprint Profit 2 - Objetivo: validar ambiente NTSL e renderização gráfica.
+
+  VERSÃO 1.0 - TODOS OS VALORES VIA INPUT (sem integração JSON)
+  Após validação do ambiente → Sprint Profit 3 integrará o JSON do Trade AI.
+
+  Tipo: Sobreposição (Overlay) - renderiza sobre o gráfico de preços
+  Testado com: Profit Chart / Profit Pro (Nelogica)
+================================================================================
+*}
+
+{Tipo: Sobreposição}
+
+{* ============================================================
+   INPUTS — edite os valores diretamente no Profit após instalar
+   ============================================================ *}
+
+Input:
+  i_Ativo        : String ("WDO");
+  i_Acao         : String ("COMPRA");
+  i_Score        : Integer(9);
+  i_Forca        : Integer(73);
+  i_Risco        : Integer(10);
+  i_Regime       : String ("TRENDING");
+  i_Confluencias : Integer(9);
+  i_Tendencia    : String ("ALTA");
+
+{* Configurações visuais do painel *}
+  i_FontSize     : Integer(9);
+  i_OffsetBars   : Integer(3);       {* Posição horizontal: barras a partir da direita *}
+  i_OffsetPrice  : Float  (0.003);   {* Posição vertical: fração do preço atual *}
+
+{* ============================================================
+   VARIÁVEIS LOCAIS
+   ============================================================ *}
+
+Var:
+  vCorAcao    : Integer;
+  vCorScore   : Integer;
+  vCorRisco   : Integer;
+  vCorForca   : Integer;
+  vBase       : Float;
+  vStep       : Float;
+  vBarra      : Integer;
+  vTexto      : String;
+
+{* ============================================================
+   LÓGICA PRINCIPAL
+   ============================================================ *}
+
+Begin
+
+  {* Renderiza somente na última barra visível para evitar
+     multiplas cópias do painel ao rolar o gráfico *}
+  If LastBarOnChart Then
+  Begin
+
+    {* --- Cores dinâmicas baseadas nos valores de entrada --- *}
+
+    {* Cor da Ação *}
+    If i_Acao = "COMPRA" Then
+      vCorAcao := RGB(0, 220, 90)      {* Verde *}
+    Else If i_Acao = "VENDA" Then
+      vCorAcao := RGB(255, 80, 60)     {* Vermelho *}
+    Else
+      vCorAcao := RGB(180, 180, 180);  {* Cinza - NEUTRO *}
+
+    {* Cor do Score (escala 0-10) *}
+    If i_Score >= 7 Then
+      vCorScore := RGB(0, 220, 90)
+    Else If i_Score >= 5 Then
+      vCorScore := RGB(255, 214, 0)
+    Else
+      vCorScore := RGB(255, 80, 60);
+
+    {* Cor da Força (escala 0-100) *}
+    If i_Forca >= 60 Then
+      vCorForca := RGB(0, 220, 90)
+    Else If i_Forca >= 35 Then
+      vCorForca := RGB(255, 214, 0)
+    Else
+      vCorForca := RGB(255, 80, 60);
+
+    {* Cor do Risco (menor = melhor) *}
+    If i_Risco <= 25 Then
+      vCorRisco := RGB(0, 220, 90)
+    Else If i_Risco <= 50 Then
+      vCorRisco := RGB(255, 214, 0)
+    Else
+      vCorRisco := RGB(255, 80, 60);
+
+    {* --- Posicionamento do painel --- *}
+    vBarra := CurrentBar - i_OffsetBars;
+    vBase  := Close * (1 + i_OffsetPrice);
+    vStep  := ATR(14) * 0.6;
+
+    {* --- Desenha o painel linha por linha --- *}
+
+    {* Cabeçalho *}
+    PlotText(vBarra, vBase + (vStep * 9.0),
+             "═══ TRADE AI ═══",
+             RGB(150, 120, 255), i_FontSize + 1);
+
+    {* Ativo *}
+    PlotText(vBarra, vBase + (vStep * 8.0),
+             "ATIVO: " + i_Ativo,
+             RGB(220, 220, 220), i_FontSize);
+
+    {* Ação — cor dinâmica *}
+    PlotText(vBarra, vBase + (vStep * 7.0),
+             "AÇÃO:  " + i_Acao,
+             vCorAcao, i_FontSize);
+
+    {* Score — cor dinâmica *}
+    PlotText(vBarra, vBase + (vStep * 6.0),
+             "SCORE: " + IntToStr(i_Score),
+             vCorScore, i_FontSize);
+
+    {* Força — cor dinâmica *}
+    PlotText(vBarra, vBase + (vStep * 5.0),
+             "FORÇA: " + IntToStr(i_Forca) + "%",
+             vCorForca, i_FontSize);
+
+    {* Risco — cor dinâmica *}
+    PlotText(vBarra, vBase + (vStep * 4.0),
+             "RISCO: " + IntToStr(i_Risco) + "%",
+             vCorRisco, i_FontSize);
+
+    {* Regime *}
+    PlotText(vBarra, vBase + (vStep * 3.0),
+             "REGIME: " + i_Regime,
+             RGB(220, 220, 220), i_FontSize);
+
+    {* Confluências *}
+    PlotText(vBarra, vBase + (vStep * 2.0),
+             "CONFLUÊNCIAS: " + IntToStr(i_Confluencias),
+             RGB(220, 220, 220), i_FontSize);
+
+    {* Tendência *}
+    PlotText(vBarra, vBase + (vStep * 1.0),
+             "TENDÊNCIA: " + i_Tendencia,
+             RGB(220, 220, 220), i_FontSize);
+
+    {* Rodapé - versão *}
+    PlotText(vBarra, vBase,
+             "─── v1.0 Sprint P2 ───",
+             RGB(80, 80, 80), i_FontSize - 1);
+
+  End; {* LastBarOnChart *}
+
+  {* Plot transparente obrigatório para indicadores de sobreposição.
+     Sem isso o Profit pode rejeitar o indicador na compilação. *}
+  Plot1(Close);
+  SetPlotColor(1, RGB(0, 0, 0));
+  SetPlotStyle(1, psDot);
+  SetPlotWidth(1, 0);
+
+End;
+
+{*
+================================================================================
+  NOTAS DE AJUSTE (se necessário após compilação)
+  ===========================================================================
+
+  PROBLEMA: "PlotText não encontrado"
+  SOLUÇÃO:  Substituir PlotText por DrawText com a assinatura:
+            DrawText(vBarra, preco, "texto");
+            (DrawText não suporta cor diretamente - use SetFontColor antes)
+
+  PROBLEMA: "RGB não encontrado"
+  SOLUÇÃO:  Substituir RGB(r,g,b) pelas constantes:
+            clGreen, clRed, clYellow, clWhite, clGray, clBlue, clPurple
+
+  PROBLEMA: "ATR não encontrado"
+  SOLUÇÃO:  Substituir ATR(14) por:
+            vStep := (High - Low) * 0.5;
+            Ou use um valor fixo baseado no tick do ativo.
+
+  PROBLEMA: Painel não aparece na posição correta
+  SOLUÇÃO:  Ajuste i_OffsetPrice e i_OffsetBars nos Inputs do indicador.
+            Para WIN: i_OffsetPrice = 0.001  (menor variação percentual)
+            Para WDO: i_OffsetPrice = 0.002
+
+  PROBLEMA: Texto sobreposto / linhas se misturam
+  SOLUÇÃO:  Aumente i_OffsetPrice ou reduza i_FontSize.
+
+================================================================================
+*}

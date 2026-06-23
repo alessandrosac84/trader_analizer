@@ -726,136 +726,166 @@ function buildGeralCard(data) {
         </div>
         <div class="stat-box">
           <div class="stat-box-label">Win Rate</div>
-          <div class="stat-box-value ${d.win_rate >= 60 ? 'positive' : d.win_rate >= 40 ? 'neutral' : 'negative'}">${d.win_rate != null ? d.win_rate + '%' : '—'}</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-box-label">Drawdown Máx</div>
-          <div class="stat-box-value ${(d.max_drawdown_brl || 0) < -200 ? 'negative' : 'neutral'}">${fmtSign(d.max_drawdown_brl, 0)} R$</div>
+          <div class="stat-box-value ${d.win_rate >= 55 ? 'positive' : d.win_rate >= 40 ? 'neutral' : 'negative'}">${d.win_rate != null ? d.win_rate + '%' : '—'}</div>
         </div>
       </div>
 
-      ${metaPct !== null ? `
-      <div class="divider"></div>
-      <div style="font-size:10px;color:var(--text2);margin-bottom:4px">Meta do dia: ${fmtSign(pnlDay, 0)} / ${fmt(meta, 0)} R$ (${metaPct}%)</div>
-      <div style="background:var(--bg3);border-radius:4px;overflow:hidden;height:6px">
-        <div style="width:${metaPct}%;height:100%;background:${metaPct >= 100 ? 'var(--green)' : 'var(--blue)'}"></div>
-      </div>
+      ${meta != null ? `
+        <div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:4px">
+            <span style="color:var(--text2)">Meta diária</span>
+            <span style="color:${metaPct >= 100 ? 'var(--green)' : 'var(--blue)'}">${metaPct}%</span>
+          </div>
+          <div style="height:5px;background:var(--bg3);border-radius:3px;overflow:hidden">
+            <div style="height:100%;width:${metaPct}%;background:${metaPct >= 100 ? 'var(--green)' : 'var(--blue)'};border-radius:3px;transition:width .4s"></div>
+          </div>
+        </div>
       ` : ''}
 
-      <div class="divider"></div>
       <div class="metrics">
         <div class="metric-row">
-          <span class="metric-label">Posicoes abertas</span>
+          <span class="metric-label">Posições abertas</span>
           <span class="metric-value ${totalOpen > 0 ? 'positive' : 'neutral'}">${totalOpen}</span>
         </div>
         <div class="metric-row">
-          <span class="metric-label">Sequencia perdas</span>
-          <span class="metric-value ${(at.consecutive_losses||0) >= 2 ? 'negative' : 'neutral'}">${at.consecutive_losses || 0}</span>
+          <span class="metric-label">W / L hoje</span>
+          <span class="metric-value">
+            <span class="positive">${d.wins || 0}</span>
+            <span class="neutral"> / </span>
+            <span class="negative">${d.losses || 0}</span>
+          </span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">P&L Médio</span>
+          <span class="metric-value ${pnlColor(d.avg_pnl_brl)}">${fmtSign(d.avg_pnl_brl, 0)} R$</span>
         </div>
       </div>
     </div>
   `;
 }
 
-/* --- Render all cards ------------------------------------------------ */
-function render(data) {
-  const grid = $('main-grid');
-  if (!grid) return;
-  const loading = $('loading');
-  if (loading) loading.style.display = 'none';
+/* ─── logOpportunity — registra sinal no banco analytics ───────────── */
+const _loggedOpps = new Set();   // evita duplicatas na mesma sessao
 
-  const atEnabled = (data.autotrade || {}).enabled;
-  const badge = $('at-badge');
-  if (badge) {
-    badge.textContent = 'AUTO ' + (atEnabled ? 'ON' : 'OFF');
-    badge.className = atEnabled ? '' : 'off';
-  }
+function logOpportunities(data) {
+  const instruments = [data.win, data.wdo].filter(Boolean);
+  for (const symData of instruments) {
+    if (!symData || !symData.action || symData.action === 'NEUTRO') continue;
+    // Chave unica: simbolo + acao + score + minuto
+    const minute = new Date().toISOString().slice(0, 16);
+    const key = `${symData.tv_symbol}|${symData.action}|${symData.score}|${minute}`;
+    if (_loggedOpps.has(key)) continue;
+    _loggedOpps.add(key);
 
-  let html = '';
-  if (data.win)     html += buildInstrumentCard(data.win,     'win-card',    'var(--blue)');
-  if (data.wdo)     html += buildInstrumentCard(data.wdo,     'wdo-card',    'var(--orange)');
-  if (data.scalper) html += buildScalperCard(data.scalper);
-  html += buildGeralCard(data);
+    const payload = {
+      tv_symbol:               symData.tv_symbol,
+      symbol_short:            symData.symbol,
+      interval:                data.interval || '15',
+      action:                  symData.action,
+      score:                   symData.score,
+      score_raw:               symData.score_raw,
+      signal_strength:         symData.signal_strength,
+      risk_level:              symData.risk_level,
+      market_regime:           symData.market_regime,
+      score_breakdown:         symData.score_breakdown,
+      confluences:             symData.confluences,
+      entry_price:             symData.entry_price,
+      sl:                      symData.sl,
+      tp1:                     symData.tp1,
+      atr:                     symData.atr,
+      adx:                     symData.adx,
+      rsi:                     symData.rsi,
+      htf_trend:               symData.htf_trend,
+      adx_filtered:            symData.adx_filtered,
+      directional_block:       symData.directional_block,
+      ai_verdict:              symData.ai_verdict,
+      ai_confidence:           symData.ai_confidence,
+      volume_confirm:          symData.volume_confirm != null ? (symData.volume_confirm ? 1 : 0) : null,
+      volume_ratio:            symData.volume_ratio || null,
+      ai_trader_confidence:    symData.ai_trader_confidence || null,
+      ai_validator_confidence: symData.ai_validator_confidence || null,
+    };
 
-  grid.innerHTML = html;
-}
-
-/* --- Log opportunity to analytics ------------------------------------ */
-function logOpportunity(tvSymbol, side, symData) {
-  if (!symData || !side || side === 'NEUTRO') return;
-  const payload = {
-    tv_symbol:         tvSymbol,
-    symbol_short:      symData.symbol || '',
-    interval:          '15',
-    action:            side,
-    score:             symData.score,
-    score_raw:         symData.score,
-    signal_strength:   symData.signal_strength,
-    risk_level:        symData.risk_level,
-    market_regime:     symData.market_regime,
-    score_breakdown:   symData.score_breakdown || {},
-    confluences:       symData.confluences || [],
-    entry_price:       symData.entry_price,
-    sl:                symData.sl,
-    tp1:               symData.tp1,
-    atr:               symData.atr,
-    adx:               symData.adx,
-    rsi:               symData.rsi,
-    htf_trend:         symData.htf_trend || null,
-    adx_filtered:      symData.adx_filtered || false,
-    directional_block: symData.directional_block || null,
-    ai_verdict:        symData.ai_verdict || null,
-    ai_confidence:     symData.ai_confidence || null,
-  };
-  fetch('/api/analytics/opportunity', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  }).catch(function() {});
-}
-
-function logOpportunities(d) {
-  if (d.win && d.win.action && d.win.action !== 'NEUTRO') {
-    logOpportunity('BMFBOVESPA:WIN1!', d.win.action, d.win);
-  }
-  if (d.wdo && d.wdo.action && d.wdo.action !== 'NEUTRO') {
-    logOpportunity('BMFBOVESPA:WDO1!', d.wdo.action, d.wdo);
+    fetch('/api/analytics/opportunity', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    }).catch(() => {}); // falha silenciosa — nao bloqueia UI
   }
 }
 
-/* --- Fetch loop ------------------------------------------------------- */
-var _interval_id = null;
+/* ─── fetchData — ciclo principal de atualização ───────────────────── */
+let _refreshTimer = null;
+let _refreshMs    = 30000;
+let _fetching     = false;
 
 async function fetchData() {
+  if (_fetching) return;
+  _fetching = true;
   try {
-    const res  = await fetch('/api/telemetry/full');
-    const data = await res.json();
-    if (data.ok) {
-      render(data);
-      logOpportunities(data);
-      const ts = $('last-ts');
-      if (ts) ts.textContent = new Date().toLocaleTimeString('pt-BR');
-    } else {
-      const grid = $('main-grid');
-      if (grid) grid.innerHTML = '<div class="error-msg">Erro: ' + (data.error || 'desconhecido') + '</div>';
+    const resp = await fetch('/api/telemetry/full');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const json = await resp.json();
+    if (!json.ok) throw new Error(json.error || 'api error');
+
+    const data = json;
+
+    // Actualiza timestamp
+    const ts = new Date(data.timestamp || Date.now());
+    const tsStr = ts.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const el = document.getElementById('last-ts');
+    if (el) el.textContent = tsStr;
+
+    // Actualiza badge AUTO no header
+    const atBadge = document.getElementById('at-badge');
+    if (atBadge && data.autotrade) {
+      atBadge.textContent = 'AUTO ' + (data.autotrade.enabled ? 'ON' : 'OFF');
+      atBadge.style.color = data.autotrade.enabled ? 'var(--green)' : 'var(--red)';
     }
-  } catch (e) {
-    const grid = $('main-grid');
-    if (grid) grid.innerHTML = '<div class="error-msg">Erro de conexao: ' + e.message + '</div>';
+
+    // Renderiza cards
+    const grid = document.getElementById('main-grid');
+    if (grid) {
+      const winHtml    = buildInstrumentCard(data.win    || {}, 'win-card',    'var(--blue)');
+      const wdoHtml    = buildInstrumentCard(data.wdo    || {}, 'wdo-card',    'var(--orange)');
+      const scalperHtml = buildScalperCard(data.scalper  || {});
+      const geralHtml  = buildGeralCard(data);
+      grid.innerHTML   = winHtml + wdoHtml + scalperHtml + geralHtml;
+    }
+
+    // Registra oportunidades no banco
+    logOpportunities(data);
+
+  } catch (err) {
+    console.warn('[MarketCenter] fetchData error:', err.message);
+    const grid = document.getElementById('main-grid');
+    const errEl = document.getElementById('mc-error');
+    if (!errEl && grid) {
+      const div = document.createElement('div');
+      div.id = 'mc-error';
+      div.style.cssText = 'color:var(--red);padding:20px;text-align:center;font-size:12px;';
+      div.textContent = 'Erro ao carregar dados: ' + err.message;
+      grid.appendChild(div);
+    }
+  } finally {
+    _fetching = false;
   }
 }
 
+/* ─── setRefreshInterval ─────────────────────────────────────────────── */
 function setRefreshInterval(ms) {
-  if (_interval_id) { clearInterval(_interval_id); _interval_id = null; }
-  var v = parseInt(ms, 10);
-  if (v > 0) _interval_id = setInterval(fetchData, v);
-  var sel = document.getElementById('mc-refresh');
-  if (sel) sel.value = String(v);
+  _refreshMs = parseInt(ms, 10);
+  if (_refreshTimer) clearInterval(_refreshTimer);
+  if (_refreshMs > 0) {
+    _refreshTimer = setInterval(fetchData, _refreshMs);
+  }
 }
 
-// Inicia e repete a cada 10 segundos
-fetchData();
-setRefreshInterval(10000);
+/* ─── Init ───────────────────────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+  fetchData();
+  _refreshTimer = setInterval(fetchData, _refreshMs);
+});
 </script>
 </body>
 </html>

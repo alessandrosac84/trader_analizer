@@ -1,0 +1,24 @@
+{*
+  HelloTradeAI_Minimal.ntsl
+  =========================
+  Indicador mínimo para validar que o ambiente NTSL compila e renderiza.
+  Use este ANTES do TradeAI_Commander para testar o ambiente.
+
+  Objetivo: exibir uma linha simples + um texto na última barra.
+  Se este compilar e mostrar algo no gráfico, o ambiente está OK.
+*}
+
+Input:
+  i_Texto : String("TRADE AI OK");
+  i_Cor   : Integer(clGreen);
+
+Begin
+  {* Plot básico — linha na média de 1 período (= Close) *}
+  Plot1(Close);
+  SetPlotColor(1, clTransparent);
+
+  {* Texto na última barra — se aparecer, PlotText funciona *}
+  If LastBarOnChart Then
+    PlotText(CurrentBar, High * 1.001, i_Texto, i_Cor, 10);
+
+End;

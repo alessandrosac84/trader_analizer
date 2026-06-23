@@ -231,7 +231,20 @@
     .str-60plus  { color: var(--blue);   }
     .str-40plus  { color: var(--yellow); }
     .str-low     { color: var(--muted);  }
-  </style>
+  
+    .date-filter-btn {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .date-filter-btn:hover  { border-color: var(--blue); color: var(--blue); }
+    .date-filter-btn.active { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 600; }
+</style>
 </head>
 <body>
 
@@ -388,13 +401,20 @@
       <div class="dot" style="background:var(--orange)"></div>
       Oportunidades Recentes
       <div style="flex:1"></div>
-      <select id="recentLimit" onchange="loadRecent()"
-        style="background:var(--bg);border:1px solid var(--border);color:var(--muted);
-               padding:3px 8px;border-radius:6px;font-size:11px;cursor:pointer;">
-        <option value="25">25</option>
-        <option value="50" selected>50</option>
-        <option value="100">100</option>
-      </select>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <div id="recentDateBtns" style="display:flex;gap:4px;">
+          <button onclick="setRecentDate('today')"  id="rdBtn-today"  class="date-filter-btn active">Hoje</button>
+          <button onclick="setRecentDate('week')"   id="rdBtn-week"   class="date-filter-btn">Semana</button>
+          <button onclick="setRecentDate('')"        id="rdBtn-all"    class="date-filter-btn">Tudo</button>
+        </div>
+        <select id="recentLimit" onchange="loadRecent()"
+          style="background:var(--bg);border:1px solid var(--border);color:var(--muted);
+                 padding:3px 8px;border-radius:6px;font-size:11px;cursor:pointer;">
+          <option value="25">25</option>
+          <option value="50" selected>50</option>
+          <option value="100">100</option>
+        </select>
+      </div>
     </div>
     <div class="card-body" style="overflow-x:auto">
       <table>
@@ -404,19 +424,23 @@
             <th>Hora</th>
             <th>Ativo</th>
             <th>Acao</th>
-            <th>Score</th>
-            <th>Forca</th>
-            <th>Risco</th>
+            <th title="Score técnico dos indicadores">Score</th>
+            <th title="Signal Strength (0-100)">Força</th>
+            <th title="Risk Level (0-100)">Risco</th>
+            <th title="ADX — força da tendência">ADX</th>
+            <th title="RSI 14">RSI</th>
+            <th title="Volume confirmando direção">Vol</th>
+            <th title="Confluências ativas">#Conf</th>
             <th>Regime</th>
+            <th title="Score final da IA (signal_validator_ai)">IA Score</th>
             <th>Operou</th>
             <th>Resultado</th>
             <th class="right">PnL (pts)</th>
             <th class="right">PnL (R$)</th>
-            <th>Confluencias</th>
           </tr>
         </thead>
         <tbody id="tRecent">
-          <tr class="loading-row"><td colspan="13"><span class="spinner"></span>carregando...</td></tr>
+          <tr class="loading-row"><td colspan="17"><span class="spinner"></span>carregando...</td></tr>
         </tbody>
       </table>
     </div>
@@ -594,40 +618,79 @@ async function loadConfluence() {
 
 // ── Recent opportunities ──────────────────────────────────────────────────
 
+function fmtAdx(v) {
+  if (v == null) return '<span style="color:var(--muted)">-</span>';
+  const cls = v < 20 ? 'color:var(--red)' : v >= 30 ? 'color:var(--green)' : 'color:var(--yellow)';
+  return `<span style="${cls};font-weight:600">${Number(v).toFixed(1)}</span>`;
+}
+
+function fmtRsi(v) {
+  if (v == null) return '<span style="color:var(--muted)">-</span>';
+  const cls = v > 70 ? 'color:var(--red)' : v < 30 ? 'color:var(--green)' : 'color:var(--muted)';
+  return `<span style="${cls}">${Number(v).toFixed(1)}</span>`;
+}
+
+function fmtVol(v) {
+  if (v == null) return '<span style="color:var(--muted)">-</span>';
+  return v ? '<span style="color:var(--green);font-weight:700">✓</span>' : '<span style="color:var(--muted)">✗</span>';
+}
+
+function fmtIaScore(v) {
+  if (v == null) return '<span style="color:var(--muted)">-</span>';
+  const cls = v >= 75 ? 'color:var(--green)' : v >= 58 ? 'color:var(--yellow)' : 'color:var(--red)';
+  return `<span style="${cls};font-weight:600">${v}%</span>`;
+}
+
+let _recentDate = 'today';  // default: Hoje
+
+function setRecentDate(d) {
+  _recentDate = d;
+  document.querySelectorAll('.date-filter-btn').forEach(b => b.classList.remove('active'));
+  const key = d === 'today' ? 'today' : d === 'week' ? 'week' : 'all';
+  const btn = document.getElementById(`rdBtn-${key}`);
+  if (btn) btn.classList.add('active');
+  loadRecent();
+}
+
 async function loadRecent() {
   const tb    = document.getElementById('tRecent');
   const limit = document.getElementById('recentLimit').value;
-  tb.innerHTML = '<tr class="loading-row"><td colspan="13"><span class="spinner"></span>carregando...</td></tr>';
+  const dateQ = _recentDate ? `&date=${_recentDate}` : '';
+  tb.innerHTML = '<tr class="loading-row"><td colspan="17"><span class="spinner"></span>carregando...</td></tr>';
   try {
-    const res = await fetchJson(`/api/analytics/recent?limit=${limit}`);
+    const res = await fetchJson(`/api/analytics/recent?limit=${limit}${dateQ}`);
     if (!res.ok || !res.data.length) {
-      tb.innerHTML = '<tr class="loading-row"><td colspan="13">Nenhuma oportunidade registrada ainda</td></tr>';
+      tb.innerHTML = '<tr class="loading-row"><td colspan="17">Nenhuma oportunidade registrada ainda</td></tr>';
       return;
     }
     tb.innerHTML = res.data.map(r => {
-      const wCls  = r.outcome_win === 1 ? 'win-1' : r.outcome_win === 0 ? 'win-0' : 'win-null';
-      const wTxt  = r.outcome_win === 1 ? 'GANHO' : r.outcome_win === 0 ? 'PERDA' : (r.resolved ? 'NEUTRO' : '-');
-      const aCls  = r.action ? `action-${r.action}` : '';
-      const confs = (r.confluences || []).map(c => `<span class="conf-tag">${c.slice(0,30)}</span>`).join('');
-      const sc    = scoreColor(r.score);
+      const wCls = r.outcome_win === 1 ? 'win-1' : r.outcome_win === 0 ? 'win-0' : 'win-null';
+      const wTxt = r.outcome_win === 1 ? 'GANHO' : r.outcome_win === 0 ? 'PERDA' : (r.resolved ? 'NEUTRO' : '-');
+      const aCls = r.action ? `action-${r.action}` : '';
+      const sc   = scoreColor(r.score);
+      const nConf = r.confluence_count != null ? r.confluence_count : (r.confluences ? r.confluences.length : '-');
       return `<tr>
-        <td style="color:var(--muted)">${r.id}</td>
-        <td style="color:var(--muted);white-space:nowrap">${fmtTime(r.created_at)}</td>
+        <td style="color:var(--muted);font-size:10px">${r.id}</td>
+        <td style="color:var(--muted);white-space:nowrap;font-size:11px">${fmtTime(r.created_at)}</td>
         <td style="font-weight:600">${r.symbol || '-'}</td>
-        <td class="${aCls}">${r.action || '-'}</td>
+        <td class="${aCls}" style="font-weight:700">${r.action || '-'}</td>
         <td><span class="score-chip" style="background:${sc}22;color:${sc}">${r.score ?? '-'}</span></td>
         <td>${fmtStrength(r.signal_strength)}</td>
-        <td>${r.risk_level ?? '-'}</td>
+        <td style="color:${r.risk_level > 75 ? 'var(--red)' : r.risk_level > 50 ? 'var(--yellow)' : 'var(--muted)'}">${r.risk_level ?? '-'}</td>
+        <td>${fmtAdx(r.adx)}</td>
+        <td>${fmtRsi(r.rsi)}</td>
+        <td style="text-align:center">${fmtVol(r.volume_confirm)}</td>
+        <td style="text-align:center;color:var(--muted)">${nConf}</td>
         <td><span class="regime-badge regime-${r.market_regime}">${r.market_regime || '-'}</span></td>
+        <td>${fmtIaScore(r.ai_confidence)}</td>
         <td>${buildTradedBadge(r)}</td>
-        <td class="${wCls}">${wTxt}</td>
+        <td class="${wCls}" style="font-weight:700">${wTxt}</td>
         <td class="right">${fmtPnl(r.pnl_pts)}</td>
         <td class="right">${r.pnl_brl != null ? fmtPnl(r.pnl_brl, '') : '<span class="pnl-nil">-</span>'}</td>
-        <td>${confs || '<span style="color:var(--muted)">-</span>'}</td>
       </tr>`;
     }).join('');
   } catch(e) {
-    tb.innerHTML = '<tr class="loading-row"><td colspan="13">Erro ao carregar</td></tr>';
+    tb.innerHTML = '<tr class="loading-row"><td colspan="17">Erro ao carregar</td></tr>';
   }
 }
 
@@ -654,22 +717,6 @@ async function syncOutcomes() {
   }
 }
 
-// ── Reset links (para re-sync limpo) ─────────────────────────────────────
-
-async function resetLinks() {
-  if (!confirm('Isso vai apagar todos os links entre oportunidades e trades para re-sincronizar do zero. Continuar?')) return;
-  try {
-    const res = await fetch('/api/analytics/reset-links', { method: 'POST' });
-    const data = await res.json();
-    document.getElementById('lastSync').textContent = data.ok
-      ? 'Links resetados. Clique Sincronizar Outcomes.'
-      : 'Erro: ' + (data.error || '?');
-    if (data.ok) await loadAll();
-  } catch(e) {
-    document.getElementById('lastSync').textContent = 'Erro de rede';
-  }
-}
-
 // ── Load all ──────────────────────────────────────────────────────────────
 
 async function loadAll() {
@@ -683,15 +730,13 @@ async function loadAll() {
   ]);
 }
 
-// Init
-loadAll();
+// ── Init ──────────────────────────────────────────────────────────────────
 
-// Auto-refresh summary + recent every 60s
-setInterval(() => {
-  loadSummary();
-  loadRecent();
-}, 60000);
+document.addEventListener('DOMContentLoaded', () => {
+  loadAll();
+  setInterval(loadAll, 30000);
+});
+
 </script>
-
 </body>
 </html>

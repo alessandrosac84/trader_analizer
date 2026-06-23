@@ -78,7 +78,12 @@ def init_trade_opportunities():
                 outcome_win              INTEGER,
                 outcome_close_reason     TEXT,
                 outcome_duration_candles INTEGER,
-                resolved_at              TEXT
+                resolved_at              TEXT,
+                volume_confirm           INTEGER DEFAULT 0,
+                volume_ratio             REAL,
+                confluence_count         INTEGER,
+                ai_trader_confidence     INTEGER,
+                ai_validator_confidence  INTEGER
             )
         """)
         conn.execute("""
@@ -93,6 +98,30 @@ def init_trade_opportunities():
             CREATE INDEX IF NOT EXISTS idx_opp_regime
             ON trade_opportunities(market_regime, outcome_win)
         """)
+    _ensure_columns()
+
+
+def _ensure_columns():
+    """Adiciona colunas novas em bases existentes (migracao sem perda de dados)."""
+    _NEW_COLS = [
+        ("volume_confirm",          "INTEGER DEFAULT 0"),
+        ("volume_ratio",            "REAL"),
+        ("confluence_count",        "INTEGER"),
+        ("ai_trader_confidence",    "INTEGER"),
+        ("ai_validator_confidence", "INTEGER"),
+    ]
+    try:
+        with _conn() as conn:
+            existing = {row[1] for row in conn.execute(
+                "PRAGMA table_info(trade_opportunities)"
+            ).fetchall()}
+            for col_name, col_type in _NEW_COLS:
+                if col_name not in existing:
+                    conn.execute(
+                        f"ALTER TABLE trade_opportunities ADD COLUMN {col_name} {col_type}"
+                    )
+    except Exception as exc:
+        logger.warning("_ensure_columns: %s", exc)
 
 
 # ---------------------------------------------------------------------------
@@ -105,6 +134,8 @@ def log_opportunity(
     score_breakdown, confluences, entry_price, sl, tp1,
     atr, adx, rsi, htf_trend, adx_filtered, directional_block,
     ai_verdict=None, ai_confidence=None,
+    volume_confirm=None, volume_ratio=None,
+    ai_trader_confidence=None, ai_validator_confidence=None,
 ):
     """
     Insere uma nova oportunidade no banco.
@@ -113,6 +144,13 @@ def log_opportunity(
     """
     try:
         now = datetime.now(_BRT).isoformat()
+
+        # Deriva volume e contagem das confluencias se nao fornecidos
+        confs_list = confluences or []
+        if volume_confirm is None:
+            vol_txt = " ".join(str(c).lower() for c in confs_list)
+            volume_confirm = 1 if ("volume forte" in vol_txt and "confirmando" in vol_txt) else 0
+        confluence_count_val = len(confs_list)
 
         with _conn() as conn:
             existing = conn.execute("""
@@ -134,12 +172,16 @@ def log_opportunity(
                     market_regime, score_breakdown, confluences,
                     entry_price, sl, tp1, atr, adx, rsi,
                     htf_trend, adx_filtered, directional_block,
-                    ai_verdict, ai_confidence
+                    ai_verdict, ai_confidence,
+                    volume_confirm, volume_ratio, confluence_count,
+                    ai_trader_confidence, ai_validator_confidence
                 ) VALUES (
                     ?, ?, ?, ?,
                     ?, ?, ?, ?, ?,
                     ?, ?, ?,
                     ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?,
+                    ?, ?,
                     ?, ?, ?,
                     ?, ?
                 )
@@ -148,10 +190,12 @@ def log_opportunity(
                 action, score, score_raw, signal_strength, risk_level,
                 market_regime,
                 json.dumps(score_breakdown or {}),
-                json.dumps(confluences or []),
+                json.dumps(confs_list),
                 entry_price, sl, tp1, atr, adx, rsi,
                 htf_trend, 1 if adx_filtered else 0, directional_block,
                 ai_verdict, ai_confidence,
+                volume_confirm, volume_ratio, confluence_count_val,
+                ai_trader_confidence, ai_validator_confidence,
             ))
             return int(cur.lastrowid)
 
@@ -551,18 +595,34 @@ def analytics_signal_strength_performance():
         return []
 
 
-def analytics_recent_opportunities(limit=50):
-    """Lista as oportunidades mais recentes com resultado se disponivel."""
+
+def analytics_recent_opportunities(limit=50, date_filter=None):
+    """
+    Lista as oportunidades mais recentes com resultado se disponivel.
+    date_filter: 'today' | 'week' | None (tudo)
+    """
     try:
+        # Filtro de data em BRT
+        where_date = ""
+        if date_filter == "today":
+            # Dia atual em BRT = UTC-3
+            where_date = "AND date(created_at, '+0 hours') = date('now', '-3 hours')"
+        elif date_filter == "week":
+            where_date = "AND created_at >= datetime('now', '-3 hours', '-7 days')"
+
         with _conn() as conn:
-            rows = conn.execute("""
+            rows = conn.execute(f"""
                 SELECT
                     id, created_at, symbol_short, action, score,
                     signal_strength, risk_level, market_regime,
                     was_traded, outcome_win, outcome_pnl_pts, outcome_pnl_brl,
                     outcome_close_reason, ai_verdict, confluences,
-                    resolved_at
+                    resolved_at,
+                    adx, rsi, volume_confirm, confluence_count,
+                    ai_confidence, ai_trader_confidence, ai_validator_confidence
                 FROM trade_opportunities
+                WHERE action IN ('COMPRA', 'VENDA')
+                {where_date}
                 ORDER BY id DESC
                 LIMIT ?
             """, (limit,)).fetchall()
@@ -576,22 +636,29 @@ def analytics_recent_opportunities(limit=50):
                 confs_short = []
 
             result.append({
-                "id":              r[0],
-                "created_at":      r[1],
-                "symbol":          r[2],
-                "action":          r[3],
-                "score":           r[4],
-                "signal_strength": r[5],
-                "risk_level":      r[6],
-                "market_regime":   r[7],
-                "was_traded":      bool(r[8]),
-                "outcome_win":     r[9],
-                "pnl_pts":         r[10],
-                "pnl_brl":         r[11],
-                "close_reason":    r[12],
-                "ai_verdict":      r[13],
-                "confluences":     confs_short,
-                "resolved":        r[15] is not None,
+                "id":                      r[0],
+                "created_at":              r[1],
+                "symbol":                  r[2],
+                "action":                  r[3],
+                "score":                   r[4],
+                "signal_strength":         r[5],
+                "risk_level":              r[6],
+                "market_regime":           r[7],
+                "was_traded":              bool(r[8]),
+                "outcome_win":             r[9],
+                "pnl_pts":                 r[10],
+                "pnl_brl":                 r[11],
+                "close_reason":            r[12],
+                "ai_verdict":              r[13],
+                "confluences":             confs_short,
+                "resolved":                r[15] is not None,
+                "adx":                     r[16],
+                "rsi":                     r[17],
+                "volume_confirm":          bool(r[18]) if r[18] is not None else None,
+                "confluence_count":        r[19],
+                "ai_confidence":           r[20],
+                "ai_trader_confidence":    r[21],
+                "ai_validator_confidence": r[22],
             })
         return result
     except Exception as exc:
@@ -636,14 +703,87 @@ def analytics_summary():
             "pending":             row[6] or 0,
             "blocked_ia":          row[7] or 0,
             "waiting_ia":          row[8] or 0,
-            "win_rate":            round(wins / closed * 100) if closed else 0,
-            "total_pnl_brl":       row[4] or 0.0,
+            "total_pnl_brl":       round(row[4] or 0, 2),
             "total_pnl_pts":       int(row[5] or 0),
+            "win_rate":            round(wins / closed * 100) if closed else None,
+            "closed":              closed,
         }
     except Exception as exc:
         logger.warning("analytics_summary: %s", exc)
-        return {
-            "total_opportunities": 0, "traded": 0, "wins": 0, "losses": 0,
-            "pending": 0, "blocked_ia": 0, "waiting_ia": 0,
-            "win_rate": 0, "total_pnl_brl": 0.0, "total_pnl_pts": 0,
-        }
+        return {}
+
+
+def analytics_confluence_performance():
+    """Win rate por numero de confluencias."""
+    try:
+        with _conn() as conn:
+            rows = conn.execute("""
+                SELECT
+                    confluence_count,
+                    COUNT(*)                                          AS total,
+                    SUM(CASE WHEN outcome_win = 1 THEN 1 ELSE 0 END) AS wins,
+                    ROUND(AVG(outcome_pnl_pts), 1)                   AS avg_pnl
+                FROM trade_opportunities
+                WHERE was_traded = 1
+                  AND outcome_win IS NOT NULL
+                  AND confluence_count IS NOT NULL
+                  AND action IN ('COMPRA', 'VENDA')
+                GROUP BY confluence_count
+                ORDER BY confluence_count DESC
+            """).fetchall()
+
+        result = []
+        for r in rows:
+            total = r[1] or 0
+            wins  = r[2] or 0
+            result.append({
+                "confluence_count": r[0],
+                "total":            total,
+                "wins":             wins,
+                "losses":           total - wins,
+                "win_rate":         round(wins / total * 100) if total else 0,
+                "avg_pnl_pts":      r[3],
+            })
+        return result
+    except Exception as exc:
+        logger.warning("analytics_confluence_performance: %s", exc)
+        return []
+
+
+def analytics_signal_strength_performance():
+    """Win rate por faixa de signal_strength (buckets de 10)."""
+    try:
+        with _conn() as conn:
+            rows = conn.execute("""
+                SELECT
+                    (signal_strength / 10) * 10                        AS bucket,
+                    COUNT(*)                                           AS total,
+                    SUM(CASE WHEN outcome_win = 1 THEN 1 ELSE 0 END)  AS wins,
+                    ROUND(AVG(outcome_pnl_pts), 1)                    AS avg_pnl
+                FROM trade_opportunities
+                WHERE was_traded = 1
+                  AND outcome_win IS NOT NULL
+                  AND signal_strength IS NOT NULL
+                  AND action IN ('COMPRA', 'VENDA')
+                GROUP BY bucket
+                ORDER BY bucket DESC
+            """).fetchall()
+
+        result = []
+        for r in rows:
+            total  = r[1] or 0
+            wins   = r[2] or 0
+            bucket = r[0] or 0
+            result.append({
+                "range":    f"{bucket}-{bucket + 9}",
+                "bucket":   bucket,
+                "total":    total,
+                "wins":     wins,
+                "losses":   total - wins,
+                "win_rate": round(wins / total * 100) if total else 0,
+                "avg_pnl":  r[3],
+            })
+        return result
+    except Exception as exc:
+        logger.warning("analytics_signal_strength_performance: %s", exc)
+        return []
