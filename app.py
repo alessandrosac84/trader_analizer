@@ -71,6 +71,10 @@ app.register_blueprint(intelligence_bp)
 from blueprints.profit_bp import profit_bp
 app.register_blueprint(profit_bp)
 
+# ── Capital Protection Engine (CPE) ───────────────────────────────────────
+from blueprints.risk_bp import risk_bp
+app.register_blueprint(risk_bp)
+
 # ── Inicialização única no primeiro request ────────────────────────────────
 _app_initialized = False
 
@@ -144,6 +148,16 @@ def _startup_once():
         start_commander()
     except Exception as e:
         logger.warning("Erro ao iniciar Telegram commander: %s", e)
+    try:
+        from services.risk_settings_service import init_cpe_tables
+        init_cpe_tables()
+    except Exception as e:
+        logger.warning("CPE tables init falhou (nao bloqueante): %s", e)
+    try:
+        from services.market_close_scheduler import start_scheduler as _start_mcs
+        _start_mcs()
+    except Exception as e:
+        logger.warning("Market Close Scheduler nao iniciou (nao bloqueante): %s", e)
 
 
 def allowed_file(filename: str) -> bool:
@@ -882,6 +896,33 @@ def api_autotrade_execute():
             )
     except Exception as _pcm_init_err:
         logger.warning("Partial-config init falhou: %s", _pcm_init_err)
+
+    # ── Capital Protection Engine — veto antes de executar ────────────────
+    try:
+        from services.capital_protection_engine import cpe_evaluate
+        _sl_pts = None
+        try:
+            if sl and entrada:
+                _sl_pts = abs(float(sl) - float(entrada))
+        except Exception:
+            pass
+        _cpe = cpe_evaluate(
+            tv_symbol=tv_symbol,
+            acao=acao,
+            sl_pts=_sl_pts,
+            score=score,
+        )
+        if not _cpe.get("allowed", True):
+            logger.warning("CPE bloqueou trade: %s | %s", _cpe.get("block_code"), _cpe.get("reason"))
+            return jsonify({"ok": False, "result": None, "error": f"CPE: {_cpe['reason']}", "cpe": _cpe})
+        # Soft Target: ajusta limiares se CPE retornar overrides
+        if _cpe.get("score_min_override"):
+            score_min_eff = max(SCORE_MIN, _cpe["score_min_override"])
+            if score < score_min_eff:
+                return jsonify({"ok": False, "result": None,
+                                "error": f"CPE Soft-Target: score {score} < mínimo conservador {score_min_eff}", "cpe": _cpe})
+    except Exception as _cpe_err:
+        logger.warning("CPE check falhou (não bloqueante): %s", _cpe_err)
 
     result, error = execute_trade(
         tv_symbol=tv_symbol,
@@ -1904,11 +1945,9 @@ def api_verify_mt5_signal(signal_id: int):
     update_mt5_outcome(signal_id, **outcome)
     updated = get_mt5_signal(signal_id)
     return jsonify({"ok": True, "outcome": outcome, "signal": dict(updated)})
-
-
 @app.route("/api/monitor/signals/verify-batch", methods=["POST"])
 def api_verify_mt5_batch():
-    """Verifica os N sinais mais recentes ainda não verificados."""
+    """Verifica os N sinais mais recentes ainda nao verificados."""
     from services.outcome_checker import check_outcome
     body  = request.get_json(silent=True) or {}
     limit = min(int(body.get("limit", 30)), 100)
@@ -1921,12 +1960,17 @@ def api_verify_mt5_batch():
         tv_sym = r["tv_symbol"]
         ativo  = tv_sym.split(":")[-1] if ":" in tv_sym else tv_sym
         outcome = check_outcome(
-            ativo=ativo, acao=r["acao"], created_at_iso=r["created_at"],
-            entrada=r.get("entrada"), stop=r.get("stop"),
-            tp1=r.get("tp1"), tp2=r.get("tp2"), tp3=r.get("tp3"),
+            ativo=ativo,
+            acao=r["acao"],
+            created_at_iso=r["created_at"],
+            entrada=r.get("entrada"),
+            stop=r.get("stop"),
+            tp1=r.get("tp1"),
+            tp2=r.get("tp2"),
+            tp3=r.get("tp3"),
         )
         update_mt5_outcome(r["id"], **outcome)
-        results.append({"id": r["id"], "skipped": False, **outcome})
+        results.append({"id": r["id"], "outcome": outcome})
     return jsonify({"ok": True, "results": results})
 
 
@@ -1934,12 +1978,12 @@ init_db()
 init_mt5_signals()
 init_auto_trades()
 
-# ── Inicia monitor de fechamento parcial (thread daemon bg a cada 2s) ─────────
+# ── Inicia monitor de fechamento parcial (thread daemon bg a cada 2s) ─────────────
 try:
     from services.partial_close_monitor import start_monitor as _start_pcm
     _start_pcm()
 except Exception as _pcm_start_err:
-    logger.warning("partial_close_monitor não pôde ser iniciado: %s", _pcm_start_err)
+    logger.warning("partial_close_monitor nao pode ser iniciado: %s", _pcm_start_err)
 
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False, host="0.0.0.0", port=int(os.getenv("PORT", "5000")))

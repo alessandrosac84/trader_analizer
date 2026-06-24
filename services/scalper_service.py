@@ -75,6 +75,194 @@ TICK_VALUE_BRL = {
     "VALE3":  1.0,
 }
 
+# ── Configuração por símbolo — parâmetros de scoring e detecção ───────────
+# Cada ativo tem seus próprios limiares calibrados para sua liquidez.
+# _default é aplicado para símbolos sem config explícita.
+SYMBOL_CONFIG: dict[str, dict] = {
+    "_default": {
+        # Burst velocity: ratio ticks-2s / média — tiers de pontuação
+        "burst_ratio_strong":        3.0,   # >= 3.0 → 30 pts
+        "burst_ratio_med":           2.0,   # >= 2.0 → 20 pts
+        "burst_ratio_weak":          1.3,   # >= 1.3 → 10 pts
+        "burst_min_ticks":           2,     # mínimo absoluto em 2s para 4 pts
+        # Tick consistency — hard-block abaixo desses valores
+        "consistency_hard_block":    55,    # % mínimo sem VWAP alignment
+        "consistency_hb_aligned":    48,    # % mínimo com VWAP alignment
+        # Entry quality — ticks de movimento que bloqueiam entrada
+        "entry_hard_ticks":          4,     # > 4 ticks movidos → hard-block
+        # Absorção/exaustão — volumes mínimos para detecção
+        "absorption_min_vol":        50,    # vol mínimo p/ absorção
+        "exhaustion_min_vol":        100,   # vol mínimo p/ exaustão
+        # Book imbalance — limiares de pontuação
+        "book_strong_pct":           30,    # imb% para 20 pts
+        "book_weak_pct":             15,    # imb% para 12 pts
+        "book_penalty_pct":          20,    # imb% contra para -8 pts
+        # Volatility
+        "volatility_min_ticks":      2,     # range mínimo para mercado "vivo"
+    },
+
+    # ── Mini Dólar / Dólar Futuro — alta liquidez ─────────────────────────
+    "WDON26": {},
+    "WDOM26": {},
+
+    # ── Mini Índice Bovespa — alta liquidez ───────────────────────────────
+    "WINM26": {
+        "burst_ratio_strong":        3.0,
+        "burst_ratio_med":           2.0,
+        "burst_ratio_weak":          1.3,
+        "burst_min_ticks":           2,
+        "consistency_hard_block":    55,
+        "consistency_hb_aligned":    48,
+        "entry_hard_ticks":          4,
+        "absorption_min_vol":        80,    # WIN tem contratos menores, mais vol
+        "exhaustion_min_vol":        150,
+        "book_strong_pct":           30,
+        "book_weak_pct":             15,
+        "book_penalty_pct":          20,
+        "volatility_min_ticks":      2,
+    },
+
+    # ── Bitcoin Futuro B3 (BITM26) — liquidez baixa/média ─────────────────
+    # Tick rate muito menor que WDO/WIN: bursts de 2-5 ticks já são significativos.
+    "BITM26": {
+        "burst_ratio_strong":        2.0,   # 2x já é burst forte p/ BTC
+        "burst_ratio_med":           1.4,
+        "burst_ratio_weak":          1.1,
+        "burst_min_ticks":           1,     # 1 tick em 2s já conta
+        "consistency_hard_block":    42,    # mais tolerante (menos ticks no buffer)
+        "consistency_hb_aligned":    35,
+        "entry_hard_ticks":          3,     # BTC move mais em pts, 3 ticks = tarde
+        "absorption_min_vol":         3,    # vol é muito menor
+        "exhaustion_min_vol":          6,
+        "book_strong_pct":           20,    # book menos espesso
+        "book_weak_pct":             10,
+        "book_penalty_pct":          15,
+        "volatility_min_ticks":       1,
+    },
+
+    # ── Ouro / XAUUSD — liquidez média ────────────────────────────────────
+    "XAUUSD": {
+        "burst_ratio_strong":        2.5,
+        "burst_ratio_med":           1.7,
+        "burst_ratio_weak":          1.2,
+        "burst_min_ticks":           1,
+        "consistency_hard_block":    48,
+        "consistency_hb_aligned":    40,
+        "entry_hard_ticks":          3,
+        "absorption_min_vol":        10,
+        "exhaustion_min_vol":        20,
+        "book_strong_pct":           25,
+        "book_weak_pct":             12,
+        "book_penalty_pct":          18,
+        "volatility_min_ticks":       1,
+    },
+
+    # ── EUR/USD — alta liquidez forex ────────────────────────────────────
+    "EURUSD": {
+        "burst_ratio_strong":        2.8,
+        "burst_ratio_med":           1.8,
+        "burst_ratio_weak":          1.2,
+        "burst_min_ticks":           2,
+        "consistency_hard_block":    50,
+        "consistency_hb_aligned":    42,
+        "entry_hard_ticks":          4,
+        "absorption_min_vol":        15,
+        "exhaustion_min_vol":        30,
+        "book_strong_pct":           28,
+        "book_weak_pct":             14,
+        "book_penalty_pct":          20,
+        "volatility_min_ticks":       2,
+    },
+
+    # ── USD/BRL ───────────────────────────────────────────────────────────
+    "USDBRL": {
+        "burst_ratio_strong":        2.5,
+        "burst_ratio_med":           1.6,
+        "burst_ratio_weak":          1.1,
+        "burst_min_ticks":           1,
+        "consistency_hard_block":    46,
+        "consistency_hb_aligned":    38,
+        "entry_hard_ticks":          3,
+        "absorption_min_vol":         8,
+        "exhaustion_min_vol":         15,
+        "book_strong_pct":           22,
+        "book_weak_pct":             11,
+        "book_penalty_pct":          16,
+        "volatility_min_ticks":       1,
+    },
+
+    # ── Ações B3 (PETR4, VALE3, ITUB4) — liquidez média ──────────────────
+    "PETR4": {
+        "burst_ratio_strong":        2.5,
+        "burst_ratio_med":           1.6,
+        "burst_ratio_weak":          1.2,
+        "burst_min_ticks":           1,
+        "consistency_hard_block":    48,
+        "consistency_hb_aligned":    40,
+        "entry_hard_ticks":          3,
+        "absorption_min_vol":        20,
+        "exhaustion_min_vol":        50,
+        "book_strong_pct":           25,
+        "book_weak_pct":             12,
+        "book_penalty_pct":          18,
+        "volatility_min_ticks":       1,
+    },
+    "VALE3": {
+        "burst_ratio_strong":        2.5,
+        "burst_ratio_med":           1.6,
+        "burst_ratio_weak":          1.2,
+        "burst_min_ticks":           1,
+        "consistency_hard_block":    48,
+        "consistency_hb_aligned":    40,
+        "entry_hard_ticks":          3,
+        "absorption_min_vol":        20,
+        "exhaustion_min_vol":        50,
+        "book_strong_pct":           25,
+        "book_weak_pct":             12,
+        "book_penalty_pct":          18,
+        "volatility_min_ticks":       1,
+    },
+    "ITUB4": {
+        "burst_ratio_strong":        2.5,
+        "burst_ratio_med":           1.6,
+        "burst_ratio_weak":          1.2,
+        "burst_min_ticks":           1,
+        "consistency_hard_block":    48,
+        "consistency_hb_aligned":    40,
+        "entry_hard_ticks":          3,
+        "absorption_min_vol":        20,
+        "exhaustion_min_vol":        50,
+        "book_strong_pct":           25,
+        "book_weak_pct":             12,
+        "book_penalty_pct":          18,
+        "volatility_min_ticks":       1,
+    },
+    "GOLD11": {
+        "burst_ratio_strong":        2.5,
+        "burst_ratio_med":           1.6,
+        "burst_ratio_weak":          1.2,
+        "burst_min_ticks":           1,
+        "consistency_hard_block":    46,
+        "consistency_hb_aligned":    38,
+        "entry_hard_ticks":          3,
+        "absorption_min_vol":        10,
+        "exhaustion_min_vol":        20,
+        "book_strong_pct":           22,
+        "book_weak_pct":             11,
+        "book_penalty_pct":          16,
+        "volatility_min_ticks":       1,
+    },
+}
+
+
+def _sym_cfg(mt5_sym: str) -> dict:
+    """Retorna config mesclada: _default + override do símbolo específico."""
+    base     = dict(SYMBOL_CONFIG["_default"])
+    override = SYMBOL_CONFIG.get(mt5_sym, {})
+    base.update(override)
+    return base
+
+
 # ── Buffer de ticks por símbolo (rastreamento de agressão) ─────────────────
 _MAX_TAPE   = 200
 _AGGR_WIN   = 30
@@ -454,14 +642,18 @@ def _detect_absorption_exhaustion(mt5_sym: str) -> dict:
     total_vol = buy_vol + sell_vol
 
     # Absorção: muito volume de um lado mas preço NÃO se move (≤ 1 tick)
+    # Limiares por símbolo (BITM26 e ações têm vol muito menor que WDO/WIN)
+    cfg      = _sym_cfg(mt5_sym)
+    abs_min  = cfg["absorption_min_vol"]
+    exh_min  = cfg["exhaustion_min_vol"]
     # Absorção compradora = muito sell, preço não cai → compradores institucionais absorvendo
-    abs_buy  = sell_vol > 50 and r_ticks <= 1.0 and total_vol > 0 and sell_vol / max(total_vol, 1) > 0.65
+    abs_buy  = sell_vol > abs_min and r_ticks <= 1.0 and total_vol > 0 and sell_vol / max(total_vol, 1) > 0.65
     # Absorção vendedora = muito buy, preço não sobe → vendedores absorvendo
-    abs_sell = buy_vol  > 50 and r_ticks <= 1.0 and total_vol > 0 and buy_vol  / max(total_vol, 1) > 0.65
+    abs_sell = buy_vol  > abs_min and r_ticks <= 1.0 and total_vol > 0 and buy_vol  / max(total_vol, 1) > 0.65
 
     # Exaustão: muito volume de um lado mas preço move POUCO (< 1 tick) — compradores/vendedores sem força
-    exh_buy  = buy_vol  > 100 and buy_vol  > sell_vol * 2 and r_ticks < 1.0
-    exh_sell = sell_vol > 100 and sell_vol > buy_vol  * 2 and r_ticks < 1.0
+    exh_buy  = buy_vol  > exh_min and buy_vol  > sell_vol * 2 and r_ticks < 1.0
+    exh_sell = sell_vol > exh_min and sell_vol > buy_vol  * 2 and r_ticks < 1.0
 
     signal = "NEUTRO"
     if   abs_buy:  signal = "COMPRA"   # compradores absorvendo pressão vendedora
@@ -595,12 +787,13 @@ def _calc_multi_score(
     ts_val       = TICK_SIZE_OVERRIDE.get(mt5_sym, 0.5)
     buf          = _tick_buf.get(mt5_sym)
     now          = time.time()
+    scfg         = _sym_cfg(mt5_sym)   # config específica do símbolo
 
     # Alinhamento VWAP: define se estamos operando A FAVOR da tendência
     vwap_context = vwap_data.get("context", "NEUTRO")
     vwap_aligned = (is_buy and vwap_context == "BULL") or (not is_buy and vwap_context == "BEAR")
-    # Hard-block de consistência: mais tolerante na tendência (pullbacks têm ticks contra momentaneamente)
-    consistency_hard_block = 48 if vwap_aligned else 55
+    # Hard-block de consistência: por símbolo (BITM26 tem buffer menor → mais tolerante)
+    consistency_hard_block = scfg["consistency_hb_aligned"] if vwap_aligned else scfg["consistency_hard_block"]
 
     # ── 1. BURST VELOCITY — 30 pts ──────────────────────────────────────────
     # Quantos ticks chegaram nos últimos 2s vs média dos últimos 30s?
@@ -615,11 +808,13 @@ def _calc_multi_score(
         avg_per_2s = max(0.5, count_30s / 15.0)  # avg de ticks por janela de 2s
 
         ratio = count_2s / avg_per_2s
-        if   ratio >= 3.0: pts["burst_vel"] = 30; reasons.append(f"🚀 Burst forte {count_2s}tk/2s ({avg_per_2s:.1f} media)")
-        elif ratio >= 2.0: pts["burst_vel"] = 20; reasons.append(f"⚡ Burst moderado {count_2s}tk/2s")
-        elif ratio >= 1.3: pts["burst_vel"] = 10
-        elif count_2s >= 2: pts["burst_vel"] =  4
-        else:              pts["burst_vel"] =  0; reasons.append(f"Tape parado ({count_2s}tk/2s)")
+        br_s = scfg["burst_ratio_strong"]; br_m = scfg["burst_ratio_med"]
+        br_w = scfg["burst_ratio_weak"];   br_min = scfg["burst_min_ticks"]
+        if   ratio >= br_s:         pts["burst_vel"] = 30; reasons.append(f"🚀 Burst forte {count_2s}tk/2s ({avg_per_2s:.1f} media)")
+        elif ratio >= br_m:         pts["burst_vel"] = 20; reasons.append(f"⚡ Burst moderado {count_2s}tk/2s")
+        elif ratio >= br_w:         pts["burst_vel"] = 10
+        elif count_2s >= br_min:    pts["burst_vel"] =  4
+        else:                       pts["burst_vel"] =  0; reasons.append(f"Tape parado ({count_2s}tk/2s)")
     else:
         pts["burst_vel"] = 0
         reasons.append("Sem dados de tape")
@@ -654,19 +849,20 @@ def _calc_multi_score(
     # ── 3. BOOK PRESSURE — 20 pts ───────────────────────────────────────────
     # Desequilíbrio do book: imbalance_pct > 0 = bid pesado (pressão compra).
     # Leading indicator: o book pesado ANTECEDE o movimento de preço.
-    imb = book_imb.get("imbalance_pct", 0)
+    imb  = book_imb.get("imbalance_pct", 0)
+    bs   = scfg["book_strong_pct"]; bw = scfg["book_weak_pct"]; bp = scfg["book_penalty_pct"]
     if is_buy:
-        if   imb >= 30: pts["book_pressure"] = 20; reasons.append(f"✅ Book comprador ({imb:+.0f}%)")
-        elif imb >= 15: pts["book_pressure"] = 12
-        elif imb >=  0: pts["book_pressure"] =  5
-        elif imb >= -15: pts["book_pressure"] =  0
-        else:           pts["book_pressure"] = -8; reasons.append(f"⚠ Book vendedor ({imb:+.0f}%)")
+        if   imb >=  bs:  pts["book_pressure"] = 20; reasons.append(f"✅ Book comprador ({imb:+.0f}%)")
+        elif imb >=  bw:  pts["book_pressure"] = 12
+        elif imb >=   0:  pts["book_pressure"] =  5
+        elif imb >= -bw:  pts["book_pressure"] =  0
+        else:             pts["book_pressure"] = -8; reasons.append(f"⚠ Book vendedor ({imb:+.0f}%)")
     else:
-        if   imb <= -30: pts["book_pressure"] = 20; reasons.append(f"✅ Book vendedor ({imb:+.0f}%)")
-        elif imb <= -15: pts["book_pressure"] = 12
-        elif imb <=   0: pts["book_pressure"] =  5
-        elif imb <=  15: pts["book_pressure"] =  0
-        else:            pts["book_pressure"] = -8; reasons.append(f"⚠ Book comprador ({imb:+.0f}%)")
+        if   imb <= -bs:  pts["book_pressure"] = 20; reasons.append(f"✅ Book vendedor ({imb:+.0f}%)")
+        elif imb <= -bw:  pts["book_pressure"] = 12
+        elif imb <=   0:  pts["book_pressure"] =  5
+        elif imb <=  bw:  pts["book_pressure"] =  0
+        else:             pts["book_pressure"] = -8; reasons.append(f"⚠ Book comprador ({imb:+.0f}%)")
 
     # ── 4. ENTRY QUALITY — 20 pts ───────────────────────────────────────────
     # Quanto o preço já se moveu na direção do sinal nos últimos 5s?
@@ -683,7 +879,7 @@ def _calc_multi_score(
                 if   move_pts <= 0:         pts["entry_quality"] = 20; reasons.append("✅ Preço ainda não subiu")
                 elif move_ticks <= 1:       pts["entry_quality"] = 15
                 elif move_ticks <= 2:       pts["entry_quality"] =  8
-                elif move_ticks <= 4:       pts["entry_quality"] =  0; reasons.append(f"Preço já subiu {move_ticks:.1f}tk")
+                elif move_ticks <= scfg["entry_hard_ticks"]: pts["entry_quality"] = 0; reasons.append(f"Preço já subiu {move_ticks:.1f}tk")
                 else:
                     pts["entry_quality"] = -10; hard_blocked = True
                     reasons.append(f"🚫 Tarde: preço subiu {move_ticks:.1f}tk")
@@ -691,7 +887,7 @@ def _calc_multi_score(
                 if   move_pts >= 0:         pts["entry_quality"] = 20; reasons.append("✅ Preço ainda não caiu")
                 elif move_ticks <= 1:       pts["entry_quality"] = 15
                 elif move_ticks <= 2:       pts["entry_quality"] =  8
-                elif move_ticks <= 4:       pts["entry_quality"] =  0; reasons.append(f"Preço já caiu {move_ticks:.1f}tk")
+                elif move_ticks <= scfg["entry_hard_ticks"]: pts["entry_quality"] = 0; reasons.append(f"Preço já caiu {move_ticks:.1f}tk")
                 else:
                     pts["entry_quality"] = -10; hard_blocked = True
                     reasons.append(f"🚫 Tarde: preço caiu {move_ticks:.1f}tk")
@@ -820,9 +1016,10 @@ def _calc_volatility(mt5_sym: str, window_sec: int = 20) -> dict:
 
     price_range   = max(recent) - min(recent)
     range_ticks   = round(price_range / ts_val, 1)
+    cfg_v = _sym_cfg(mt5_sym)
     return {
         "range_ticks": range_ticks,
-        "ok":          range_ticks >= 2,   # threshold padrão: 2 ticks
+        "ok":          range_ticks >= cfg_v["volatility_min_ticks"],
         "max":         round(max(recent), 4),
         "min":         round(min(recent), 4),
     }

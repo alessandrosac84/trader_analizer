@@ -605,10 +605,13 @@ def analytics_recent_opportunities(limit=50, date_filter=None):
         # Filtro de data em BRT
         where_date = ""
         if date_filter == "today":
-            # Dia atual em BRT = UTC-3
-            where_date = "AND date(created_at, '+0 hours') = date('now', '-3 hours')"
+            # substr(created_at,1,10) pega a data BRT diretamente do isoformat
+            # Evita que o SQLite normalize para UTC o offset -03:00
+            # Ex: '2026-06-23T23:10:00-03:00' -> substr = '2026-06-23' (correto)
+            #     date(..., '+0 hours') -> '2026-06-24' (errado — converte para UTC)
+            where_date = "AND substr(created_at, 1, 10) = date('now', '-3 hours')"
         elif date_filter == "week":
-            where_date = "AND created_at >= datetime('now', '-3 hours', '-7 days')"
+            where_date = "AND substr(created_at, 1, 10) >= date('now', '-3 hours', '-7 days')"
 
         with _conn() as conn:
             rows = conn.execute(f"""
@@ -666,11 +669,19 @@ def analytics_recent_opportunities(limit=50, date_filter=None):
         return []
 
 
-def analytics_summary():
-    """Resumo geral para o header do analytics dashboard."""
+def analytics_summary(date_filter=None):
+    """Resumo geral para o header do analytics dashboard.
+    date_filter: 'today' | 'week' | None (tudo)
+    """
+    where_date = ""
+    if date_filter == "today":
+        where_date = "AND substr(created_at, 1, 10) = date('now', '-3 hours')"
+    elif date_filter == "week":
+        where_date = "AND substr(created_at, 1, 10) >= date('now', '-3 hours', '-7 days')"
+
     try:
         with _conn() as conn:
-            row = conn.execute("""
+            row = conn.execute(f"""
                 SELECT
                     COUNT(*)                                          AS total,
                     SUM(CASE WHEN was_traded = 1 THEN 1 ELSE 0 END)  AS traded,
@@ -687,6 +698,7 @@ def analytics_summary():
                                THEN 1 ELSE 0 END)                     AS waiting_ia
                 FROM trade_opportunities
                 WHERE action IN ('COMPRA', 'VENDA')
+                {where_date}
             """).fetchone()
 
         total  = row[0] or 0

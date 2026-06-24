@@ -160,6 +160,122 @@ _pause_cfg = {
     "pause_duration_sec":     1800,
 }
 
+# ── Parâmetros de execução por símbolo ──────────────────────────────────────
+# Cada ativo tem thresholds calibrados para sua liquidez.
+# O frontend pode sobrescrever individualmente via body do auto-check.
+_SYMBOL_TRADE_CFG: dict[str, dict] = {
+    "_default": {
+        "score_min":       60,     # score mínimo para entrar
+        "threshold_pct":   65.0,   # agressão mínima (buy_pct ou sell_pct)
+        "confirm_n":        3,     # confirmações consecutivas do sinal
+        "cooldown_sec":    30,     # cooldown entre trades (segundos)
+        "max_daily":       15,     # limite diário de trades
+        "tp_ticks":         5,     # take profit em ticks
+        "sl_ticks":         2,     # stop loss em ticks
+        "use_atr_sizing":  True,   # dimensionar TP/SL pelo ATR
+        "use_vwap_filter": True,   # filtro direcional VWAP
+    },
+    "WDON26": {},   # usa defaults
+    "WDOM26": {},
+    "WINM26": {
+        "score_min":       60,
+        "threshold_pct":   65.0,
+        "confirm_n":        3,
+        "cooldown_sec":    30,
+        "max_daily":       20,     # WIN tem mais liquidez, mais oportunidades
+        "tp_ticks":        10,     # WIN tick = R$1, precisa mais ticks p/ cobrir custo
+        "sl_ticks":         4,
+    },
+    # Bitcoin Futuro B3 — baixa liquidez, movimentos mais lentos e maiores
+    "BITM26": {
+        "score_min":       35,     # score máximo atingível é menor (menos ticks)
+        "threshold_pct":   58.0,   # agressão mais difícil de concentrar
+        "confirm_n":        2,     # 2 confirmações (ticks chegam mais devagar)
+        "cooldown_sec":    90,     # movimentos do BTC são mais espaçados
+        "max_daily":       10,
+        "tp_ticks":         4,     # BTC: 4 ticks = R$400 por contrato (4 × R$100)
+        "sl_ticks":         2,
+        "use_atr_sizing":  False,  # ATR do BITM26 pode ser instável com poucos dados
+    },
+    # Ouro — liquidez média, movimentos suaves
+    "XAUUSD": {
+        "score_min":       40,
+        "threshold_pct":   60.0,
+        "confirm_n":        2,
+        "cooldown_sec":    60,
+        "max_daily":       12,
+        "tp_ticks":         4,
+        "sl_ticks":         2,
+    },
+    # EUR/USD — alta liquidez forex
+    "EURUSD": {
+        "score_min":       50,
+        "threshold_pct":   63.0,
+        "confirm_n":        3,
+        "cooldown_sec":    45,
+        "max_daily":       15,
+        "tp_ticks":         5,
+        "sl_ticks":         2,
+    },
+    # USD/BRL
+    "USDBRL": {
+        "score_min":       40,
+        "threshold_pct":   60.0,
+        "confirm_n":        2,
+        "cooldown_sec":    60,
+        "max_daily":       12,
+        "tp_ticks":         4,
+        "sl_ticks":         2,
+    },
+    # Ações B3 — liquidez moderada
+    "PETR4": {
+        "score_min":       45,
+        "threshold_pct":   62.0,
+        "confirm_n":        2,
+        "cooldown_sec":    45,
+        "max_daily":       12,
+        "tp_ticks":         4,
+        "sl_ticks":         2,
+    },
+    "VALE3": {
+        "score_min":       45,
+        "threshold_pct":   62.0,
+        "confirm_n":        2,
+        "cooldown_sec":    45,
+        "max_daily":       12,
+        "tp_ticks":         4,
+        "sl_ticks":         2,
+    },
+    "ITUB4": {
+        "score_min":       45,
+        "threshold_pct":   62.0,
+        "confirm_n":        2,
+        "cooldown_sec":    45,
+        "max_daily":       12,
+        "tp_ticks":         4,
+        "sl_ticks":         2,
+    },
+    "GOLD11": {
+        "score_min":       40,
+        "threshold_pct":   60.0,
+        "confirm_n":        2,
+        "cooldown_sec":    60,
+        "max_daily":       12,
+        "tp_ticks":         4,
+        "sl_ticks":         2,
+    },
+}
+
+
+def _sym_trade_cfg(symbol: str) -> dict:
+    """Retorna config de trade mesclada: _default + override do símbolo."""
+    from services.scalper_service import SCALPER_SYMBOLS
+    mt5_sym  = SCALPER_SYMBOLS.get(symbol.upper().strip(), symbol.upper().strip())
+    base     = dict(_SYMBOL_TRADE_CFG["_default"])
+    override = _SYMBOL_TRADE_CFG.get(mt5_sym, {})
+    base.update(override)
+    return base
+
 
 # ── Helper: atualiza contador de stops consecutivos ──────────────────────────
 def _update_consecutive_losses(profit: float) -> None:
@@ -313,20 +429,23 @@ def api_scalper_auto_state():
 @scalper_bp.route("/api/scalper/auto-check", methods=["POST"])
 def api_scalper_auto_check():
     from services.scalper_service import execute_scalper_trade, get_scalper_position
-    body          = request.get_json(silent=True) or {}
-    symbol        = body.get("symbol",        "WDON26")
-    signal        = body.get("signal",        "NEUTRO")
-    buy_pct       = float(body.get("buy_pct",       50))
-    sell_pct      = float(body.get("sell_pct",      50))
-    volume        = float(body.get("volume",        100))
-    tp_ticks       = int(body.get("tp_ticks",       5))
-    sl_ticks       = int(body.get("sl_ticks",       2))
-    use_atr_sizing = bool(body.get("use_atr_sizing", True))
-    threshold_pct  = float(body.get("threshold_pct", 65))
-    cooldown_sec  = int(body.get("cooldown_sec",  30))
-    confirm_n     = int(body.get("confirm_n",      3))
-    b3_open       = bool(body.get("b3_open",      True))
-    max_daily     = int(body.get("max_daily",     15))
+    body   = request.get_json(silent=True) or {}
+    symbol = body.get("symbol", "WDON26")
+    signal = body.get("signal", "NEUTRO")
+
+    # Parâmetros com defaults por símbolo — frontend pode sobrescrever individualmente
+    scfg           = _sym_trade_cfg(symbol)
+    buy_pct        = float(body.get("buy_pct",        50))
+    sell_pct       = float(body.get("sell_pct",       50))
+    volume         = float(body.get("volume",         100))
+    tp_ticks       = int(  body.get("tp_ticks",       scfg["tp_ticks"]))
+    sl_ticks       = int(  body.get("sl_ticks",       scfg["sl_ticks"]))
+    use_atr_sizing = bool( body.get("use_atr_sizing",  scfg["use_atr_sizing"]))
+    threshold_pct  = float(body.get("threshold_pct",  scfg["threshold_pct"]))
+    cooldown_sec   = int(  body.get("cooldown_sec",    scfg["cooldown_sec"]))
+    confirm_n      = int(  body.get("confirm_n",       scfg["confirm_n"]))
+    b3_open        = bool( body.get("b3_open",         True))
+    max_daily      = int(  body.get("max_daily",       scfg["max_daily"]))
 
     def _deny(reason):
         return jsonify({"ok": True, "action": "NONE", "reason": reason,
@@ -389,7 +508,7 @@ def api_scalper_auto_check():
         sv_blocked = score_obj.get("hard_blocked", False)
         sv_cum_bias= score_obj.get("cum_bias", "NEUTRO")
         sv_cum_pct = score_obj.get("cum_pct",  50.0)
-        score_min_sv = int(body.get("score_min", 60))
+        score_min_sv = int(body.get("score_min", scfg["score_min"]))
 
         # Hard-block 1: score server-side abaixo do mínimo configurado
         if sv_score < score_min_sv:
@@ -401,7 +520,7 @@ def api_scalper_auto_check():
         # BULL = preço acima da VWAP intraday → só COMPRA permitida
         # NEUTRO → permite ambas as direções
         vwap_ctx = macro_sv.get("vwap", {}).get("context", "NEUTRO")
-        use_vwap_filter = bool(body.get("use_vwap_filter", True))
+        use_vwap_filter = bool(body.get("use_vwap_filter", scfg["use_vwap_filter"]))
         if use_vwap_filter and vwap_ctx != "NEUTRO":
             if vwap_ctx == "BEAR" and signal == "COMPRA":
                 _auto["signal_count"] = 0
@@ -468,6 +587,27 @@ def api_scalper_auto_check():
 
 
 # Sessao: stats + historico
+# Config por símbolo — retorna defaults usados pelo auto-check para um símbolo
+@scalper_bp.route("/api/scalper/symbol-config/<symbol>")
+def api_scalper_symbol_config(symbol):
+    try:
+        from services.scalper_service import SYMBOL_CONFIG, _sym_cfg, SCALPER_SYMBOLS
+        mt5_sym   = SCALPER_SYMBOLS.get(symbol.upper().strip(), symbol.upper().strip())
+        scoring   = _sym_cfg(mt5_sym)
+        trade     = _sym_trade_cfg(symbol)
+        has_override = mt5_sym in SYMBOL_CONFIG and bool(SYMBOL_CONFIG[mt5_sym])
+        return jsonify({
+            "ok":           True,
+            "symbol":       mt5_sym,
+            "has_override": has_override,
+            "scoring":      scoring,
+            "trade":        trade,
+        })
+    except Exception as exc:
+        logger.exception("api_scalper_symbol_config error")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 @scalper_bp.route("/api/scalper/session")
 def api_scalper_session():
     return jsonify({"ok": True, "session": _session})

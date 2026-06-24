@@ -512,7 +512,8 @@ async function fetchJson(url) {
 
 async function loadSummary() {
   try {
-    const res = await fetchJson('/api/analytics/summary');
+    const dateQ = _recentDate && _recentDate !== 'all' ? `?date=${_recentDate}` : '';
+    const res = await fetchJson(`/api/analytics/summary${dateQ}`);
     if (!res.ok) return;
     const d = res.data;
     document.getElementById('kTotal').textContent   = d.total_opportunities;
@@ -650,6 +651,7 @@ function setRecentDate(d) {
   const btn = document.getElementById(`rdBtn-${key}`);
   if (btn) btn.classList.add('active');
   loadRecent();
+  loadSummary();
 }
 
 async function loadRecent() {
@@ -714,6 +716,24 @@ async function syncOutcomes() {
   } finally {
     btn.textContent = 'Sincronizar Outcomes';
     btn.disabled    = false;
+  }
+}
+
+// ── Reset links ───────────────────────────────────────────────────────────
+
+async function resetLinks() {
+  if (!confirm('Isso vai apagar todos os links de outcome. Continuar?')) return;
+  const el = document.getElementById('lastSync');
+  if (el) el.textContent = 'Resetando...';
+  try {
+    const r   = await fetch('/api/analytics/reset-links', {method: 'POST'});
+    const res = await r.json();
+    if (el) el.textContent = res.ok
+      ? (res.message || 'Links resetados. Execute Sincronizar Outcomes.')
+      : 'Erro: ' + (res.error || '?');
+    if (res.ok) await loadAll();
+  } catch(e) {
+    if (el) el.textContent = 'Erro de rede';
   }
 }
 

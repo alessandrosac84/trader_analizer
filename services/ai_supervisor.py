@@ -34,16 +34,18 @@ def _conn():
 
 
 def _period_since(period: str) -> str:
-    """Converte nome de periodo em timestamp ISO para filtro SQL."""
+    """Converte nome de periodo em data YYYY-MM-DD para filtro SQL via substr().
+    Retorna apenas a data para evitar o bug de normalizacao UTC do SQLite com DATE().
+    """
     _BRT_now = datetime.now(_BRT)
     if period == "today":
-        return _BRT_now.strftime("%Y-%m-%d") + "T00:00:00"
+        return _BRT_now.strftime("%Y-%m-%d")
     elif period == "week":
         start_of_week = _BRT_now - timedelta(days=_BRT_now.weekday())
-        return start_of_week.strftime("%Y-%m-%d") + "T00:00:00"
+        return start_of_week.strftime("%Y-%m-%d")
     elif period == "month":
-        return _BRT_now.strftime("%Y-%m-01") + "T00:00:00"
-    return "2000-01-01T00:00:00"
+        return _BRT_now.strftime("%Y-%m-01")
+    return "2000-01-01"
 
 
 # ---------------------------------------------------------------------------
@@ -78,7 +80,7 @@ def analyze_ai_performance(period: str = _DEFAULT_PERIOD) -> dict:
                 WHERE closed_at IS NOT NULL
                   AND pnl_brl IS NOT NULL
                   AND ai_veredito IS NOT NULL
-                  AND closed_at >= ?
+                  AND substr(closed_at, 1, 10) >= ?
                 ORDER BY closed_at DESC
             """, (since,)).fetchall()
 
@@ -268,7 +270,7 @@ def get_recent_decisions(limit: int = 50, period: str = _DEFAULT_PERIOD) -> list
                     close_reason
                 FROM auto_trades
                 WHERE ai_veredito IS NOT NULL
-                  AND closed_at >= ?
+                  AND substr(closed_at, 1, 10) >= ?
                 ORDER BY closed_at DESC
                 LIMIT ?
             """, (since, limit)).fetchall()
@@ -328,7 +330,7 @@ def get_fp_fn_summary(period: str = _DEFAULT_PERIOD) -> dict:
                 WHERE closed_at IS NOT NULL AND pnl_brl IS NOT NULL
                   AND pnl_pts > 0
                   AND ai_veredito IS NOT NULL
-                  AND closed_at >= ?
+                  AND substr(closed_at, 1, 10) >= ?
             """, (since,)).fetchone()[0] or 0
 
             fp = conn.execute("""
@@ -336,7 +338,7 @@ def get_fp_fn_summary(period: str = _DEFAULT_PERIOD) -> dict:
                 WHERE closed_at IS NOT NULL AND pnl_brl IS NOT NULL
                   AND pnl_pts <= 0
                   AND ai_veredito IS NOT NULL
-                  AND closed_at >= ?
+                  AND substr(closed_at, 1, 10) >= ?
             """, (since,)).fetchone()[0] or 0
 
             # FN estimado de trade_opportunities (pode estar vazio)
@@ -407,7 +409,7 @@ def analyze_confidence_accuracy(period: str = _DEFAULT_PERIOD) -> list:
                 WHERE closed_at IS NOT NULL
                   AND pnl_brl IS NOT NULL
                   AND ai_confidence IS NOT NULL
-                  AND closed_at >= ?
+                  AND substr(closed_at, 1, 10) >= ?
                 GROUP BY bucket
                 ORDER BY bucket DESC
             """, (since,)).fetchall()

@@ -135,7 +135,8 @@ def api_reset_links():
 def api_analytics_summary():
     try:
         from services.opportunity_service import analytics_summary
-        return jsonify({"ok": True, "data": analytics_summary()})
+        date_filter = request.args.get("date", None)  # 'today' | 'week' | None
+        return jsonify({"ok": True, "data": analytics_summary(date_filter)})
     except Exception as exc:
         logger.exception("api_analytics_summary error")
         return jsonify({"ok": False, "error": str(exc)}), 500

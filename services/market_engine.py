@@ -41,16 +41,19 @@ def _conn():
 # ---------------------------------------------------------------------------
 
 def _period_since(period: str) -> str:
-    """Converte nome de periodo em timestamp ISO para filtro SQL."""
+    """Converte nome de periodo em data YYYY-MM-DD para filtro SQL via substr().
+    Retorna apenas a data (sem horario) para ser usada com substr(ts, 1, 10) >= ?.
+    Isso evita o bug de normalizacao UTC do SQLite com DATE() e timestamps BRT.
+    """
     _BRT_now = datetime.now(_BRT)
     if period == "today":
-        return _BRT_now.strftime("%Y-%m-%d") + "T00:00:00"
+        return _BRT_now.strftime("%Y-%m-%d")
     elif period == "week":
         start_of_week = _BRT_now - timedelta(days=_BRT_now.weekday())
-        return start_of_week.strftime("%Y-%m-%d") + "T00:00:00"
+        return start_of_week.strftime("%Y-%m-%d")
     elif period == "month":
-        return _BRT_now.strftime("%Y-%m-01") + "T00:00:00"
-    return "2000-01-01T00:00:00"
+        return _BRT_now.strftime("%Y-%m-01")
+    return "2000-01-01"
 
 
 def _get_single_instrument_stats(instrument_key: str, period: str) -> dict:
@@ -78,7 +81,7 @@ def _get_single_instrument_stats(instrument_key: str, period: str) -> dict:
                 FROM auto_trades
                 WHERE closed_at IS NOT NULL
                   AND pnl_brl IS NOT NULL
-                  AND closed_at >= ?
+                  AND substr(closed_at, 1, 10) >= ?
                   AND UPPER(tv_symbol) LIKE ?
             """, (since, f"%{sym_fragment}%")).fetchone()
 
@@ -130,7 +133,7 @@ def _get_monitor_stats(period: str = "today") -> dict:
                 FROM auto_trades
                 WHERE closed_at IS NOT NULL
                   AND pnl_brl IS NOT NULL
-                  AND closed_at >= ?
+                  AND substr(closed_at, 1, 10) >= ?
                 GROUP BY tv_symbol
             """, (since,)).fetchall()
 
@@ -384,7 +387,7 @@ def get_drawdown_history() -> list:
                     FROM auto_trades
                     WHERE closed_at IS NOT NULL
                       AND pnl_brl IS NOT NULL
-                      AND DATE(closed_at) BETWEEN ? AND ?
+                      AND substr(closed_at, 1, 10) BETWEEN ? AND ?
                 """, (ws, we)).fetchone()
 
             mon_brl = mon_row[0] or 0.0

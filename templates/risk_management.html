@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Risk Management V1.1 — Trade AI</title>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#0d1117;--bg2:#161b22;--bg3:#21262d;--border:#30363d;
+      --text:#e6edf3;--muted:#8b949e;
+      --green:#3fb950;--red:#f85149;--yellow:#d29922;
+      --blue:#58a6ff;--purple:#bc8cff;--orange:#fb8f44;--cyan:#39d353;
+      --radius:10px;
+    }
+    body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,monospace;font-size:13px;min-height:100vh}
+    .header{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
+    .logo{font-size:17px;font-weight:700;color:var(--blue)}
+    .nav-link{color:var(--muted);text-decoration:none;font-size:11px;padding:4px 10px;border:1px solid var(--border);border-radius:6px}
+    .nav-link:hover{color:var(--text);border-color:var(--text)}
+    .nav-link.active{color:var(--red);border-color:var(--red)}
+    .container{max-width:1500px;margin:0 auto;padding:16px}
+
+    /* ─ Tabs ─ */
+    .tabs{display:flex;gap:2px;margin-bottom:16px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:4px}
+    .tab{padding:7px 18px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);border:none;background:transparent;transition:.15s}
+    .tab.active{background:var(--bg3);color:var(--text);border:1px solid var(--border)}
+    .tab-content{display:none}
+    .tab-content.active{display:block}
+
+    /* ─ Status Bar ─ */
+    .status-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:14px}
+    .stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px}
+    .stat-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px}
+    .stat-value{font-size:20px;font-weight:800;line-height:1.2}
+    .stat-sub{font-size:10px;color:var(--muted);margin-top:2px}
+    .stat-card.span2{grid-column:span 2}
+    .stat-card.span3{grid-column:span 3}
+
+    /* ─ Status badge ─ */
+    .status-badge{display:inline-block;padding:5px 12px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.5px}
+    .s-NORMAL{background:#3fb95022;color:var(--green);border:1px solid var(--green)}
+    .s-PROTEGIDO{background:#58a6ff22;color:var(--blue);border:1px solid var(--blue)}
+    .s-COOLDOWN{background:#d2992222;color:var(--yellow);border:1px solid var(--yellow)}
+    .s-BLOQUEADO_DIA{background:#f8514922;color:var(--red);border:1px solid var(--red)}
+    .s-MODO_CONSERVADOR{background:#bc8cff22;color:var(--purple);border:1px solid var(--purple)}
+    .s-CIRCUIT_BREAKER{background:#f8514955;color:#fff;border:1px solid var(--red)}
+    .s-ACCOUNT_PROTECTION{background:#f8514955;color:#fff;border:1px solid var(--red)}
+
+    /* ─ Progress bars M3 ─ */
+    .progress-section{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-bottom:14px}
+    .prog-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px}
+    .prog-label{display:flex;justify-content:space-between;margin-bottom:6px;font-size:11px}
+    .prog-name{color:var(--muted)}
+    .prog-val{font-weight:700}
+    .prog-bar-bg{background:var(--bg3);border-radius:4px;height:8px;overflow:hidden}
+    .prog-bar{height:100%;border-radius:4px;transition:width .4s}
+    .prog-bar.danger{background:var(--red)}
+    .prog-bar.warn{background:var(--yellow)}
+    .prog-bar.ok{background:var(--green)}
+    .prog-bar.blue{background:var(--blue)}
+
+    /* ─ Cards ─ */
+    .card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:14px}
+    .card-hdr{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+    .card-body{padding:14px}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    @media(max-width:900px){.grid2{grid-template-columns:1fr}.stat-card.span2,.stat-card.span3{grid-column:span 1}}
+
+    /* ─ M1: Risk Budget card ─ */
+    .budget-card{border-color:var(--blue)}
+    .budget-value{font-size:28px;font-weight:900}
+    .budget-ok{color:var(--green)}
+    .budget-warn{color:var(--yellow)}
+    .budget-danger{color:var(--red)}
+
+    /* ─ M2: Ultimo bloqueio card ─ */
+    .block-card{border-color:var(--red)}
+    .block-code{font-size:13px;font-weight:700;color:var(--red)}
+
+    /* ─ Settings ─ */
+    .blocks-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 28px}
+    @media(max-width:1000px){.blocks-grid{grid-template-columns:1fr}}
+    .block{margin-bottom:22px;padding-bottom:18px;border-bottom:1px solid var(--border)}
+    .block:last-child{border-bottom:none;margin-bottom:0}
+    .block-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+    .row{display:flex;align-items:center;gap:10px;margin-bottom:7px;flex-wrap:wrap}
+    label{font-size:11px;color:var(--muted);min-width:210px}
+    input[type=number],input[type=text],select{background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:6px;font-size:12px;width:110px}
+    input[type=number]:focus,select:focus{border-color:var(--blue);outline:none}
+    .toggle{position:relative;width:36px;height:20px;cursor:pointer;display:inline-block}
+    .toggle input{opacity:0;width:0;height:0}
+    .toggle-slider{position:absolute;inset:0;background:var(--bg3);border:1px solid var(--border);border-radius:20px;transition:.2s}
+    .toggle-slider::after{content:"";position:absolute;left:3px;top:3px;width:12px;height:12px;background:var(--muted);border-radius:50%;transition:.2s}
+    .toggle input:checked + .toggle-slider{background:var(--green);border-color:var(--green)}
+    .toggle input:checked + .toggle-slider::after{left:19px;background:#fff}
+    .radio-group{display:flex;gap:10px}
+    .radio-opt{display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:var(--muted)}
+    .radio-opt input{width:auto}
+    .radio-opt.selected{color:var(--text)}
+
+    /* ─ Buttons ─ */
+    .btn{padding:7px 16px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid transparent;transition:.15s}
+    .btn-primary{background:var(--blue);color:#fff}
+    .btn-primary:hover{background:#4090dd}
+    .btn-danger{background:var(--red);color:#fff}
+    .btn-warn{background:var(--yellow);color:#000}
+    .btn-warn:hover{background:#b07a00;color:#fff}
+    .btn-ghost{background:transparent;border-color:var(--border);color:var(--muted)}
+    .btn-ghost:hover{border-color:var(--text);color:var(--text)}
+    .actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+
+    /* ─ Table ─ */
+    table{width:100%;border-collapse:collapse;font-size:11px}
+    th{text-align:left;color:var(--muted);font-weight:600;padding:6px 10px;border-bottom:1px solid var(--border);white-space:nowrap}
+    td{padding:5px 10px;border-bottom:1px solid #21262d;vertical-align:top}
+    tr:last-child td{border-bottom:none}
+    .badge{font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px}
+    .b-red{background:#f8514922;color:var(--red)}
+    .b-yellow{background:#d2992222;color:var(--yellow)}
+    .b-green{background:#3fb95022;color:var(--green)}
+    .b-purple{background:#bc8cff22;color:var(--purple)}
+    .b-orange{background:#fb8f4422;color:var(--orange)}
+    .b-blue{background:#58a6ff22;color:var(--blue)}
+
+    /* ─ Analytics M7 ─ */
+    .analytics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:16px}
+    .kpi-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px}
+    .kpi-val{font-size:26px;font-weight:900;margin-bottom:2px}
+    .kpi-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+    .rule-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)}
+    .rule-row:last-child{border-bottom:none}
+    .rule-name{font-size:11px;color:var(--muted)}
+    .rule-count{font-size:13px;font-weight:700;color:var(--text)}
+
+    /* ─ M4 Day Panel ─ */
+    .day-panel{background:linear-gradient(135deg,#161b22 0%,#1a2035 100%);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:14px}
+    .day-panel-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #30363d}
+    .day-panel-row:last-child{border-bottom:none}
+    .day-panel-key{font-size:11px;color:var(--muted)}
+    .day-panel-val{font-size:12px;font-weight:700}
+
+    /* ─ Toast ─ */
+    #toast{position:fixed;bottom:20px;right:20px;padding:10px 16px;border-radius:8px;font-size:12px;font-weight:600;display:none;z-index:999}
+    #toast.ok{background:var(--green);color:#fff}
+    #toast.err{background:var(--red);color:#fff}
+  </style>
+</head>
+<body>
+<div class="header">
+  <div style="display:flex;align-items:center;gap:10px">
+    <span class="logo">Trade AI</span>
+    <span style="color:var(--muted)">Risk Management V1.1</span>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <span id="last-update" style="color:var(--muted);font-size:10px">—</span>
+    <a href="/dashboard"       class="nav-link">Dashboard</a>
+    <a href="/market-center"   class="nav-link">Market</a>
+    <a href="/analytics"       class="nav-link">Analytics</a>
+    <a href="/risk-management" class="nav-link active">Risk</a>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('status')">📊 Status</button>
+    <button class="tab" onclick="showTab('settings')">⚙ Configurações</button>
+    <button class="tab" onclick="showTab('analytics')">📈 Efetividade</button>
+    <button class="tab" onclick="showTab('audit')">📋 Auditoria</button>
+  </div>
+
+  <!-- ══ TAB: STATUS ══════════════════════════════════════════════════════ -->
+  <div class="tab-content active" id="tab-status">
+
+    <!-- Status Bar -->
+    <div class="status-grid">
+      <div class="stat-card span2">
+        <div class="stat-label">Status CPE</div>
+        <div id="cpe-status-badge" style="margin:4px 0"><span class="status-badge s-NORMAL">NORMAL</span></div>
+        <div class="stat-sub" id="cpe-reason">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">P&L Dia</div>
+        <div class="stat-value" id="stat-pnl">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Lucro Máximo</div>
+        <div class="stat-value" id="stat-max" style="color:var(--green)">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Piso Protegido</div>
+        <div class="stat-value" id="stat-floor" style="color:var(--blue)">—</div>
+        <div class="stat-sub" id="stat-trailing-mode">—</div>
+      </div>
+      <!-- M1: Risk Budget -->
+      <div class="stat-card budget-card">
+        <div class="stat-label">Risk Budget</div>
+        <div class="stat-value budget-value" id="stat-budget">—</div>
+        <div class="stat-sub">lucro atual − piso protegido</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Trades Hoje</div>
+        <div class="stat-value" id="stat-trades">—</div>
+        <div class="stat-sub" id="stat-wl">— W / — L</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Losses Consec.</div>
+        <div class="stat-value" id="stat-consec">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Cooldown</div>
+        <div class="stat-value" id="stat-cooldown">—</div>
+        <div class="stat-sub" id="stat-pause">—</div>
+      </div>
+    </div>
+
+    <!-- M2: Ultimo Bloqueio -->
+    <div class="grid2" style="margin-bottom:14px">
+      <div class="card block-card">
+        <div class="card-hdr" style="color:var(--red)">🚫 Último Bloqueio</div>
+        <div class="card-body">
+          <div class="block-code" id="last-block-code">—</div>
+          <div style="color:var(--muted);font-size:11px;margin-top:4px" id="last-block-reason">Nenhum bloqueio registrado</div>
+          <div style="color:var(--muted);font-size:10px;margin-top:4px" id="last-block-ts">—</div>
+        </div>
+      </div>
+      <!-- M4: Próximo Limite -->
+      <div class="card">
+        <div class="card-hdr" style="color:var(--orange)">⚡ Próximo Limite</div>
+        <div class="card-body">
+          <div style="font-size:16px;font-weight:800;color:var(--orange)" id="next-limit-name">—</div>
+          <div style="color:var(--muted);font-size:11px;margin-top:4px" id="next-limit-detail">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- M3: Barras de Progresso -->
+    <div class="progress-section">
+      <div class="prog-card">
+        <div class="prog-label">
+          <span class="prog-name">Daily Loss</span>
+          <span class="prog-val" id="prog-loss-label">—</span>
+        </div>
+        <div class="prog-bar-bg"><div class="prog-bar danger" id="prog-loss" style="width:0%"></div></div>
+      </div>
+      <div class="prog-card">
+        <div class="prog-label">
+          <span class="prog-name">Hard Target</span>
+          <span class="prog-val" id="prog-target-label">—</span>
+        </div>
+        <div class="prog-bar-bg"><div class="prog-bar ok" id="prog-target" style="width:0%"></div></div>
+      </div>
+      <div class="prog-card">
+        <div class="prog-label">
+          <span class="prog-name">Soft Target</span>
+          <span class="prog-val" id="prog-soft-label">—</span>
+        </div>
+        <div class="prog-bar-bg"><div class="prog-bar blue" id="prog-soft" style="width:0%"></div></div>
+      </div>
+      <div class="prog-card">
+        <div class="prog-label">
+          <span class="prog-name">Max Trades</span>
+          <span class="prog-val" id="prog-trades-label">—</span>
+        </div>
+        <div class="prog-bar-bg"><div class="prog-bar warn" id="prog-trades" style="width:0%"></div></div>
+      </div>
+      <div class="prog-card">
+        <div class="prog-label">
+          <span class="prog-name">Profit Protection</span>
+          <span class="prog-val" id="prog-prot-label">—</span>
+        </div>
+        <div class="prog-bar-bg"><div class="prog-bar blue" id="prog-prot" style="width:0%"></div></div>
+      </div>
+    </div>
+
+    <!-- M4: Painel do Dia -->
+    <div class="day-panel">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:10px">📋 Painel do Dia</div>
+      <div class="day-panel-row">
+        <span class="day-panel-key">Estado</span>
+        <span class="day-panel-val" id="dp-status">—</span>
+      </div>
+      <div class="day-panel-row">
+        <span class="day-panel-key">Lucro Máximo</span>
+        <span class="day-panel-val" id="dp-max">—</span>
+      </div>
+      <div class="day-panel-row">
+        <span class="day-panel-key">Piso Atual</span>
+        <span class="day-panel-val" id="dp-floor">—</span>
+      </div>
+      <div class="day-panel-row">
+        <span class="day-panel-key">Risk Budget</span>
+        <span class="day-panel-val" id="dp-budget">—</span>
+      </div>
+      <div class="day-panel-row">
+        <span class="day-panel-key">Próximo Limite</span>
+        <span class="day-panel-val" id="dp-next">—</span>
+      </div>
+      <div class="day-panel-row">
+        <span class="day-panel-key">Modo Trailing</span>
+        <span class="day-panel-val" id="dp-trailing">—</span>
+      </div>
+    </div>
+
+    <!-- Homolog override banner (visível apenas quando ativo) -->
+    <div id="homolog-banner" style="display:none;background:#d2992222;border:1px solid #d29922;border-radius:8px;padding:10px 16px;margin-bottom:12px;color:#d29922;font-size:12px;font-weight:600;">
+      ⚠ OVERRIDE MANUAL ATIVO — CPE desativado até meia-noite. Clique em "Reativar Proteção" para restaurar.
+    </div>
+
+    <!-- Actions -->
+    <div class="actions">
+      <button class="btn btn-danger" onclick="resetCircuitBreaker()" id="btn-cb">Reativar Circuit Breaker</button>
+      <button class="btn btn-warn"   onclick="resetDayBlock()"       id="btn-db">Desbloquear Dia</button>
+      <button class="btn btn-warn"   onclick="disableHomologOverride()" id="btn-homolog" style="display:none;background:#d2992244;border-color:#d29922;color:#d29922;">🛡 Reativar Proteção</button>
+      <button class="btn btn-ghost"  onclick="loadStatus()">↻ Atualizar</button>
+    </div>
+  </div>
+
+  <!-- ══ TAB: SETTINGS ════════════════════════════════════════════════════ -->
+  <div class="tab-content" id="tab-settings">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+      <button class="btn btn-primary" onclick="saveSettings()">💾 Salvar Configurações</button>
+    </div>
+    <div id="settings-form">Carregando...</div>
+  </div>
+
+  <!-- ══ TAB: ANALYTICS ═══════════════════════════════════════════════════ -->
+  <div class="tab-content" id="tab-analytics">
+    <div class="analytics-grid">
+      <div class="kpi-card"><div class="kpi-val" id="an-blocked">—</div><div class="kpi-label">Trades Bloqueados</div></div>
+      <div class="kpi-card"><div class="kpi-val" id="an-days">—</div><div class="kpi-label">Dias Protegidos</div></div>
+      <div class="kpi-card"><div class="kpi-val" id="an-circuit">—</div><div class="kpi-label">Circuit Breakers</div></div>
+      <div class="kpi-card"><div class="kpi-val" id="an-cooldowns">—</div><div class="kpi-label">Cooldowns</div></div>
+    </div>
+    <div class="card">
+      <div class="card-hdr" style="color:var(--orange);justify-content:space-between">
+        <span>Efetividade por Regra</span>
+        <button class="btn btn-ghost" style="font-size:10px" onclick="loadAnalytics()">↻</button>
+      </div>
+      <div class="card-body" id="analytics-rules">Carregando...</div>
+    </div>
+  </div>
+
+  <!-- ══ TAB: AUDITORIA ═══════════════════════════════════════════════════ -->
+  <div class="tab-content" id="tab-audit">
+    <div class="actions">
+      <button class="btn btn-ghost" onclick="loadEvents()">↻ Atualizar</button>
+      <button class="btn btn-ghost" onclick="exportAudit('csv')">⬇ CSV</button>
+      <button class="btn btn-ghost" onclick="exportAudit('xlsx')">⬇ Excel</button>
+      <button class="btn btn-ghost" onclick="exportAudit('json')">⬇ JSON</button>
+    </div>
+    <div class="card">
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Hora</th><th>Evento</th><th>Ativo</th><th>Ação</th><th>Score</th>
+              <th>Motivo</th><th class="right">P&L</th><th class="right">Budget</th>
+              <th class="right">Máx</th><th class="right">Piso</th>
+              <th>Antes</th><th>Depois</th>
+            </tr>
+          </thead>
+          <tbody id="events-tbody">
+            <tr><td colspan="12" style="text-align:center;color:var(--muted);padding:20px">Carregando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ── Utils ────────────────────────────────────────────────────────── */
+const $ = id => document.getElementById(id);
+const fmtBRL = v => v == null ? '—' : (v >= 0 ? '+' : '') + 'R$ ' + Number(v).toFixed(0);
+const fmtMin = v => v > 0 ? v + ' min' : '—';
+
+function toast(msg, ok=true) {
+  const el = $('toast');
+  el.textContent = msg; el.className = ok ? 'ok' : 'err';
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, 3000);
+}
+async function api(url, opts={}) { const r = await fetch(url, opts); return r.json(); }
+
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  const tabs = ['status','settings','analytics','audit'];
+  const idx = tabs.indexOf(name);
+  document.querySelectorAll('.tab')[idx].classList.add('active');
+  $('tab-' + name).classList.add('active');
+  if (name === 'analytics') loadAnalytics();
+  if (name === 'audit') loadEvents();
+  if (name === 'settings') loadSettings();
+}
+
+/* ── Status M1/M2/M3/M4 ──────────────────────────────────────────── */
+async function loadStatus() {
+  const res = await api('/api/risk/status');
+  if (!res.ok) return;
+  const d = res.data;
+  $('last-update').textContent = 'Atualizado: ' + new Date().toLocaleTimeString('pt-BR');
+
+  $('cpe-status-badge').innerHTML = `<span class="status-badge s-${d.status}">${d.status}</span>`;
+  $('cpe-reason').textContent = d.reason || '—';
+
+  const pnlEl = $('stat-pnl');
+  pnlEl.textContent = fmtBRL(d.daily_pnl);
+  pnlEl.style.color = (d.daily_pnl||0) >= 0 ? 'var(--green)' : 'var(--red)';
+  $('stat-max').textContent   = fmtBRL(d.daily_max_profit);
+  $('stat-floor').textContent = d.protected_floor > 0 ? fmtBRL(d.protected_floor) : '—';
+
+  // Trailing mode label
+  const trMode = d.trailing_mode === 'PERCENTUAL'
+    ? `Trailing ${d.trailing_percent}% do máximo`
+    : `Trailing fixo −R$ ${d.trailing_value}`;
+  $('stat-trailing-mode').textContent = trMode;
+
+  // M1 — Risk Budget colorido
+  const rb = d.risk_budget;
+  const budgetEl = $('stat-budget');
+  if (rb == null) {
+    budgetEl.textContent = '—';
+    budgetEl.className = 'stat-value budget-value';
+  } else {
+    budgetEl.textContent = fmtBRL(rb);
+    budgetEl.className = 'stat-value budget-value ' + (rb > 100 ? 'budget-ok' : rb >= 50 ? 'budget-warn' : 'budget-danger');
+  }
+
+  $('stat-trades').textContent = d.trades_today ?? '—';
+  $('stat-wl').textContent     = `${d.wins_today ?? 0} W / ${d.losses_today ?? 0} L`;
+  const cl = $('stat-consec');
+  cl.textContent = d.consecutive_losses ?? 0;
+  cl.style.color = (d.consecutive_losses || 0) >= 2 ? 'var(--red)' : 'var(--text)';
+  $('stat-cooldown').textContent = fmtMin(d.cooldown_remaining);
+  $('stat-pause').textContent    = d.loss_pause_remaining > 0 ? `Pausa: ${d.loss_pause_remaining} min` : '';
+
+  // M2 — Ultimo Bloqueio
+  const lb = d.last_block || {};
+  $('last-block-code').textContent   = lb.code   || '—';
+  $('last-block-reason').textContent = lb.reason || 'Nenhum bloqueio registrado';
+  $('last-block-ts').textContent     = lb.ts ? new Date(lb.ts).toLocaleString('pt-BR') : '—';
+
+  // M3 — Progress bars
+  setBar('prog-loss',   d.loss_progress_pct,   `${Math.abs(d.daily_pnl||0).toFixed(0)} / ${d.loss_limit} (${d.loss_progress_pct}%)`);
+  setBar('prog-target', d.target_progress_pct, `${Math.max(d.daily_pnl||0,0).toFixed(0)} / ${d.hard_target} (${d.target_progress_pct}%)`);
+  setBar('prog-soft',   d.soft_progress_pct,   `${Math.max(d.daily_pnl||0,0).toFixed(0)} / ${d.soft_target} (${d.soft_progress_pct}%)`);
+  setBar('prog-trades', d.trades_progress_pct, `${d.trades_today} / ${d.max_trades} (${d.trades_progress_pct}%)`);
+  const protActiv = d.profit_protection_activation || 250;
+  const protPct = d.daily_max_profit > 0 ? Math.min(100, Math.round(d.daily_max_profit / (d.soft_target || 500) * 100)) : 0;
+  setBar('prog-prot', protPct, `Máx R$ ${(d.daily_max_profit||0).toFixed(0)} → Piso R$ ${(d.protected_floor||0).toFixed(0)}`);
+
+  // M4 — Next Limit
+  const nl = d.next_limit || {};
+  $('next-limit-name').textContent   = nl.name || '—';
+  $('next-limit-detail').textContent = nl.distance != null ? `Distância: R$ ${nl.distance}` : '—';
+
+  // M4 — Day Panel
+  $('dp-status').textContent  = d.status || '—';
+  $('dp-max').textContent     = fmtBRL(d.daily_max_profit);
+  $('dp-floor').textContent   = d.protected_floor > 0 ? fmtBRL(d.protected_floor) : '—';
+  $('dp-budget').textContent  = rb != null ? fmtBRL(rb) : '—';
+  $('dp-next').textContent    = nl.name && nl.distance != null ? `${nl.name} (R$ ${nl.distance})` : '—';
+  $('dp-trailing').textContent = trMode;
+
+  // Buttons
+  $('btn-cb').disabled = !d.circuit_breaker_active;
+  // Habilita quando: dia bloqueado, circuit breaker ativo, OU em cooldown
+  const needsUnlock = d.day_blocked || d.circuit_breaker_active || d.status === 'COOLDOWN' || (d.loss_pause_remaining > 0);
+  $('btn-db').disabled = !needsUnlock;
+
+  // Homolog override UI
+  const override = !!d.homolog_override;
+  const banner = document.getElementById('homolog-banner');
+  const btnHomolog = $('btn-homolog');
+  if (banner) banner.style.display = override ? 'block' : 'none';
+  if (btnHomolog) btnHomolog.style.display = override ? 'inline-block' : 'none';
+  if ($('btn-db')) $('btn-db').style.display = override ? 'none' : 'inline-block';
+}
+
+function setBar(id, pct, label) {
+  const bar = $(id);
+  if (bar) bar.style.width = (pct || 0) + '%';
+  const labelEl = $(id + '-label');
+  if (labelEl) labelEl.textContent = label || '—';
+}
+
+/* ── Settings M5/M6 ──────────────────────────────────────────────── */
+const BLOCKS = [
+  { id:1,  title:'Daily Loss',            color:'var(--red)',    priority:'CRÍTICA',
+    fields:[
+      {key:'daily_loss_enabled',            label:'Ativado',                    type:'bool'},
+      {key:'daily_loss_value',              label:'Limite de perda (R$)',        type:'number',step:50},
+    ]},
+  { id:2,  title:'Profit Protection',     color:'var(--blue)',   priority:'CRÍTICA',
+    fields:[
+      {key:'profit_protection_enabled',     label:'Ativado',                    type:'bool'},
+      {key:'profit_protection_activation',  label:'Ativação (R$ lucro)',         type:'number',step:50},
+    ]},
+  { id:3,  title:'Daily Trailing',        color:'var(--blue)',   priority:'CRÍTICA',
+    fields:[
+      {key:'daily_trailing_enabled',        label:'Ativado',                    type:'bool'},
+      {key:'daily_trailing_mode',           label:'Modo',                       type:'select',opts:['FIXO','PERCENTUAL']},
+      {key:'daily_trailing_value',          label:'Trailing fixo (R$)',          type:'number',step:25},
+      {key:'daily_trailing_percent',        label:'Trailing percentual (%)',     type:'number',step:5},
+    ]},
+  { id:4,  title:'Hard Daily Target',     color:'var(--green)',  priority:'ALTA',
+    fields:[
+      {key:'hard_daily_target_enabled',     label:'Ativado',                    type:'bool'},
+      {key:'hard_daily_target',             label:'Meta máxima (R$)',            type:'number',step:100},
+    ]},
+  { id:5,  title:'Soft Daily Target',     color:'var(--purple)', priority:'ALTA',
+    fields:[
+      {key:'soft_target_enabled',           label:'Ativado',                    type:'bool'},
+      {key:'soft_target_value',             label:'Meta conservadora (R$)',      type:'number',step:50},
+      {key:'soft_score_penalty',            label:'Score mínimo extra (+)',      type:'number',step:1},
+      {key:'soft_confluences_penalty',      label:'Confluências extras (+)',     type:'number',step:1},
+      {key:'soft_risk_reduction',           label:'Risk Level máximo (−)',       type:'number',step:5},
+      {key:'soft_max_position_factor',      label:'Fator de posição (0.5=50%)', type:'number',step:0.1},
+    ]},
+  { id:6,  title:'Max Trades por Dia',    color:'var(--orange)', priority:'ALTA',
+    fields:[
+      {key:'max_trades_enabled',            label:'Ativado',                    type:'bool'},
+      {key:'max_trades_per_day',            label:'Máximo de trades',            type:'number',step:1},
+    ]},
+  { id:7,  title:'Consecutive Losses',    color:'var(--red)',    priority:'CRÍTICA',
+    fields:[
+      {key:'loss_pause_enabled',            label:'Ativado',                    type:'bool'},
+      {key:'pause_after_losses',            label:'Pausar após N losses',        type:'number',step:1},
+      {key:'pause_minutes',                 label:'Minutos de pausa',            type:'number',step:5},
+      {key:'stop_after_losses',             label:'Encerrar após N losses',      type:'number',step:1},
+    ]},
+  { id:8,  title:'Cooldown Entre Trades', color:'var(--yellow)', priority:'MÉDIA',
+    fields:[
+      {key:'cooldown_enabled',              label:'Ativado',                    type:'bool'},
+      {key:'cooldown_minutes_after_loss',   label:'Cooldown após loss (min)',    type:'number',step:5},
+      {key:'cooldown_minutes_after_win',    label:'Cooldown após win (min)',     type:'number',step:5},
+    ]},
+  { id:9,  title:'Break Even Automático', color:'var(--cyan)',   priority:'ALTA',
+    fields:[
+      {key:'breakeven_enabled',             label:'Ativado',                    type:'bool'},
+      {key:'breakeven_trigger_rr',          label:'Trigger R/R',                type:'number',step:0.5},
+      {key:'breakeven_offset_points',       label:'Offset (pontos)',             type:'number',step:5},
+    ]},
+  { id:10, title:'Trade Trailing Stop',   color:'var(--cyan)',   priority:'ALTA',
+    fields:[
+      {key:'trade_trailing_enabled',        label:'Ativado',                    type:'bool'},
+      {key:'atr_multiplier',                label:'Multiplicador ATR',           type:'number',step:0.5},
+    ]},
+  { id:11, title:'Risk Budget',           color:'var(--orange)', priority:'ALTA',
+    fields:[
+      {key:'risk_budget_enabled',           label:'Ativado',                    type:'bool'},
+    ]},
+  { id:12, title:'Circuit Breaker',       color:'var(--red)',    priority:'MÉDIA',
+    fields:[
+      {key:'circuit_breaker_enabled',       label:'Ativado',                    type:'bool'},
+      {key:'max_daily_stops_sequence',      label:'Dias consecutivos p/ disparar',type:'number',step:1},
+    ]},
+  { id:13, title:'Equity Drawdown',       color:'var(--red)',    priority:'MÉDIA',
+    fields:[
+      {key:'equity_protection_enabled',     label:'Ativado',                    type:'bool'},
+      {key:'max_equity_drawdown_percent',   label:'Drawdown máximo (%)',         type:'number',step:0.5},
+    ]},
+];
+
+let _settings = {};
+
+async function loadSettings() {
+  const res = await api('/api/risk/settings');
+  if (!res.ok) return;
+  _settings = res.data;
+  renderSettings();
+}
+
+function renderSettings() {
+  const left  = BLOCKS.filter((_,i) => i % 2 === 0);
+  const right = BLOCKS.filter((_,i) => i % 2 === 1);
+  $('settings-form').innerHTML = `
+    <div class="blocks-grid">
+      <div>${left.map(renderBlock).join('')}</div>
+      <div>${right.map(renderBlock).join('')}</div>
+    </div>`;
+}
+
+function renderBlock(b) {
+  const pc = b.priority==='CRÍTICA'?'var(--red)':b.priority==='ALTA'?'var(--orange)':'var(--muted)';
+  const fields = b.fields.map(f => {
+    const val = _settings[f.key];
+    if (f.type === 'bool') {
+      return `<div class="row"><label>${f.label}</label>
+        <label class="toggle"><input type="checkbox" id="s_${f.key}" ${val?'checked':''}><span class="toggle-slider"></span></label></div>`;
+    }
+    if (f.type === 'select') {
+      const opts = (f.opts||[]).map(o => `<option value="${o}" ${val===o?'selected':''}>${o}</option>`).join('');
+      return `<div class="row"><label>${f.label}</label><select id="s_${f.key}">${opts}</select></div>`;
+    }
+    return `<div class="row"><label>${f.label}</label>
+      <input type="number" id="s_${f.key}" value="${val??''}" step="${f.step||1}"></div>`;
+  }).join('');
+  return `<div class="block">
+    <div class="block-title" style="color:${b.color}">
+      <span style="background:${b.color}22;color:${b.color};padding:1px 6px;border-radius:4px;font-size:10px">B${b.id}</span>
+      ${b.title} <span style="color:${pc};font-size:9px;font-weight:400;text-transform:none">${b.priority}</span>
+    </div>${fields}</div>`;
+}
+
+async function saveSettings() {
+  const updates = {};
+  BLOCKS.forEach(b => b.fields.forEach(f => {
+    const el = $(`s_${f.key}`);
+    if (!el) return;
+    if (f.type === 'bool') { updates[f.key] = el.checked; }
+    else if (f.type === 'select') { updates[f.key] = el.value; }
+    else { const v = parseFloat(el.value); if (!isNaN(v)) updates[f.key] = v; }
+  }));
+  const res = await api('/api/risk/settings', {
+    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(updates)
+  });
+  toast(res.ok ? '✓ Configurações salvas!' : '✗ Erro: ' + res.error, res.ok);
+}
+
+/* ── Analytics M7 ────────────────────────────────────────────────── */
+async function loadAnalytics() {
+  const res = await api('/api/risk/analytics');
+  if (!res.ok) return;
+  const d = res.data;
+  $('an-blocked').textContent   = d.trades_blocked ?? 0;
+  $('an-days').textContent      = d.days_protected ?? 0;
+  $('an-circuit').textContent   = d.circuit_breakers ?? 0;
+  $('an-cooldowns').textContent = d.cooldowns ?? 0;
+
+  const rules = d.by_rule || {};
+  const RULE_LABELS = {
+    'DAILY_LOSS_TRIGGERED':       ['Daily Loss',          'b-red'],
+    'TRAILING_PROFIT_TRIGGERED':  ['Trailing Profit',     'b-blue'],
+    'HARD_TARGET_REACHED':        ['Hard Target',         'b-green'],
+    'SOFT_TARGET_ACTIVATED':      ['Soft Target',         'b-purple'],
+    'MAX_TRADES_REACHED':         ['Max Trades',          'b-orange'],
+    'CONSECUTIVE_LOSSES_STOP':    ['Consec. Losses Stop', 'b-red'],
+    'CONSECUTIVE_LOSS_PAUSE':     ['Consec. Pause',       'b-yellow'],
+    'COOLDOWN_STARTED':           ['Cooldown',            'b-yellow'],
+    'TRADE_BLOCKED_RISK_BUDGET':  ['Risk Budget',         'b-orange'],
+    'CIRCUIT_BREAKER_TRIGGERED':  ['Circuit Breaker',     'b-red'],
+    'CIRCUIT_BREAKER_RESET':      ['CB Reset',            'b-green'],
+    'DAY_BLOCK_RESET':            ['Day Block Reset',     'b-green'],
+    'EQUITY_DRAWDOWN_TRIGGERED':  ['Equity Drawdown',     'b-red'],
+  };
+
+  const sorted = Object.entries(rules).sort((a,b) => b[1].count - a[1].count);
+  $('analytics-rules').innerHTML = sorted.length ? sorted.map(([rule, info]) => {
+    const [label, cls] = RULE_LABELS[rule] || [rule, 'b-blue'];
+    return `<div class="rule-row">
+      <span class="rule-name"><span class="badge ${cls}">${label}</span></span>
+      <span class="rule-count">${info.count}x</span>
+    </div>`;
+  }).join('') : '<div style="color:var(--muted);padding:16px;text-align:center">Nenhum evento registrado ainda</div>';
+}
+
+/* ── Eventos M8 ──────────────────────────────────────────────────── */
+async function loadEvents() {
+  const res = await api('/api/risk/events?limit=100');
+  if (!res.ok) return;
+  const tb = $('events-tbody');
+  if (!res.data.length) {
+    tb.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:20px">Nenhum evento registrado</td></tr>';
+    return;
+  }
+  const EVENT_CLASS = {
+    'DAILY_LOSS_TRIGGERED':'b-red','TRAILING_PROFIT_TRIGGERED':'b-red',
+    'HARD_TARGET_REACHED':'b-red','CONSECUTIVE_LOSSES_STOP':'b-red',
+    'CIRCUIT_BREAKER_TRIGGERED':'b-red','EQUITY_DRAWDOWN_TRIGGERED':'b-red',
+    'SOFT_TARGET_ACTIVATED':'b-purple','MAX_TRADES_REACHED':'b-purple',
+    'CONSECUTIVE_LOSS_PAUSE':'b-yellow','COOLDOWN_STARTED':'b-yellow',
+    'TRADE_BLOCKED_RISK_BUDGET':'b-orange',
+    'CIRCUIT_BREAKER_RESET':'b-green','DAY_BLOCK_RESET':'b-green',
+  };
+  tb.innerHTML = res.data.map(e => {
+    const ts  = e.timestamp ? e.timestamp.slice(11,16) : '—';
+    const cls = EVENT_CLASS[e.event_type] || 'b-blue';
+    const label = (e.event_type||'').replace(/_/g,' ');
+    return `<tr>
+      <td style="white-space:nowrap;color:var(--muted);font-size:10px">${ts}</td>
+      <td><span class="badge ${cls}" style="white-space:nowrap">${label}</span></td>
+      <td style="color:var(--muted)">${e.tv_symbol||'—'}</td>
+      <td style="color:var(--muted)">${e.acao||'—'}</td>
+      <td style="text-align:center">${e.score!=null?e.score:'—'}</td>
+      <td style="color:var(--muted);max-width:240px;font-size:10px">${e.event_reason||'—'}</td>
+      <td style="text-align:right">${fmtBRL(e.daily_pnl)}</td>
+      <td style="text-align:right;color:var(--blue)">${e.risk_budget!=null?fmtBRL(e.risk_budget):'—'}</td>
+      <td style="text-align:right;color:var(--green)">${fmtBRL(e.daily_max_profit)}</td>
+      <td style="text-align:right;color:var(--blue)">${fmtBRL(e.protected_floor)}</td>
+      <td style="font-size:10px;color:var(--muted)">${e.status_before||'—'}</td>
+      <td style="font-size:10px">${e.status_after||'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ── Export M9 ───────────────────────────────────────────────────── */
+function exportAudit(fmt) {
+  window.open(`/api/risk/export?fmt=${fmt}`, '_blank');
+}
+
+/* ── Modal de confirmacao (substitui confirm() bloqueado em iframe) ─ */
+let _modalCb = null;
+function showModal(msg, cb) {
+  _modalCb = cb;
+  document.getElementById('modal-msg').textContent = msg;
+  document.getElementById('modal-overlay').style.display = 'flex';
+}
+function modalConfirm() {
+  document.getElementById('modal-overlay').style.display = 'none';
+  if (_modalCb) { _modalCb(); _modalCb = null; }
+}
+function modalCancel() {
+  document.getElementById('modal-overlay').style.display = 'none';
+  _modalCb = null;
+}
+
+/* ── Controls ────────────────────────────────────────────────────── */
+async function resetCircuitBreaker() {
+  showModal('Reativar após Circuit Breaker?\nCertifique-se que investigou o problema.', async () => {
+    const res = await api('/api/risk/reset-circuit-breaker', {method:'POST'});
+    toast(res.ok ? '\u2713 Circuit Breaker resetado' : '\u2717 Erro: ' + res.error, res.ok);
+    if (res.ok) { loadStatus(); loadEvents(); }
+  });
+}
+async function resetDayBlock() {
+  showModal('Desbloquear o dia manualmente?\nO override fica ativo até meia-noite.\nUse "Reativar Proteção" para restaurar antes disso.', async () => {
+    const res = await api('/api/risk/reset-day-block', {method:'POST'});
+    toast(res.ok ? '\u2713 Dia desbloqueado — override ativo' : '\u2717 Erro: ' + res.error, res.ok);
+    if (res.ok) { loadStatus(); loadEvents(); }
+  });
+}
+async function disableHomologOverride() {
+  showModal('Reativar proteção do CPE?\nO sistema voltará a bloquear conforme as regras configuradas.', async () => {
+    const res = await api('/api/risk/disable-homolog-override', {method:'POST'});
+    toast(res.ok ? '\u2713 Proteção reativada' : '\u2717 Erro: ' + res.error, res.ok);
+    if (res.ok) { loadStatus(); loadEvents(); }
+  });
+}
+
+/* ── Init ────────────────────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+  loadStatus();
+  loadSettings();
+  setInterval(loadStatus, 12000);
+});
+</script>
+
+<!-- Modal overlay -->
+<div id="modal-overlay" style="display:none;position:fixed;inset:0;background:#000a;z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:#161b22;border:1px solid #30363d;border-radius:12px;padding:24px 28px;max-width:420px;width:90%;box-shadow:0 8px 32px #000;">
+    <p id="modal-msg" style="color:#e6edf3;font-size:13px;white-space:pre-line;margin-bottom:20px;line-height:1.6;"></p>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button onclick="modalCancel()" style="padding:8px 18px;border-radius:6px;border:1px solid #30363d;background:transparent;color:#8b949e;cursor:pointer;font-size:12px;">Cancelar</button>
+      <button onclick="modalConfirm()" style="padding:8px 18px;border-radius:6px;border:none;background:#f85149;color:#fff;cursor:pointer;font-size:12px;font-weight:700;">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
