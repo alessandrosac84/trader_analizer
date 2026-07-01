@@ -942,11 +942,17 @@ def _calc_multi_score(
     _burst_max       = pts.get("burst_vel", 0) >= 30
     _consistency_pts = pts.get("tick_consistency", 0)
 
-    if _burst_max and _consistency_pts >= 30:       # burst >=3x + tape >=90%
+    # v6 ASSERTIVIDADE: dados reais (scalper_trades.csv, BITM26) mostram que
+    # score ALTO = PIOR resultado: faixa 90-109 teve 0% de acerto; 80-89 ~33%;
+    # 60-79 (melhor) ~32-37%. A combinacao burst-maximo + tape-maximo indica que
+    # o movimento JA aconteceu — estamos entrando no TETO do impulso, nao no
+    # inicio. Antes isso era so uma penalidade (-20); agora vira HARD-BLOCK.
+    if _burst_max and _consistency_pts >= 30:       # burst >=3x + tape >=90% -> exaustao
         pts["exaustao_pen"] = -20
-        reasons.append("AVISO Impulso no teto: burst x3+ com tape 90%+ -> possivel exaustao")
+        hard_blocked = True
+        reasons.append("🚫 Exaustao no teto: burst x3+ com tape 90%+ -> entrada tardia bloqueada")
     elif _burst_max and _consistency_pts >= 22:     # burst >=3x + tape >=80%
-        pts["exaustao_pen"] = -10
+        pts["exaustao_pen"] = -18   # v6: era -10 (penalidade mais forte)
         reasons.append("AVISO Burst extremo com tape 80%+ -> atencao a exaustao")
     else:
         pts["exaustao_pen"] = 0

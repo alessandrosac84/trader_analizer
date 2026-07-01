@@ -308,9 +308,26 @@ def _s(points: int) -> str:
 # Gerador de sinal principal
 # ---------------------------------------------------------------------------
 
-COMPRA_THRESHOLD = 4
-VENDA_THRESHOLD  = -4
-ADX_MIN_TREND    = 20   # abaixo disso -> range -> bloqueia sinal
+# ── v6 ASSERTIVIDADE (2026-07) ────────────────────────────────────────────
+# Threshold elevado de |4| para |7|. Dados reais (auto_trades, jun/2026):
+# trades executados com |score| 4-8 tiveram win rate ~12%; os UNICOS vencedores
+# tinham score 9 e 12. |4| e ruido num score aditivo de ~15 indicadores.
+# Postura escolhida: menos trades, mais qualidade.
+COMPRA_THRESHOLD = 7
+VENDA_THRESHOLD  = -7
+ADX_MIN_TREND    = 23   # v6: era 20. ADX>=23 = tendencia mais confiavel (menos range)
+# v6.2 — TETO DE EXAUSTAO. Backtest de 877 sinais reais (WIN+WDO) mostrou que
+# |score| extremo tem expectancia PIOR (exaustao / entrada tardia no impulso):
+#   WIN |score|>=11 = -0,30 R (WR 32%);  WDO |score|>=12 = -0,37 R (WR 27%).
+# Mesmo padrao do scalper (score 90+ = 0% acerto). Acima do teto, o sinal vira
+# NEUTRO (nao opera): o movimento provavelmente ja aconteceu.
+EXHAUSTION_CEILING = 11   # |effective_score| >= isso -> NEUTRO (exaustao)
+# v6.2 — ALVO MINIMO EM R. Backtest MT5: o TP1 antigo (encurtado ao S/R mais
+# proximo) derrubava o RR para ~1.0 e tornava o sistema perdedor a 46-50% de
+# acerto. Com alvo fixo de 1.5R o WDO saltou de +0,092 para +0,182 R/trade
+# (PF 1,34). Regra: nunca aceitar 1o alvo com RR < TARGET_RR; usar S/R so quando
+# ele estiver AINDA MAIS LONGE que 1.5R.
+TARGET_RR = 1.5
 
 
 def generate_signal(
@@ -581,29 +598,33 @@ def generate_signal(
     directional_block = None   # "COMPRA_BLOCKED" | "VENDA_BLOCKED" | None
 
     if htf_known:
-        # Alinhamento pleno bearish: bloqueia COMPRA
-        if ema200_bearish and htf_bearish:
+        # ── v6 ASSERTIVIDADE: filtro direcional ENDURECIDO ────────────────
+        # Antes, so bloqueava contra-tendencia quando EMA200 E 1h estavam
+        # alinhados. Nos dados reais aparecem sinais de VENDA com 1h em ALTA
+        # (contra-tendencia) que perderam. Agora a tendencia de 1h sozinha ja
+        # veta operacoes contrarias: NUNCA comprar com 1h em baixa nem vender
+        # com 1h em alta. Regra "menos trades, mais qualidade".
+        if htf_bearish:
             if effective_score >= COMPRA_THRESHOLD:
                 directional_block = "COMPRA_BLOCKED"
                 sinais.append(
-                    "⛔ Filtro direcional: preco abaixo da EMA200 + 1h bearish - "
-                    "COMPRA bloqueada contra a tendencia macro [filtro]"
+                    "⛔ Filtro direcional v6: 1h em BAIXA - "
+                    "COMPRA bloqueada contra a tendencia maior [filtro]"
                 )
                 effective_score = COMPRA_THRESHOLD - 1  # fica NEUTRO
 
-        # Alinhamento pleno bullish: bloqueia VENDA
-        elif ema200_bullish and htf_bullish:
+        elif htf_bullish:
             if effective_score <= VENDA_THRESHOLD:
                 directional_block = "VENDA_BLOCKED"
                 sinais.append(
-                    "⛔ Filtro direcional: preco acima da EMA200 + 1h bullish - "
-                    "VENDA bloqueada contra a tendencia macro [filtro]"
+                    "⛔ Filtro direcional v6: 1h em ALTA - "
+                    "VENDA bloqueada contra a tendencia maior [filtro]"
                 )
                 effective_score = VENDA_THRESHOLD + 1  # fica NEUTRO
 
         # Sinal misto (EMA200 e 1h divergem): exige threshold maior
         else:
-            MIXED_THRESHOLD = 6
+            MIXED_THRESHOLD = 9   # v6: era 6 (acompanha threshold base 7)
             if VENDA_THRESHOLD < effective_score < COMPRA_THRESHOLD:
                 pass  # ja neutro, sem impacto
             elif effective_score >= COMPRA_THRESHOLD and effective_score < MIXED_THRESHOLD:
@@ -620,19 +641,29 @@ def generate_signal(
                 effective_score = VENDA_THRESHOLD + 1
     # -------------------------------------------------------------------------
 
+    # v6.2 — Teto de exaustao: |score| extremo = movimento provavelmente esgotado.
+    if abs(effective_score) >= EXHAUSTION_CEILING:
+        sinais.append(
+            f"🚫 Exaustao: |score| {abs(effective_score)} >= {EXHAUSTION_CEILING} - "
+            "impulso provavelmente no teto, sinal neutralizado [filtro v6.2]"
+        )
+        effective_score = 0   # forca NEUTRO
+
     if effective_score >= COMPRA_THRESHOLD:
         acao  = "COMPRA"
         forca = "FORTE" if effective_score >= COMPRA_THRESHOLD + 2 else "MODERADA"
         entrada = _r(close)
         stop    = _r(close - 1.2 * atr)   # v5: stop mais justo (1.2x vs 1.5x)
 
-        # TP1: usa nivel de resistencia S/R mais proximo se disponivel
-        sr_tp1 = _nearest_sr_tp(close, sr_resistances, "above", atr)
-        if sr_tp1 is not None:
+        # TP1 (v6.2): piso de TARGET_RR. Usa S/R so se estiver MAIS LONGE que 1.5R.
+        min_tp1 = close + TARGET_RR * (close - stop)   # 1.5R acima da entrada
+        sr_tp1  = _nearest_sr_tp(close, sr_resistances, "above", atr)
+        if sr_tp1 is not None and sr_tp1 >= min_tp1:
             tp1 = _r(sr_tp1)
-            sinais.append(f"TP1 ajustado para resistencia S/R detectada em {tp1} [nivel de mercado]")
+            sinais.append(f"TP1 na resistencia S/R {tp1} (>= {TARGET_RR}R) [nivel de mercado]")
         else:
-            tp1 = _r(close + 2.0 * atr)   # v5: alvo maior (2.0x vs 1.5x) -> R:R ~1:1.67
+            tp1 = _r(min_tp1)
+            sinais.append(f"TP1 fixado em {TARGET_RR}R = {tp1} (S/R proximo encurtaria o alvo) [v6.2]")
 
         tp2 = _r(close + 3.5 * atr)
         tp3 = _r(close + 6.0 * atr)
@@ -643,13 +674,15 @@ def generate_signal(
         entrada = _r(close)
         stop    = _r(close + 1.2 * atr)   # v5: stop mais justo
 
-        # TP1: usa nivel de suporte S/R mais proximo se disponivel
-        sr_tp1 = _nearest_sr_tp(close, sr_supports, "below", atr)
-        if sr_tp1 is not None:
+        # TP1 (v6.2): piso de TARGET_RR. Usa S/R so se estiver MAIS LONGE que 1.5R.
+        min_tp1 = close - TARGET_RR * (stop - close)   # 1.5R abaixo da entrada
+        sr_tp1  = _nearest_sr_tp(close, sr_supports, "below", atr)
+        if sr_tp1 is not None and sr_tp1 <= min_tp1:
             tp1 = _r(sr_tp1)
-            sinais.append(f"TP1 ajustado para suporte S/R detectado em {tp1} [nivel de mercado]")
+            sinais.append(f"TP1 no suporte S/R {tp1} (>= {TARGET_RR}R) [nivel de mercado]")
         else:
-            tp1 = _r(close - 2.0 * atr)   # v5: alvo maior
+            tp1 = _r(min_tp1)
+            sinais.append(f"TP1 fixado em {TARGET_RR}R = {tp1} (S/R proximo encurtaria o alvo) [v6.2]")
 
         tp2 = _r(close - 3.5 * atr)
         tp3 = _r(close - 6.0 * atr)

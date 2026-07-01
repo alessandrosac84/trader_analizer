@@ -158,6 +158,12 @@ def _startup_once():
         _start_mcs()
     except Exception as e:
         logger.warning("Market Close Scheduler nao iniciou (nao bloqueante): %s", e)
+    try:
+        # v6.2 — Supervisor do Scalper (avalia a cada 20min; pausa se detectar sangria)
+        from services.scalper_supervisor import start_supervisor_scheduler as _start_sup
+        _start_sup()
+    except Exception as e:
+        logger.warning("Scalper Supervisor nao iniciou (nao bloqueante): %s", e)
 
 
 def allowed_file(filename: str) -> bool:
@@ -842,10 +848,12 @@ def api_autotrade_execute():
                 try:
                     ai_result = _fut.result(timeout=12)
                 except _FutTimeout:
-                    logger.warning("AI validator timeout (12s) — aprovacao pelo score tecnico")
+                    # v6 ASSERTIVIDADE: timeout da IA agora FALHA FECHADO (aguarda,
+                    # nao executa). Antes aprovava automaticamente no timeout.
+                    logger.warning("AI validator timeout (12s) — fail-closed: AGUARDAR")
                     ai_result = {
-                        "aprovado": True, "confianca": 60, "veredito": "EXECUTAR",
-                        "motivo": "Timeout IA (12s) — aprovacao pelo score tecnico.",
+                        "aprovado": False, "confianca": 0, "veredito": "AGUARDAR",
+                        "motivo": "Timeout IA (12s) — gate fail-closed: trade nao executado.",
                         "alertas": [], "tp1_sugerido": None, "ia_usada": True,
                     }
             # AGUARDAR e BLOQUEAR ambos impedem execução automática.
@@ -895,7 +903,13 @@ def api_autotrade_execute():
                     "ai": ai_result,
                 })
         except Exception as ai_exc:
-            logger.warning("AI validator falhou, continuando: %s", ai_exc)
+            # v6 ASSERTIVIDADE: falha no bloco de validacao IA agora BLOQUEIA a
+            # entrada (fail-closed), em vez de seguir e executar sem validacao.
+            logger.warning("AI validator falhou — fail-closed, trade bloqueado: %s", ai_exc)
+            return jsonify({
+                "ok": False, "result": None,
+                "error": f"Validacao IA falhou (fail-closed) — trade nao executado: {ai_exc}",
+            })
 
     # ── Partial-close mode: 3 contratos, TPs calculados pelo R/R do SL ──────
     # TPs derivados do risco real (distância entrada→SL), nunca do sinal.
@@ -954,6 +968,20 @@ def api_autotrade_execute():
                                 "error": f"CPE Soft-Target: score {score} < mínimo conservador {score_min_eff}", "cpe": _cpe})
     except Exception as _cpe_err:
         logger.warning("CPE check falhou (não bloqueante): %s", _cpe_err)
+
+    # ── Order flow (v6.1): book/DOM + agressão + volume real do MT5 ───────────
+    # Confirmação final de microestrutura. Só bloqueia quando o fluxo contradiz
+    # FORTEMENTE a direção (book E tape contra). Fail-safe: sem dados → não veta.
+    _of = None
+    try:
+        from services.orderflow_mt5 import confirm_direction as _of_confirm
+        _of = _of_confirm(tv_symbol, acao)
+        if not _of.get("allow", True):
+            logger.warning("Order flow bloqueou %s %s: %s", acao, tv_symbol, _of.get("reason"))
+            return jsonify({"ok": False, "result": None,
+                            "error": f"Order flow: {_of.get('reason')}", "orderflow": _of})
+    except Exception as _of_err:
+        logger.warning("Order flow check falhou (não bloqueante): %s", _of_err)
 
     result, error = execute_trade(
         tv_symbol=tv_symbol,

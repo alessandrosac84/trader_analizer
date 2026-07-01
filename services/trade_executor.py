@@ -17,14 +17,28 @@ MAGIC_NUMBER   = 20260505
 BOT_COMMENT    = "TradeAI-DEMO"
 MAX_POSITIONS  = 1          # máximo de posições abertas simultâneas
 DEFAULT_VOLUME = 1.0        # 1 mini contrato
-SCORE_MIN      = 4          # |score| mínimo para executar (igual ao COMPRA/VENDA_THRESHOLD)
+SCORE_MIN      = 7          # v6: era 4. |score| mínimo GLOBAL (fallback)
+# v6.2 — THRESHOLD POR ATIVO. Backtest MT5 (877 sinais) mostrou perfis OPOSTOS:
+#   WIN so tem edge em |score| ALTO (>=9: +0,056 R; >=10: +0,333 R; <9 negativo);
+#   WDO tem edge em |score| BAIXO (7-8), degradando acima disso.
+# Por isso cada ativo tem seu proprio piso. Ativos sem entrada usam SCORE_MIN.
+MIN_SCORE_BY_SYMBOL = {
+    "BMFBOVESPA:WIN1!": 9,   # WIN: so scores fortes
+    "BMFBOVESPA:WDO1!": 7,   # WDO: opera cedo
+}
+# v6.1 — RR_MIN recalibrado por replay dos trades reais. O TP1 deste sistema e um
+# ALVO PARCIAL curto (existem TP2/TP3 + fechamento parcial), entao seu RR fica
+# proximo de 1.0 mesmo em trades vencedores. Um piso alto (1.5) BLOQUEAVA os
+# unicos vencedores reais (score 9 e 12, RR~1.0). Agora RR_MIN e apenas um GUARDA
+# DE SANIDADE: bloqueia so setups quebrados (stop 2x+ mais longe que o 1o alvo).
+RR_MIN         = 0.5        # v6.1: era 1.5 (piso alto matava os vencedores)
 B3_OPEN        = dt_time(9, 0)
 B3_CLOSE       = dt_time(17, 30)
 
 # Mapeamento TV_SYMBOL -> MT5_SYMBOL para order_send
 _TV_TO_MT5_TRADE = {
     "BMFBOVESPA:WIN1!": os.getenv("WIN_MT5_SYMBOL", "WINQ26"),
-    "BMFBOVESPA:WDO1!": os.getenv("WDO_MT5_SYMBOL", "WDOM26"),
+    "BMFBOVESPA:WDO1!": os.getenv("WDO_MT5_SYMBOL", "WDOQ26"),
     "BMFBOVESPA:PETR4": "PETR4",
     "BMFBOVESPA:RADL3": "RADL3",
     "FX:EURUSD":        "EURUSD",
@@ -132,8 +146,26 @@ def execute_trade(
     if acao not in ("COMPRA", "VENDA"):
         return None, "Ação inválida — apenas COMPRA ou VENDA."
 
-    if abs(score or 0) < SCORE_MIN:
-        return None, f"Score {score} abaixo do mínimo ({SCORE_MIN}) — trade bloqueado."
+    _min_score = MIN_SCORE_BY_SYMBOL.get(tv_symbol.upper().strip(), SCORE_MIN)
+    if abs(score or 0) < _min_score:
+        return None, f"Score {score} abaixo do mínimo do ativo ({_min_score}) — trade bloqueado."
+
+    # v6 ASSERTIVIDADE: piso de risco/retorno. Nos dados reais varios trades
+    # tinham TP1 mais perto que o stop (RR < 1), exigindo win rate alto p/ lucrar.
+    # Bloqueia quando reward/risk < RR_MIN (so avalia se entrada, sl e tp1 existem).
+    try:
+        if entrada is not None and sl is not None and tp1 is not None:
+            _risk   = abs(float(entrada) - float(sl))
+            _reward = abs(float(tp1) - float(entrada))
+            if _risk > 0:
+                _rr = _reward / _risk
+                if _rr < RR_MIN:
+                    return None, (
+                        f"RR {_rr:.2f} abaixo do mínimo ({RR_MIN}) — "
+                        f"risco {_risk:.0f} vs retorno {_reward:.0f}. Trade bloqueado."
+                    )
+    except Exception:
+        pass  # dados de preço ausentes/inválidos não devem quebrar a execução
 
     mt5_symbol = _mt5_symbol(tv_symbol)
     if not mt5_symbol:

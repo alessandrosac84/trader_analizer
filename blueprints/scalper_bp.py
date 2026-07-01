@@ -231,11 +231,17 @@ _SYMBOL_TRADE_CFG: dict[str, dict] = {
     },
     # Bitcoin Futuro B3 — baixa liquidez, movimentos mais lentos e maiores
     "BITM26": {
-        "score_min":       35,     # score máximo atingível é menor (menos ticks)
-        "threshold_pct":   58.0,   # agressão mais difícil de concentrar
-        "confirm_n":        2,     # 2 confirmações (ticks chegam mais devagar)
-        "cooldown_sec":    45,     # movimentos do BTC — ajuste P5 (era 90s)
-        "max_daily":       10,
+        # ── v6 ASSERTIVIDADE ──────────────────────────────────────────────
+        # Dados reais (scalper_trades.csv): score < 60 = ~0% de acerto;
+        # faixa 60-79 e a unica com edge (~32-37%). Piso subiu 35 -> 60 para
+        # so operar a faixa com historico positivo. threshold_pct e confirm_n
+        # tambem subiram (menos trades, mais qualidade). cooldown e menor
+        # frequencia diaria reduzem overtrading (era fonte de perdas em serie).
+        "score_min":       65,     # v6/v6.1: era 35. Replay real: piso 65 = melhor P&L (-280 vs -430 em 60)
+        "threshold_pct":   62.0,   # v6: era 58.0
+        "confirm_n":        3,     # v6: era 2 (exige 3 confirmacoes consecutivas)
+        "cooldown_sec":    90,     # v6: era 45 (menos overtrading)
+        "max_daily":        6,     # v6: era 10 (limite diario menor)
         "tp_ticks":         4,     # BTC: 4 ticks = R$400 por contrato (4 × R$100)
         "sl_ticks":         2,
         "use_atr_sizing":  False,  # ATR do BITM26 pode ser instável com poucos dados
