@@ -97,8 +97,11 @@ SYMBOL_CONFIG: dict[str, dict] = {
         "book_strong_pct":           30,    # imb% para 20 pts
         "book_weak_pct":             15,    # imb% para 12 pts
         "book_penalty_pct":          20,    # imb% contra para -8 pts
-        # Volatility
+        # Volatility (20s)
         "volatility_min_ticks":      2,     # range mínimo para mercado "vivo"
+        # Volatility 60s (P2 Scalper V2) — filtro de mercado morto
+        "min_range_60s":             4,     # ticks mínimos em 60s → bloqueia com LOW_VOLATILITY
+        "expansion_range_60s":       10,    # ticks > isso → bônus +10pts no score
     },
 
     # ── Mini Dólar / Dólar Futuro — alta liquidez ─────────────────────────
@@ -131,13 +134,16 @@ SYMBOL_CONFIG: dict[str, dict] = {
         "burst_min_ticks":           1,     # 1 tick em 2s já conta
         "consistency_hard_block":    42,    # mais tolerante (menos ticks no buffer)
         "consistency_hb_aligned":    35,
-        "entry_hard_ticks":          3,     # BTC move mais em pts, 3 ticks = tarde
+        "entry_hard_ticks":          5,     # BTC move mais em pts, 5 ticks = tarde (P5)
         "absorption_min_vol":         3,    # vol é muito menor
         "exhaustion_min_vol":          6,
         "book_strong_pct":           20,    # book menos espesso
         "book_weak_pct":             10,
         "book_penalty_pct":          15,
         "volatility_min_ticks":       1,
+        # Volatility 60s BITM26 — limiares menores (BTC tem menos ticks)
+        "min_range_60s":              2,    # 2 ticks = R$200 de range mínimo em 60s
+        "expansion_range_60s":        6,    # 6 ticks → bônus
     },
 
     # ── Ouro / XAUUSD — liquidez média ────────────────────────────────────
@@ -945,6 +951,15 @@ def _calc_multi_score(
     else:
         pts["exaustao_pen"] = 0
 
+    # ── 9. Bônus expansão de volatilidade 60s (P2 Scalper V2) ─────────────────
+    # Mercado em expansão de range → movimento mais definido → +10pts
+    vol60 = _calc_volatility(mt5_sym)
+    if vol60.get("expansion"):
+        pts["expansion_bonus"] = 10
+        reasons.append(f"📈 Expansão 60s: {vol60['range_60s']:.0f}tk > {vol60['expansion_range_60s']}tk")
+    else:
+        pts["expansion_bonus"] = 0
+
     # ── Score final ──────────────────────────────────────────────────────────
     total = round(sum(pts.values()), 1)
     return {
@@ -957,6 +972,8 @@ def _calc_multi_score(
         "tick_consistency":  round(consistency, 1),
         "burst_vel_2s":      count_2s,
         "vwap_aligned":      vwap_aligned,
+        "range_60s":         vol60.get("range_60s", 0),
+        "vol60_ok":          vol60.get("vol60_ok", True),
     }
 
 def _calc_aggr(mt5_sym: str, window_sec: int) -> dict:
@@ -1001,27 +1018,56 @@ def _build_tape(mt5_sym: str, tape_size: int) -> list:
 
 def _calc_volatility(mt5_sym: str, window_sec: int = 20) -> dict:
     """Calcula range de preço (em ticks) dos últimos window_sec segundos.
-    Retorna range_ticks e ok=True se mercado tem movimento suficiente."""
-    buf = _tick_buf.get(mt5_sym)
+    Retorna range_ticks, range_60s e ok=True se mercado tem movimento suficiente.
+    range_60s alimenta o filtro LOW_VOLATILITY (P2 Scalper V2)."""
+    buf    = _tick_buf.get(mt5_sym)
     ts_val = TICK_SIZE_OVERRIDE.get(mt5_sym, 0.01)
+    cfg_v  = _sym_cfg(mt5_sym)
 
     if not buf:
-        return {"range_ticks": 0, "ok": False, "reason": "sem dados"}
+        return {
+            "range_ticks": 0, "range_60s": 0,
+            "ok": False, "vol60_ok": False, "expansion": False,
+            "reason": "sem dados",
+        }
 
-    cutoff  = time.time() - window_sec
-    recent  = [e["last"] for e in buf if e["ts"] >= cutoff and e["last"] > 0]
+    now    = time.time()
+    cutoff = now - window_sec
+    recent = [e["last"] for e in buf if e["ts"] >= cutoff and e["last"] > 0]
 
     if len(recent) < 3:
-        return {"range_ticks": 0, "ok": False, "reason": "poucos ticks"}
+        return {
+            "range_ticks": 0, "range_60s": 0,
+            "ok": False, "vol60_ok": False, "expansion": False,
+            "reason": "poucos ticks",
+        }
 
-    price_range   = max(recent) - min(recent)
-    range_ticks   = round(price_range / ts_val, 1)
-    cfg_v = _sym_cfg(mt5_sym)
+    price_range = max(recent) - min(recent)
+    range_ticks = round(price_range / ts_val, 1)
+
+    # ── Range 60s (P2) ─────────────────────────────────────────────────────
+    cutoff60  = now - 60
+    recent60  = [e["last"] for e in buf if e["ts"] >= cutoff60 and e["last"] > 0]
+    if len(recent60) >= 2:
+        range_60s = round((max(recent60) - min(recent60)) / ts_val, 1)
+    else:
+        range_60s = range_ticks  # fallback para janela curta
+
+    min_r60     = cfg_v.get("min_range_60s", 4)
+    exp_r60     = cfg_v.get("expansion_range_60s", 10)
+    vol60_ok    = range_60s >= min_r60
+    expansion   = range_60s >= exp_r60
+
     return {
         "range_ticks": range_ticks,
+        "range_60s":   range_60s,
         "ok":          range_ticks >= cfg_v["volatility_min_ticks"],
-        "max":         round(max(recent), 4),
-        "min":         round(min(recent), 4),
+        "vol60_ok":    vol60_ok,
+        "expansion":   expansion,
+        "min_range_60s":       min_r60,
+        "expansion_range_60s": exp_r60,
+        "max":  round(max(recent), 4),
+        "min":  round(min(recent), 4),
     }
 
 
@@ -1491,57 +1537,56 @@ def close_scalper_position(symbol: str) -> tuple:
             return {"order": r.order, "price": round(r.price, 2),
                     "profit": pos["profit"]}, None
 
-        code    = r.retcode if r else "?"
-        comment = r.comment if r else "sem resposta"
-        return None, f"MT5 retcode {code}: {comment}"
+        code    = r.retcode if r else '?'
+        comment = r.comment if r else 'sem resposta'
+        return None, f'MT5 retcode {code}: {comment}'
 
     except Exception as exc:
-        logger.error("close_scalper_position error: %s", exc)
+        logger.error('close_scalper_position error: %s', exc)
         return None, str(exc)
+
 
 def move_sl_to_breakeven(symbol: str) -> tuple:
     """Move o SL para o preco de entrada (break-even) quando o lucro justifica."""
     mt5_sym = _resolve_symbol(symbol)
 
-
-    # ── MODO SIMULAÇÃO ────────────────────────────────────────────────────────
     if _sim_mode:
         pos = _sim_position.get(mt5_sym)
         if not pos:
-            return None, "Nenhuma posicao simulada aberta."
-        if pos.get("be_done"):
-            return {"already": True}, None
-        pos["sl"]      = pos["price_open"]
-        pos["be_done"] = True
-        logger.info("SIM: break-even aplicado em %.4f", pos["price_open"])
-        return {"ok": True, "new_sl": pos["price_open"]}, None
+            return None, 'Sem posicao simulada'
+        old_sl = pos.get('sl')
+        pos['sl'] = pos['price_open']
+        return {'old_sl': old_sl, 'new_sl': pos['sl']}, None
 
-    # ── MODO REAL ─────────────────────────────────────────────────────────────
     try:
         import MetaTrader5 as mt5
         if not _mt5_init():
-            return None, "MT5 nao inicializado"
+            return None, f'MT5 nao inicializado: {mt5.last_error()}'
 
-        pos, err = get_scalper_position(symbol)
-        if not pos:
-            return None, err or "Nenhuma posicao aberta."
+        positions = mt5.positions_get(symbol=mt5_sym)
+        if not positions:
+            return None, 'Sem posicao aberta'
+        pos = positions[0]
+
+        new_sl = pos.price_open
+        new_tp = pos.tp
 
         req = {
-            "action":   mt5.TRADE_ACTION_SLTP,
-            "symbol":   mt5_sym,
-            "position": pos["ticket"],
-            "sl":       pos["price_open"],
-            "tp":       pos["tp"],
+            'action':   mt5.TRADE_ACTION_SLTP,
+            'symbol':   mt5_sym,
+            'position': pos.ticket,
+            'sl':       new_sl,
+            'tp':       new_tp,
+            'magic':    SCALPER_MAGIC,
+            'comment':  'BE',
         }
         r = mt5.order_send(req)
-
         if r and r.retcode == mt5.TRADE_RETCODE_DONE:
-            return {"ok": True, "new_sl": pos["price_open"]}, None
-
-        code    = r.retcode if r else "?"
-        comment = r.comment if r else "sem resposta"
-        return None, f"MT5 retcode {code}: {comment}"
+            return {'old_sl': round(pos.sl, 2), 'new_sl': round(new_sl, 2)}, None
+        code    = r.retcode if r else '?'
+        comment = r.comment if r else 'sem resposta'
+        return None, f'SLTP retcode {code}: {comment}'
 
     except Exception as exc:
-        logger.error("move_sl_to_breakeven error: %s", exc)
+        logger.error('move_sl_to_breakeven error: %s', exc)
         return None, str(exc)

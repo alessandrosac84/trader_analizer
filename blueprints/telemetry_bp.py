@@ -54,6 +54,11 @@ def market_center():
     return render_template("market_center.html")
 
 
+@telemetry_bp.route("/analytics")
+def analytics_page():
+    return render_template("analytics.html")
+
+
 @telemetry_bp.route("/api/analytics/opportunity", methods=["POST"])
 def api_log_opportunity():
     try:
@@ -194,6 +199,22 @@ def api_analytics_recent():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
-@telemetry_bp.route("/analytics")
-def analytics_dashboard():
-    return render_template("analytics.html")
+@telemetry_bp.route("/api/analytics/opportunity-log", methods=["POST"])
+def api_analytics_log_opportunity():
+    try:
+        from services.opportunity_service import log_opportunity
+        body = request.get_json(silent=True) or {}
+        log_opportunity(
+            tv_symbol  = body.get("tv_symbol", ""),
+            interval   = body.get("interval", "15"),
+            acao       = body.get("acao", ""),
+            score      = body.get("score"),
+            entrada    = body.get("entrada"),
+            stop       = body.get("stop"),
+            tp1        = body.get("tp1"),
+            signal     = body.get("signal") or {},
+        )
+        return jsonify({"ok": True})
+    except Exception as exc:
+        logger.exception("api_analytics_log_opportunity error")
+        return jsonify({"ok": False, "error": str(exc)}), 500

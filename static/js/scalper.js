@@ -24,6 +24,7 @@ var _posTicket    = null;
 var _dataTimer    = null;
 var _posTimer     = null;
 var _sessionTimer = null;
+var _timeExitTimer = null;   // P3+P4: poll server-side time exit a cada 5s
 
 // Último sinal calculado no frontend (para envio ao auto-check)
 var _currentSignal   = "NEUTRO";
@@ -824,6 +825,7 @@ function _pollPosition() {
       if (!_posOpenTime) {
         _posOpenTime        = pos.open_time ? (pos.open_time * 1000) : Date.now();
         _breakEvenTriggered = false;
+        _startTimeExitTimer();  // P3+P4: inicia verificação server-side de tempo
       }
 
       _checkBreakEvenAndTimeExit(pos);
@@ -955,6 +957,57 @@ function _onPositionClosed(ticket, profit) {
   // Esconder caixa de posição
   var posBox = document.getElementById("pos-box");
   if (posBox) posBox.className = "";
+
+  // Parar timer de time-exit (P3+P4)
+  _stopTimeExitTimer();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Time Exit server-side (P3+P4 Scalper V2)
+   Chama /api/scalper/check-time-exit a cada 5s quando há posição aberta.
+   O servidor decide se fecha por TIME_EXIT (P3) ou TIME_STOP (P4).
+───────────────────────────────────────────────────────────────────────────── */
+function _startTimeExitTimer() {
+  if (_timeExitTimer) return;  // já rodando
+  _timeExitTimer = setInterval(_runTimeExitCheck, 5000);
+}
+
+function _stopTimeExitTimer() {
+  if (_timeExitTimer) {
+    clearInterval(_timeExitTimer);
+    _timeExitTimer = null;
+  }
+}
+
+function _runTimeExitCheck() {
+  if (!_hasPosition) { _stopTimeExitTimer(); return; }
+  fetch("/api/scalper/check-time-exit", {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({ symbol: _symbol, pnl_now: _posProfit || 0 }),
+  })
+  .then(function (r) { return r.json(); })
+  .then(function (d) {
+    if (!d.ok) return;
+    if (d.action === "TIME_EXIT" || d.action === "TIME_STOP") {
+      _setStatus("⏱ " + d.action + ": " + d.reason);
+      _stopTimeExitTimer();
+      // Registrar fechamento
+      fetch("/api/scalper/register-close", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          profit: d.pnl || 0,
+          reason: d.action,
+          symbol: _symbol,
+        }),
+      })
+      .then(function (r2) { return r2.json(); })
+      .then(function () { _loadSession(); })
+      .catch(function () {});
+    }
+  })
+  .catch(function () {});
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -1169,6 +1222,7 @@ function _initSymbolSelect() {
   var sel = document.getElementById("sym-select");
   if (!sel) return;
   sel.addEventListener("change", function () {
+    _saveCfg();                    // salva config do símbolo atual antes de trocar
     _symbol       = sel.value;
     _lastPrice    = null;
     _tapeEntries  = [];
@@ -1178,7 +1232,57 @@ function _initSymbolSelect() {
     if (tapeEl) tapeEl.innerHTML = "";
     var posBox = document.getElementById("pos-box");
     if (posBox) posBox.className = "";
+    _restoreCfg(_symbol);          // carrega config salva do novo símbolo
     _setStatus("Símbolo alterado para " + _symbol);
+  });
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Persistência do painel de configuração (localStorage) — POR SÍMBOLO
+   Cada ativo tem sua própria configuração salva independentemente.
+   Chave: "scalper_cfg_v2_<SYMBOL>"  (ex: scalper_cfg_v2_WINM26)
+─────────────────────────────────────────────────────────────────────────────── */
+var _CFG_IDS = [
+  "cfg-volume", "cfg-tp", "cfg-sl", "cfg-threshold", "cfg-score-min",
+  "cfg-confirm", "cfg-cooldown", "cfg-be-ticks", "cfg-time-exit",
+  "cfg-vol-min", "cfg-vel-min", "cfg-max-daily",
+  "cfg-atr-sizing", "cfg-vwap-filter"
+];
+
+function _cfgKey(sym) {
+  return "scalper_cfg_v2_" + (sym || _symbol || "DEFAULT");
+}
+
+function _saveCfg() {
+  var saved = {};
+  _CFG_IDS.forEach(function (id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    saved[id] = (el.type === "checkbox") ? el.checked : el.value;
+  });
+  try { localStorage.setItem(_cfgKey(_symbol), JSON.stringify(saved)); }
+  catch (e) { /* storage indisponível */ }
+}
+
+function _restoreCfg(sym) {
+  var raw;
+  try { raw = localStorage.getItem(_cfgKey(sym || _symbol)); } catch (e) { return; }
+  if (!raw) return;
+  var saved;
+  try { saved = JSON.parse(raw); } catch (e) { return; }
+  _CFG_IDS.forEach(function (id) {
+    if (!(id in saved)) return;
+    var el = document.getElementById(id);
+    if (!el) return;
+    if (el.type === "checkbox") { el.checked = !!saved[id]; }
+    else { el.value = saved[id]; }
+  });
+}
+
+function _bindCfgPersist() {
+  _CFG_IDS.forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener("change", _saveCfg);
   });
 }
 
@@ -1196,6 +1300,10 @@ document.addEventListener("DOMContentLoaded", function () {
   _updateConfirmBar(0, 3);
   _setStatus("Iniciando conexão...");
   _loadSession();
+
+  // Restaura configurações salvas (antes de iniciar os timers)
+  _restoreCfg();
+  _bindCfgPersist();
 
   _dataTimer    = setInterval(_pollData,     500);
   _posTimer     = setInterval(_pollPosition, 800);
@@ -1331,48 +1439,269 @@ function _logRenderSummary(trades, filterDate) {
   }
 }
 
+/* -----------------------------------------------------------------------
+   Helpers do Log de Trades
+----------------------------------------------------------------------- */
+function _logStat(label, value, color) {
+  return '<span class="log-stat-item"><span class="log-stat-lbl">' + label + '</span>'
+       + '<span class="log-stat-val" style="color:' + (color || "var(--text)") + '">'
+       + value + '</span></span>';
+}
+
+function _logContextGroup(title, data) {
+  if (!data || typeof data !== "object") return "";
+  var keys = Object.keys(data);
+  if (!keys.length) return "";
+  var total = keys.reduce(function (s, k) { return s + (data[k] || 0); }, 0);
+  if (!total) return "";
+  var bars = keys.map(function (k) {
+    var pct = total > 0 ? data[k] / total * 100 : 0;
+    return '<span class="ctx-bar-item" title="' + k + ': ' + data[k] + '">'
+         + '<span class="ctx-bar-fill" style="width:' + pct.toFixed(0) + '%"></span>'
+         + '<span class="ctx-bar-lbl">' + k + ' (' + data[k] + ')</span></span>';
+  }).join("");
+  return '<div class="ctx-group"><span class="ctx-group-title">' + title + '</span>'
+       + '<div class="ctx-bars">' + bars + '</div></div>';
+}
+
 function _logRenderTable(trades) {
-  var tb = document.getElementById("log-tbody");
-  if (!tb) return;
-  if (trades.length === 0) {
-    tb.innerHTML = "<tr><td colspan='8' style='color:var(--muted);text-align:center;padding:12px'>Sem trades para este dia.</td></tr>";
+  var tbody = document.getElementById("log-tbody");
+  if (!tbody) return;
+  if (!trades.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:20px">Nenhum trade</td></tr>';
     return;
   }
-  tb.innerHTML = trades.map(function (t) {
-    var resClass = t.resultado === "WIN" ? "log-win" : (t.resultado === "LOSS" ? "log-loss" : "log-be");
-    var pnlClr   = parseFloat(t.profit || 0) >= 0 ? "color:var(--buy)" : "color:var(--sell)";
-    var dt       = (t.datetime_brt || "—");
-    var hora     = dt.split(" ")[1] || "";
-    var data     = (dt.split(" ")[0] || "").slice(5);   // MM-DD
-    return "<tr>" +
-      "<td>" + hora + " " + data + "</td>" +
-      "<td>" + (t.direcao === "COMPRA" ? "&#9650;" : "&#9660;") + " " + (t.direcao || "?") + "</td>" +
-      "<td class='" + resClass + "'>" + (t.resultado || "—") + "</td>" +
-      "<td style='" + pnlClr + "'>" + _fmtBRL(parseFloat(t.profit || 0)) + "</td>" +
-      "<td>" + (t.score || "—") + "</td>" +
-      "<td>" + (t.vwap_context || "—") + "</td>" +
-      "<td>" + (t.session || "—") + "</td>" +
-      "<td>" + (t.exit_reason || "—") + "</td>" +
-    "</tr>";
+  tbody.innerHTML = trades.slice().reverse().map(function (t) {
+    var res    = t.resultado || "";
+    var resClr = res === "WIN" ? "var(--buy)" : (res === "LOSS" ? "var(--sell)" : "var(--gold)");
+    var pnl    = parseFloat(t.profit || 0);
+    var pnlClr = pnl >= 0 ? "color:var(--buy)" : "color:var(--sell)";
+    var dir    = (t.direcao || "").toUpperCase();
+    var dirClr = dir === "COMPRA" ? "color:var(--buy)" : (dir === "VENDA" ? "color:var(--sell)" : "");
+    var dt     = (t.datetime_brt || "").replace("T"," ").substring(0,16);
+    return "<tr>"
+      + "<td style='padding:5px 8px;white-space:nowrap;font-size:11px'>" + dt + "</td>"
+      + "<td style='padding:5px 8px;font-weight:700;" + dirClr + "'>" + dir + "</td>"
+      + "<td style='padding:5px 8px;font-weight:700;color:" + resClr + "'>" + res + "</td>"
+      + "<td style='padding:5px 8px;" + pnlClr + "'>" + _fmtBRL(pnl) + "</td>"
+      + "<td style='padding:5px 8px'>" + (t.score != null ? parseFloat(t.score).toFixed(0) : "—") + "</td>"
+      + "<td style='padding:5px 8px;font-size:10px'>" + (t.vwap_context || "—") + "</td>"
+      + "<td style='padding:5px 8px;font-size:10px'>" + (t.session_label || "—") + "</td>"
+      + "<td style='padding:5px 8px;font-size:10px'>" + (t.exit_reason  || "—") + "</td>"
+      + "</tr>";
   }).join("");
 }
 
-function _logStat(label, val, color) {
-  return "<div class='ls-item'>" +
-    "<span class='ls-label'>" + label + "</span>" +
-    "<span class='ls-val' style='color:" + color + "'>" + val + "</span>" +
-    "</div>";
+/* -----------------------------------------------------------------------
+   P1 -- Auditoria de Rejeicoes
+----------------------------------------------------------------------- */
+window.showRejections = function() {
+  var modal = document.getElementById("rej-modal");
+  if (modal) { modal.style.display = "flex"; window.loadRejections(); }
+};
+
+window.loadRejections = function() {
+  var hours  = (document.getElementById("rej-hours") || {value:"24"}).value || 24;
+  var sym    = encodeURIComponent(_symbol || "");
+  var url    = "/api/scalper/rejections?hours=" + hours + (sym ? "&symbol=" + sym : "");
+
+  var tbody   = document.getElementById("rej-tbody");
+  var summary = document.getElementById("rej-summary");
+
+  fetch(url)
+  .then(function (r) { return r.json(); })
+  .then(function (d) {
+    if (!d.ok && d.error) {
+      if (summary) summary.innerHTML = "<span style='color:var(--sell)'>Erro: " + d.error + "</span>";
+      return;
+    }
+
+    var byCode = d.by_code || {};
+    var codes  = Object.keys(byCode).sort(function (a,b) { return byCode[b]-byCode[a]; });
+    var total  = d.total || 0;
+
+    var codeLabels = {
+      "SCORE_BELOW_MINIMUM":      "Score baixo",
+      "LOW_TICK_CONSISTENCY":     "Tape inconsistente",
+      "ENTRY_TOO_LATE":           "Entrada tardia",
+      "VWAP_DIRECTION_BLOCK":     "VWAP block",
+      "COOLDOWN_ACTIVE":          "Cooldown",
+      "MAX_DAILY_TRADES":         "Limite diario",
+      "LOW_AGGRESSION":           "Agressao baixa",
+      "CONSECUTIVE_LOSSES_PAUSE": "Pausa por stops",
+      "POSITION_ALREADY_OPEN":    "Posicao aberta",
+      "OUTSIDE_TRADING_HOURS":    "Fora do horario",
+      "HARD_BLOCK_DELTA":         "Hard-block delta",
+      "DIRECTIONAL_UPLIFT":       "Uplift direcional",
+      "AUTO_DISABLED":            "Auto desabilitado",
+      "SIGNAL_NEUTRAL":           "Sinal neutro",
+      "LOW_VOLATILITY":           "Volatilidade baixa",
+    };
+
+    var scoreAvg = d.score_avg != null ? parseFloat(d.score_avg).toFixed(1) : "—";
+    var chips = codes.map(function (c) {
+      var cnt = byCode[c];
+      var pct = total > 0 ? (cnt/total*100).toFixed(0) : 0;
+      var lbl = codeLabels[c] || c;
+      return '<span style="display:inline-flex;align-items:center;gap:4px;background:var(--panel);'
+           + 'border:1px solid var(--border);border-radius:12px;padding:3px 10px;font-size:11px;margin:2px">'
+           + '<b>' + cnt + '</b>&nbsp;<span style="color:var(--text-muted)">' + lbl + ' (' + pct + '%)</span></span>';
+    }).join("");
+
+    if (summary) summary.innerHTML =
+      '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px">'
+      + '<b style="font-size:13px">' + total + ' rejeicoes</b>'
+      + '<span style="color:var(--text-muted);font-size:11px">Score medio bloqueado: <b>' + scoreAvg + '</b></span>'
+      + '</div><div>' + chips + '</div>';
+
+    var recent = d.recent || [];
+    if (!tbody) return;
+    if (!recent.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:20px">Nenhuma rejeicao registrada</td></tr>';
+      return;
+    }
+    tbody.innerHTML = recent.map(function (r) {
+      var ts    = (r.timestamp || "").substring(11,16);
+      var sig   = r.signal || "—";
+      var sigC  = sig === "COMPRA" ? "color:var(--buy)" : (sig === "VENDA" ? "color:var(--sell)" : "");
+      var score = r.score != null ? parseFloat(r.score).toFixed(0) : "—";
+      var agg   = r.signal === "COMPRA" ? r.buy_pct : r.sell_pct;
+      var aggStr = agg != null ? parseFloat(agg).toFixed(1) + "%" : "—";
+      var code  = codeLabels[r.rejection_code] || r.rejection_code || "—";
+      var hb    = r.hard_blocked ? "🔴" : "";
+      return "<tr style='border-bottom:1px solid var(--border)'>"
+        + "<td style='padding:5px 10px;color:var(--text-muted);font-size:10px'>" + ts + "</td>"
+        + "<td style='padding:5px 10px;font-weight:700;" + sigC + "'>" + sig + "</td>"
+        + "<td style='padding:5px 10px;font-size:11px'>" + hb + " " + code + "</td>"
+        + "<td style='padding:5px 10px;text-align:center'>" + score + "</td>"
+        + "<td style='padding:5px 10px;text-align:center'>" + aggStr + "</td>"
+        + "<td style='padding:5px 10px;font-size:10px;color:var(--text-muted)'>" + (r.vwap_regime || "—") + "</td>"
+        + "<td style='padding:5px 10px;font-size:10px;color:var(--text-muted);max-width:200px;overflow:hidden;"
+          + "text-overflow:ellipsis;white-space:nowrap'>" + (r.rejection_reason || "—") + "</td>"
+        + "</tr>";
+    }).join("");
+  })
+  .catch(function (e) {
+    if (summary) summary.innerHTML = "<span style='color:var(--sell)'>Falha: " + e + "</span>";
+  });
+};
+
+/* -----------------------------------------------------------------------
+   P6 -- Metricas de Eficacia
+----------------------------------------------------------------------- */
+window.showMetrics = function() {
+  var modal = document.getElementById("met-modal");
+  if (modal) { modal.style.display = "flex"; _loadMetrics(); }
+};
+
+function _loadMetrics() {
+  var content = document.getElementById("met-content");
+  if (!content) return;
+  content.innerHTML = '<div style="color:var(--text-muted);font-size:11px">Carregando...</div>';
+
+  Promise.all([
+    fetch("/api/scalper/session").then(function(r){return r.json();}),
+    fetch("/api/scalper/rejections?hours=24").then(function(r){return r.json();}),
+    fetch("/api/scalper/trade-log").then(function(r){return r.json();}),
+  ])
+  .then(function(results) {
+    var sess = results[0].session || {};
+    var rej  = results[1] || {};
+    var log  = (results[2].data || results[2]) || {};
+
+    var trades    = sess.trades     || 0;
+    var wins      = sess.wins       || 0;
+    var losses    = sess.losses     || 0;
+    var bes       = sess.breakevens || 0;
+    var pnl       = parseFloat(sess.pnl || 0);
+    var blocked   = rej.total || 0;
+    var scoreAvg  = rej.score_avg;
+    var byCode    = rej.by_code || {};
+
+    var wr        = trades > 0 ? (wins/trades*100) : 0;
+    var allTrades = log.last_trades || [];
+    var profits   = allTrades.map(function(t){return parseFloat(t.profit||0);});
+    var wins_r    = profits.filter(function(p){return p>0;});
+    var losses_r  = profits.filter(function(p){return p<0;});
+    var pf        = losses_r.length > 0
+                    ? Math.abs(wins_r.reduce(function(s,p){return s+p;},0))
+                      / Math.abs(losses_r.reduce(function(s,p){return s+p;},0))
+                    : (wins_r.length > 0 ? 999 : 0);
+    var avgPnl    = profits.length > 0
+                    ? profits.reduce(function(s,p){return s+p;},0)/profits.length : 0;
+    var maxPnl    = profits.length > 0 ? Math.max.apply(null,profits) : 0;
+    var minPnl    = profits.length > 0 ? Math.min.apply(null,profits) : 0;
+
+    var now       = Date.now();
+    var earliest  = allTrades.length ? (new Date(allTrades[0].datetime_brt||now)).getTime() : now;
+    var sessionHours = Math.max(0.1, (now - earliest) / 3600000);
+    var tph       = trades > 0 ? (trades / sessionHours).toFixed(1) : "0";
+
+    var exitCounts = {};
+    allTrades.forEach(function(t) {
+      var r = t.exit_reason || "MT5";
+      exitCounts[r] = (exitCounts[r]||0)+1;
+    });
+
+    var rejLabels = {
+      "SCORE_BELOW_MINIMUM":"Score baixo","COOLDOWN_ACTIVE":"Cooldown",
+      "LOW_AGGRESSION":"Agressao baixa","SIGNAL_NEUTRAL":"Neutro",
+      "VWAP_DIRECTION_BLOCK":"VWAP block","MAX_DAILY_TRADES":"Limite diario",
+      "CONSECUTIVE_LOSSES_PAUSE":"Pausa stops","POSITION_ALREADY_OPEN":"Pos. aberta",
+      "LOW_VOLATILITY":"Volatilidade","HARD_BLOCK_DELTA":"Delta block",
+      "DIRECTIONAL_UPLIFT":"Uplift dir.",
+    };
+    var rejTopHtml = Object.keys(byCode).sort(function(a,b){return byCode[b]-byCode[a];})
+      .slice(0,5).map(function(c){
+        return _metRow(rejLabels[c]||c, byCode[c], "var(--text-muted)");
+      }).join("");
+
+    var exitHtml = Object.keys(exitCounts).sort(function(a,b){return exitCounts[b]-exitCounts[a];})
+      .map(function(r){
+        var c = r==="TP" ? "var(--buy)" : (r==="SL"||r==="TIME_STOP" ? "var(--sell)" : "var(--gold)");
+        return _metRow(r, exitCounts[r], c);
+      }).join("");
+
+    var wrColor  = wr >= 55 ? "var(--buy)" : (wr >= 45 ? "var(--gold)" : "var(--sell)");
+    var pfColor  = pf >= 1.5 ? "var(--buy)" : (pf >= 1.0 ? "var(--gold)" : "var(--sell)");
+    var pnlColor = pnl >= 0 ? "var(--buy)" : "var(--sell)";
+
+    content.innerHTML =
+      "<div style='display:grid;grid-template-columns:1fr 1fr;gap:16px'>"
+      + "<div>"
+      + "<div style='font-weight:700;font-size:12px;margin-bottom:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em'>Trades Executados</div>"
+      + _metRow("Total", trades)
+      + _metRow("Wins", wins, "var(--buy)")
+      + _metRow("Breakeven", bes, "var(--gold)")
+      + _metRow("Losses", losses, "var(--sell)")
+      + _metRow("Win Rate", wr.toFixed(1) + "%", wrColor)
+      + _metRow("Profit Factor", pf > 0 ? pf.toFixed(2) : "—", pfColor)
+      + _metRow("Resultado", _fmtBRL(pnl), pnlColor)
+      + _metRow("PnL medio", _fmtBRL(avgPnl), avgPnl>=0?"var(--buy)":"var(--sell)")
+      + _metRow("PnL max", _fmtBRL(maxPnl), "var(--buy)")
+      + _metRow("PnL min", _fmtBRL(minPnl), "var(--sell)")
+      + _metRow("Trades/hora", tph)
+      + "</div>"
+      + "<div>"
+      + "<div style='font-weight:700;font-size:12px;margin-bottom:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em'>Sinais Bloqueados (24h)</div>"
+      + _metRow("Total bloqueados", blocked)
+      + _metRow("Score medio blq.", scoreAvg != null ? parseFloat(scoreAvg).toFixed(1) : "—")
+      + "<div style='margin:10px 0 6px;font-size:11px;color:var(--text-muted)'>Top motivos:</div>"
+      + (rejTopHtml || "<div style='color:var(--text-muted);font-size:11px'>Sem dados</div>")
+      + "<div style='font-weight:700;font-size:12px;margin:16px 0 10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em'>Motivos de Saida</div>"
+      + (exitHtml || "<div style='color:var(--text-muted);font-size:11px'>Sem dados ainda</div>")
+      + "</div>"
+      + "</div>";
+  })
+  .catch(function (e) {
+    if (content) content.innerHTML = "<span style='color:var(--sell)'>Erro: " + e + "</span>";
+  });
 }
 
-function _logContextGroup(title, obj) {
-  if (!obj || Object.keys(obj).length === 0) return "";
-  var rows = Object.entries(obj).map(function (kv) {
-    var k = kv[0], v = kv[1];
-    if (!v || !v.total) return "";
-    var wr = v.total > 0 ? (v.wins / v.total * 100).toFixed(0) + "%" : "—";
-    var wrColor = v.total > 0 && (v.wins/v.total) >= 0.55 ? "var(--buy)" :
-      v.total > 0 && (v.wins/v.total) >= 0.40 ? "var(--warn)" : "var(--sell)";
-    return _logStat(k, wr + " (" + v.total + ")", wrColor);
-  }).join("");
-  return "<div class='lc-group'><div class='lc-title'>" + title +" </div>" + rows + "</div>";
+function _metRow(label, value, color) {
+  return '<div style="display:flex;justify-content:space-between;align-items:center;'
+       + 'padding:4px 0;border-bottom:1px solid var(--border);font-size:12px">'
+       + '<span style="color:var(--text-muted)">' + label + '</span>'
+       + '<span style="font-weight:700;color:' + (color||"var(--text)") + '">' + value + '</span>'
+       + '</div>';
 }

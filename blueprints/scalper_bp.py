@@ -34,6 +34,35 @@ except Exception:
     _TRADE_LOG = False
 
 
+# ── Rejection Logger (P1 Scalper V2) ──────────────────────────────────────
+try:
+    from services.rejection_logger import (
+        log_rejection as _log_rejection,
+        get_rejection_stats as _get_rejection_stats,
+        CODE_SCORE_BELOW_MINIMUM,
+        CODE_LOW_TICK_CONSISTENCY,
+        CODE_ENTRY_TOO_LATE,
+        CODE_VWAP_DIRECTION_BLOCK,
+        CODE_COOLDOWN_ACTIVE,
+        CODE_MAX_DAILY_TRADES,
+        CODE_LOW_AGGRESSION,
+        CODE_CONSECUTIVE_LOSSES_PAUSE,
+        CODE_POSITION_ALREADY_OPEN,
+        CODE_OUTSIDE_TRADING_HOURS,
+        CODE_HARD_BLOCK_DELTA,
+        CODE_DIRECTIONAL_UPLIFT,
+        CODE_AUTO_DISABLED,
+        CODE_SIGNAL_NEUTRAL,
+        CODE_LOW_VOLATILITY,
+    )
+    _REJECTION_LOG = True
+except Exception as _rej_exc:
+    logger.warning("rejection_logger não disponível: %s", _rej_exc)
+    _REJECTION_LOG = False
+    def _log_rejection(*a, **kw): pass
+    def _get_rejection_stats(*a, **kw): return {"ok": False, "total": 0, "by_code": {}, "recent": []}
+
+
 def _scalper_sim_mode():
     try:
         from services.scalper_service import get_sim_mode
@@ -174,9 +203,21 @@ _SYMBOL_TRADE_CFG: dict[str, dict] = {
         "sl_ticks":         2,     # stop loss em ticks
         "use_atr_sizing":  True,   # dimensionar TP/SL pelo ATR
         "use_vwap_filter": True,   # filtro direcional VWAP
+        # ── Time Exits (P3+P4 Scalper V2) ────────────────────────────────
+        "max_position_time_sec": 180,   # P3: fechar com TIME_EXIT após 3 min
+        "time_stop_seconds":      30,   # P4: verificar progresso após 30s
+        "minimum_progress_r":    0.3,   # P4: mínimo 0.3R de lucro em 30s → TIME_STOP
+        # ── Bloqueio de abertura ──────────────────────────────────────────
+        "opening_block_minutes": 0,     # 0 = sem bloqueio de abertura
     },
-    "WDON26": {},   # usa defaults
-    "WDOM26": {},
+    "WDON26": {
+        # ── Bloqueio primeiros 15min do pregão (09:00-09:15) ─────────────
+        # Ruído de abertura do Dólar Futuro causa stops frequentes.
+        "opening_block_minutes": 15,
+    },
+    "WDOM26": {
+        "opening_block_minutes": 15,    # mesmo bloqueio para contrato seguinte
+    },
     "WINM26": {
         "score_min":       60,
         "threshold_pct":   65.0,
@@ -185,17 +226,23 @@ _SYMBOL_TRADE_CFG: dict[str, dict] = {
         "max_daily":       20,     # WIN tem mais liquidez, mais oportunidades
         "tp_ticks":        10,     # WIN tick = R$1, precisa mais ticks p/ cobrir custo
         "sl_ticks":         4,
+        # ── Bloqueio abertura WIN (já existia via _get_time_weight, tornando explícito) ──
+        "opening_block_minutes": 15,
     },
     # Bitcoin Futuro B3 — baixa liquidez, movimentos mais lentos e maiores
     "BITM26": {
         "score_min":       35,     # score máximo atingível é menor (menos ticks)
         "threshold_pct":   58.0,   # agressão mais difícil de concentrar
         "confirm_n":        2,     # 2 confirmações (ticks chegam mais devagar)
-        "cooldown_sec":    90,     # movimentos do BTC são mais espaçados
+        "cooldown_sec":    45,     # movimentos do BTC — ajuste P5 (era 90s)
         "max_daily":       10,
         "tp_ticks":         4,     # BTC: 4 ticks = R$400 por contrato (4 × R$100)
         "sl_ticks":         2,
         "use_atr_sizing":  False,  # ATR do BITM26 pode ser instável com poucos dados
+        # Time Exits BITM26 — movimentos mais lentos → janelas maiores
+        "max_position_time_sec": 120,  # P3: 2 min (ticks chegam devagar)
+        "time_stop_seconds":      30,  # P4: verificar em 30s
+        "minimum_progress_r":    0.3,  # P4: 0.3R mínimo
     },
     # Ouro — liquidez média, movimentos suaves
     "XAUUSD": {
@@ -447,40 +494,84 @@ def api_scalper_auto_check():
     b3_open        = bool( body.get("b3_open",         True))
     max_daily      = int(  body.get("max_daily",       scfg["max_daily"]))
 
-    def _deny(reason):
+    # Estado do sinal para rejection logger
+    _rej_score: list = [None]
+    _rej_vwap:  list = [None]
+
+    def _deny(reason, code=None, *, hard=False):
+        """Rejeita sinal e registra auditoria."""
+        agg_pct = buy_pct if signal == "COMPRA" else sell_pct
+        if code:
+            _log_rejection(
+                symbol=symbol, signal=signal,
+                rejection_code=code, rejection_reason=reason,
+                score=_rej_score[0],
+                buy_pct=buy_pct, sell_pct=sell_pct,
+                vwap_regime=_rej_vwap[0],
+                hard_blocked=hard,
+            )
         return jsonify({"ok": True, "action": "NONE", "reason": reason,
                         "confirm": _auto["signal_count"]})
 
     if not _auto["enabled"]:
-        return _deny("Auto-trade desabilitado.")
+        return _deny("Auto-trade desabilitado.", CODE_AUTO_DISABLED)
     if not b3_open:
-        return _deny("Fora do horario B3.")
+        return _deny("Fora do horario B3.", CODE_OUTSIDE_TRADING_HOURS)
+
+    # ── Bloqueio de abertura do pregão (server-side, por símbolo) ─────────
+    # opening_block_minutes > 0 → bloqueia as N primeiros minutos após 09:00.
+    # Impede operar no ruído de abertura mesmo que o frontend envie b3_open=True.
+    _ob_min = scfg.get("opening_block_minutes", 0)
+    if _ob_min > 0:
+        from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+        _brt  = _dt.now(_tz.utc).astimezone(_tz(_td(hours=-3)))
+        _mins = _brt.hour * 60 + _brt.minute   # minutos desde 00:00 BRT
+        _open = 9 * 60                          # 09:00 = 540 min
+        if _open <= _mins < _open + _ob_min:
+            _remaining = (_open + _ob_min) - _mins
+            return _deny(
+                f"🕘 Bloqueio de abertura: aguardando {_remaining}min para operar "
+                f"{symbol} (libera às 09:{_ob_min:02d})",
+                CODE_OUTSIDE_TRADING_HOURS,
+            )
 
     # ── Pausa automática por stops consecutivos ───────────────────────────
     if _auto["paused_until"] > time.time():
         remaining = int(_auto["paused_until"] - time.time())
         mins, secs = remaining // 60, remaining % 60
         n = _pause_cfg["max_consecutive_losses"]
-        return _deny(f"Pausa automatica apos {n} stops seguidos. Retorna em {mins}m{secs:02d}s")
+        return _deny(
+            f"Pausa automatica apos {n} stops seguidos. Retorna em {mins}m{secs:02d}s",
+            CODE_CONSECUTIVE_LOSSES_PAUSE,
+        )
 
     # Limite diário de trades automáticos
     if _session["trades"] >= max_daily:
-        return _deny(f"🛑 Limite diário de {max_daily} trades atingido. Reinicie a sessão para continuar.")
+        return _deny(
+            f"🛑 Limite diário de {max_daily} trades atingido. Reinicie a sessão para continuar.",
+            CODE_MAX_DAILY_TRADES,
+        )
 
     elapsed = time.time() - _auto["last_trade_ts"]
     if elapsed < cooldown_sec:
-        return _deny(f"Cooldown: {int(cooldown_sec - elapsed)}s restantes.")
+        return _deny(
+            f"Cooldown: {int(cooldown_sec - elapsed)}s restantes.",
+            CODE_COOLDOWN_ACTIVE,
+        )
 
     if signal == "NEUTRO":
         _auto["signal_count"] = 0
         _auto["last_signal"]  = ""
-        return _deny("Sinal NEUTRO.")
+        return _deny("Sinal NEUTRO.", CODE_SIGNAL_NEUTRAL)
 
     agg_pct = buy_pct if signal == "COMPRA" else sell_pct
     if agg_pct < threshold_pct:
         _auto["signal_count"] = 0
         _auto["last_signal"]  = ""
-        return _deny(f"Agressao {agg_pct:.1f}% < threshold {threshold_pct:.0f}%.")
+        return _deny(
+            f"Agressao {agg_pct:.1f}% < threshold {threshold_pct:.0f}%.",
+            CODE_LOW_AGGRESSION,
+        )
 
     if signal == _auto["last_signal"]:
         _auto["signal_count"] += 1
@@ -494,7 +585,7 @@ def api_scalper_auto_check():
     pos, _ = get_scalper_position(symbol)
     if pos:
         _auto["signal_count"] = 0
-        return _deny("Posicao ja aberta.")
+        return _deny("Posicao ja aberta.", CODE_POSITION_ALREADY_OPEN)
 
     # ── Validação server-side: score + delta divergência ──────────────────────
     try:
@@ -510,31 +601,55 @@ def api_scalper_auto_check():
         sv_cum_pct = score_obj.get("cum_pct",  50.0)
         score_min_sv = int(body.get("score_min", scfg["score_min"]))
 
+        # Propaga score para o rejection logger
+        _rej_score[0] = sv_score
+
         # Hard-block 1: score server-side abaixo do mínimo configurado
         if sv_score < score_min_sv:
             _auto["signal_count"] = 0
-            return _deny(f"🚫 Score srv {sv_score:.0f} < mín {score_min_sv} — entrada bloqueada")
+            return _deny(
+                f"🚫 Score srv {sv_score:.0f} < mín {score_min_sv} — entrada bloqueada",
+                CODE_SCORE_BELOW_MINIMUM, hard=True,
+            )
+
+        # Hard-block Volatilidade 60s (P2) — mercado morto, sem range suficiente
+        score_obj_v = macro_sv.get(score_key, {})
+        if not score_obj_v.get("vol60_ok", True):
+            r60 = score_obj_v.get("range_60s", 0)
+            _auto["signal_count"] = 0
+            return _deny(
+                f"🚫 Volatilidade 60s insuficiente: {r60:.0f} ticks — mercado parado",
+                CODE_LOW_VOLATILITY, hard=True,
+            )
 
         # Hard-block 3: VWAP direction filter — só operar a favor da tendência
         # BEAR = preço abaixo da VWAP intraday → só VENDA permitida
         # BULL = preço acima da VWAP intraday → só COMPRA permitida
         # NEUTRO → permite ambas as direções
         vwap_ctx = macro_sv.get("vwap", {}).get("context", "NEUTRO")
+        _rej_vwap[0] = vwap_ctx
         use_vwap_filter = bool(body.get("use_vwap_filter", scfg["use_vwap_filter"]))
         if use_vwap_filter and vwap_ctx != "NEUTRO":
             if vwap_ctx == "BEAR" and signal == "COMPRA":
                 _auto["signal_count"] = 0
-                return _deny(f"🚫 VWAP BEAR — apenas VENDA (bloqueando COMPRA contra-tendência)")
+                return _deny(
+                    f"🚫 VWAP BEAR — apenas VENDA (bloqueando COMPRA contra-tendência)",
+                    CODE_VWAP_DIRECTION_BLOCK, hard=True,
+                )
             if vwap_ctx == "BULL" and signal == "VENDA":
                 _auto["signal_count"] = 0
-                return _deny(f"🚫 VWAP BULL — apenas COMPRA (bloqueando VENDA contra-tendência)")
+                return _deny(
+                    f"🚫 VWAP BULL — apenas COMPRA (bloqueando VENDA contra-tendência)",
+                    CODE_VWAP_DIRECTION_BLOCK, hard=True,
+                )
 
         # Hard-block 2: divergência delta severa (buy_pct extremo contra direção)
         if sv_blocked:
             _auto["signal_count"] = 0
             return _deny(
                 f"Hard-block: Delta {sv_cum_bias} ({sv_cum_pct:.0f}% C) "
-                f"fluxo acumulado contra {signal}"
+                f"fluxo acumulado contra {signal}",
+                CODE_HARD_BLOCK_DELTA, hard=True,
             )
 
         # ── Uplift direcional: após 2+ LOSSes na mesma direção ───────────
@@ -546,7 +661,8 @@ def api_scalper_auto_check():
                 _auto["signal_count"] = 0
                 return _deny(
                     f"Uplift direcional: {dir_streak} LOSSes em {signal}. "
-                    f"Score {sv_score:.0f} < exigido {required} (min {score_min_sv}+{uplift})"
+                    f"Score {sv_score:.0f} < exigido {required} (min {score_min_sv}+{uplift})",
+                    CODE_DIRECTIONAL_UPLIFT,
                 )
             logger.info("Uplift direcional APROVADO: %s streak=%d score=%.0f >= %d",
                         signal, dir_streak, sv_score, required)
@@ -656,8 +772,7 @@ def api_scalper_pause_config():
         "max_consecutive_losses": _pause_cfg["max_consecutive_losses"],
         "pause_duration_sec":     _pause_cfg["pause_duration_sec"],
         "pause_duration_min":     _pause_cfg["pause_duration_sec"] // 60,
-        "paused_until":           _auto["paused_until"],
-        "paused_remaining_s":     max(0, int(_auto["paused_until"] - now_ts)),
+                "paused_remaining_s":     max(0, int(_auto["paused_until"] - now_ts)),
     })
 
 
@@ -733,8 +848,7 @@ def api_scalper_sim_mode():
     return jsonify({"ok": True, "sim_mode": get_sim_mode()})
 
 
-
-# Trade Log: resumo estatístico para análise de assertividade
+# Trade Log: resumo estatistico para analise de assertividade
 @scalper_bp.route("/api/scalper/trade-log")
 def api_scalper_trade_log():
     try:
@@ -743,6 +857,16 @@ def api_scalper_trade_log():
     except Exception as exc:
         logger.warning("trade-log error: %s", exc)
         return jsonify({"ok": False, "error": str(exc)})
+
+
+# Rejection Audit (P1 Scalper V2) -- estatisticas de rejeicoes por simbolo
+@scalper_bp.route("/api/scalper/rejections")
+def api_scalper_rejections():
+    symbol = request.args.get("symbol")          # opcional -- filtra por simbolo
+    hours  = int(request.args.get("hours", 24))  # janela em horas (padrao 24h)
+    return jsonify(_get_rejection_stats(symbol=symbol, hours=hours))
+
+
 # Break-even: move SL para entry
 @scalper_bp.route("/api/scalper/move-sl", methods=["POST"])
 def api_scalper_move_sl():
@@ -751,3 +875,58 @@ def api_scalper_move_sl():
     symbol = body.get("symbol", "WDON26")
     result, err = move_sl_to_breakeven(symbol)
     return jsonify({"ok": err is None, "result": result, "error": err})
+
+
+# Time Exit (P3+P4 Scalper V2) -- verifica posicao aberta e fecha se atingiu limite de tempo
+@scalper_bp.route("/api/scalper/check-time-exit", methods=["POST"])
+def api_scalper_check_time_exit():
+    from services.scalper_service import get_scalper_position, close_scalper_position
+    body    = request.get_json(silent=True) or {}
+    symbol  = body.get("symbol", "WDON26")
+    pnl_now = float(body.get("pnl_now", 0.0))
+
+    scfg = _sym_trade_cfg(symbol)
+    max_pos_time   = scfg.get("max_position_time_sec", 180)
+    time_stop_sec  = scfg.get("time_stop_seconds", 30)
+    min_progress_r = scfg.get("minimum_progress_r", 0.3)
+
+    pos, _ = get_scalper_position(symbol)
+    if not pos:
+        return jsonify({"ok": True, "action": "NONE", "reason": "sem posicao"})
+
+    open_time = pos.get("time", 0)
+    if not open_time:
+        return jsonify({"ok": True, "action": "NONE", "reason": "sem timestamp"})
+
+    elapsed = time.time() - open_time
+
+    try:
+        from services.scalper_service import TICK_VALUE_BRL, _resolve_symbol
+        mt5_sym  = _resolve_symbol(symbol)
+        sl_ticks = scfg.get("sl_ticks", 2)
+        tick_val = TICK_VALUE_BRL.get(mt5_sym, 1.0)
+        min_pnl  = min_progress_r * sl_ticks * tick_val
+    except Exception:
+        min_pnl = 0.0
+
+    # P3: TIME_EXIT -- posicao aberta muito tempo
+    if elapsed >= max_pos_time:
+        result, err = close_scalper_position(symbol)
+        if not err:
+            reason_msg = f"TIME_EXIT: posicao aberta {elapsed:.0f}s >= {max_pos_time}s"
+            return jsonify({"ok": True, "action": "CLOSE", "reason": reason_msg, "elapsed": elapsed})
+        else:
+            return jsonify({"ok": False, "action": "NONE", "reason": f"TIME_EXIT falhou: {err}", "elapsed": elapsed})
+
+    # P4: TIME_STOP -- posicao sem progresso minimo
+    if elapsed >= time_stop_sec:
+        pnl = pos.get("profit", 0.0)
+        if pnl < min_pnl:
+            result, err = close_scalper_position(symbol)
+            if not err:
+                reason_msg = f"TIME_STOP: {elapsed:.0f}s sem progresso minimo (pnl={pnl:.2f} < {min_pnl:.2f})"
+                return jsonify({"ok": True, "action": "CLOSE", "reason": reason_msg, "elapsed": elapsed})
+            else:
+                return jsonify({"ok": False, "action": "NONE", "reason": f"TIME_STOP falhou: {err}", "elapsed": elapsed})
+
+    return jsonify({"ok": True, "action": "NONE", "reason": "posicao dentro dos limites de tempo", "elapsed": elapsed})

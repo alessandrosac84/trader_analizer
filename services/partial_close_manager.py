@@ -31,9 +31,9 @@ from threading import Lock
 
 logger = logging.getLogger(__name__)
 
-_lock    = Lock()
-_enabled = False      # desabilitado por padrão
-_state: dict = {}     # tv_symbol → state dict
+_lock             = Lock()
+_enabled_symbols: dict = {}   # tv_symbol → bool (estado por símbolo)
+_state: dict = {}             # tv_symbol → state dict
 
 # ── Configuração da estratégia ─────────────────────────────────────────────────
 ENTRY_VOLUME         = 3     # contratos na entrada
@@ -48,16 +48,28 @@ TP2_RR = 1.5   # R/R para o alvo final do contrato restante (1.5:1)
 
 # ── API de controle ────────────────────────────────────────────────────────────
 
-def is_enabled() -> bool:
-    """Retorna True se o modo 3-contratos está ativo."""
-    return _enabled
+def is_enabled(symbol: str | None = None) -> bool:
+    """Retorna True se o modo 3-contratos está ativo para o símbolo dado.
+    Se symbol=None, retorna True se QUALQUER símbolo estiver ativo
+    (compatibilidade com o monitor de background que não tem símbolo).
+    """
+    if symbol:
+        return bool(_enabled_symbols.get(symbol, False))
+    return any(_enabled_symbols.values())
 
 
-def set_enabled(flag: bool) -> None:
-    global _enabled
+def set_enabled(flag: bool, symbol: str | None = None) -> None:
+    """Ativa/desativa o modo 3-contratos para um símbolo específico.
+    Se symbol=None, aplica a todos os símbolos já registrados (retrocompatível).
+    """
     with _lock:
-        _enabled = bool(flag)
-    logger.info("Partial-close 3-contratos: %s", "ATIVADO ✅" if _enabled else "DESATIVADO")
+        if symbol:
+            _enabled_symbols[symbol] = bool(flag)
+        else:
+            for k in list(_enabled_symbols.keys()):
+                _enabled_symbols[k] = bool(flag)
+    status = "ATIVADO ✅" if flag else "DESATIVADO"
+    logger.info("Partial-close 3-contratos [%s]: %s", symbol or "ALL", status)
 
 
 # ── Cálculo dos TPs pelo R/R ──────────────────────────────────────────────────

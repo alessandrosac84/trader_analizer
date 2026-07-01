@@ -784,6 +784,22 @@ def api_autotrade_execute():
             "error": f"Cooldown ativo no servidor — próxima entrada em ~{rem} min.",
         })
 
+    # ── Bloqueio de abertura do pregão: WIN e WDO não operam entre 09:00-09:15 ──
+    # Primeiros 15 min têm ruído excessivo que gera stops desnecessários.
+    _is_win_wdo = any(k in _sym_key for k in ("WIN", "WDO", "IND", "DOL"))
+    if _is_win_wdo:
+        from datetime import datetime, timezone, timedelta
+        _brt = datetime.now(timezone(timedelta(hours=-3)))
+        if _brt.hour == 9 and _brt.minute < 15:
+            _mins_left = 15 - _brt.minute
+            return jsonify({
+                "ok": False, "result": None,
+                "error": (
+                    f"Bloqueio de abertura: {_sym_key} não opera entre 09:00-09:15 "
+                    f"({_mins_left}min restantes — libera às 09:15)."
+                ),
+            })
+
     # Proteção pós-abertura: após trade executado entre 09:00-09:30 BRT, aguarda 20 min
     if _abertura_cooldown_active(_sym_key):
         rem = _abertura_cooldown_remaining_min(_sym_key)
@@ -811,12 +827,27 @@ def api_autotrade_execute():
     ai_result = None
     if signal and acao in ("COMPRA", "VENDA"):
         try:
-            ai_result = validate_signal_with_ai(
+            # Hard timeout via thread — funciona no Windows (signal.alarm nao funciona)
+            from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FutTimeout
+            import functools as _ft
+            _ai_fn = _ft.partial(
+                validate_signal_with_ai,
                 signal=signal,
                 tv_symbol=tv_symbol,
                 interval=interval,
                 score_threshold=SCORE_MIN,
             )
+            with ThreadPoolExecutor(max_workers=1) as _pool:
+                _fut = _pool.submit(_ai_fn)
+                try:
+                    ai_result = _fut.result(timeout=12)
+                except _FutTimeout:
+                    logger.warning("AI validator timeout (12s) — aprovacao pelo score tecnico")
+                    ai_result = {
+                        "aprovado": True, "confianca": 60, "veredito": "EXECUTAR",
+                        "motivo": "Timeout IA (12s) — aprovacao pelo score tecnico.",
+                        "alertas": [], "tp1_sugerido": None, "ia_usada": True,
+                    }
             # AGUARDAR e BLOQUEAR ambos impedem execução automática.
             # BLOQUEAR = IA identificou contradição real.
             # AGUARDAR = IA identificou incerteza / setup duvidoso.
@@ -874,7 +905,7 @@ def api_autotrade_execute():
     _pcm_tp2 = None    # TP2 (1.5:1 R/R sobre SL) — alvo do contrato restante
     try:
         from services import partial_close_manager as pcm
-        if pcm.is_enabled() and acao in ("COMPRA", "VENDA") and sl:
+        if pcm.is_enabled(tv_symbol) and acao in ("COMPRA", "VENDA") and sl:
             _entrada_f = float(entrada) if entrada else 0.0
             _sl_f      = float(sl)
             volume     = float(pcm.ENTRY_VOLUME)   # 3 contratos
@@ -1539,15 +1570,22 @@ def api_autotrade_partial_config():
     """
     from services import partial_close_manager as pcm
 
+    # tv_symbol: vem do body (POST) ou query string (GET)
+    tv_symbol_cfg = None
     if request.method == "POST":
-        body    = request.get_json(silent=True) or {}
-        enabled = bool(body.get("enabled", False))
-        pcm.set_enabled(enabled)
-        logger.info("Partial-close 3-contratos via dashboard: %s", "ON" if enabled else "OFF")
+        body          = request.get_json(silent=True) or {}
+        enabled       = bool(body.get("enabled", False))
+        tv_symbol_cfg = body.get("tv_symbol") or None
+        pcm.set_enabled(enabled, tv_symbol_cfg)
+        logger.info("Partial-close 3-contratos via dashboard [%s]: %s",
+                    tv_symbol_cfg or "ALL", "ON" if enabled else "OFF")
+    else:
+        tv_symbol_cfg = request.args.get("tv_symbol") or None
 
     return jsonify({
         "ok":             True,
-        "enabled":        pcm.is_enabled(),
+        "enabled":        pcm.is_enabled(tv_symbol_cfg),
+        "tv_symbol":      tv_symbol_cfg,
         "tp1_rr":         pcm.TP1_RR,
         "tp2_rr":         pcm.TP2_RR,
         "entry_volume":   pcm.ENTRY_VOLUME,

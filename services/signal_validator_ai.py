@@ -192,7 +192,12 @@ def validate_signal_with_ai(
         from openai import AzureOpenAI
 
         # Windows: desativa verificacao SSL (mesmo fix aplicado no Telegram)
-        _http_client = httpx.Client(verify=False, trust_env=False)
+        # Timeout de 20s: connect 5s + read 15s — evita travar o endpoint de execucao
+        _http_client = httpx.Client(
+            verify=False,
+            trust_env=False,
+            timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0),
+        )
 
         client = AzureOpenAI(
             api_version    = Config.AZURE_OPENAI_API_VERSION,
@@ -210,6 +215,7 @@ def validate_signal_with_ai(
             ],
             temperature             = 0.15,
             max_completion_tokens   = 350,
+            timeout                 = 18.0,
         )
 
         content = (response.choices[0].message.content or "").strip()
@@ -248,9 +254,9 @@ def validate_signal_with_ai(
     except Exception as exc:
         import traceback
         logger.warning("AI validator erro COMPLETO: %s", traceback.format_exc())
-        logger.warning("AI validator erro resumido: %s — %s", type(exc).__name__, str(exc)[:500])
+        logger.warning("AI validator erro resumido: %s \u2014 %s", type(exc).__name__, str(exc)[:500])
         return {
             **_fallback_aprovado,
-            "motivo":  f"Erro na validacao IA — aprovacao pelo score tecnico. ({type(exc).__name__})",
+            "motivo":  f"Erro na validacao IA \u2014 aprovacao pelo score tecnico. ({type(exc).__name__})",
             "ia_usada": True,
         }

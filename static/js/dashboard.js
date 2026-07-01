@@ -1455,18 +1455,14 @@
 
   // ---- TradingView Widget ----
   function getTvSymbol() {
-    var sel = document.getElementById("mon-instrument");
-    if (!sel) return "BMFBOVESPA:WIN1!";
-    var val = sel.value;
-    if (val === "__custom__") {
-      var custom = document.getElementById("mon-custom-tv");
-      return (custom && custom.value.trim()) || "BMFBOVESPA:WIN1!";
-    }
-    return val;
+    // Usa #mt5-instrument — único seletor de ativo do dashboard
+    var sel = document.getElementById("mt5-instrument");
+    return (sel && sel.value) || "BMFBOVESPA:WIN1!";
   }
 
   function getTvInterval() {
-    var sel = document.getElementById("mon-interval");
+    // Usa #mt5-interval — único seletor de timeframe do dashboard
+    var sel = document.getElementById("mt5-interval");
     return (sel && sel.value) || "15";
   }
 
@@ -1509,12 +1505,12 @@
   }
 
   // ---- Instrument selector ----
-  var monInstrumentSel = document.getElementById("mon-instrument");
-  var monCustomWrap    = document.getElementById("mon-custom-wrap");
+  var monInstrumentSel = document.getElementById("mt5-instrument");
 
   if (monInstrumentSel) {
     monInstrumentSel.addEventListener("change", function () {
-      if (monCustomWrap) monCustomWrap.hidden = this.value !== "__custom__";
+      // Recarrega sinais quando o instrumento muda
+      if (typeof fetchSignals === "function") fetchSignals();
     });
   }
 
@@ -2050,7 +2046,7 @@
     // Atualiza label do gráfico
     var tvSym  = getTvSymbol();
     var label  = document.getElementById("mon-chart-label");
-    var selOpt = document.getElementById("mon-instrument");
+    var selOpt = document.getElementById("mt5-instrument");
     var instrLabel = selOpt ? (selOpt.options[selOpt.selectedIndex]?.text || tvSym) : tvSym;
     if (label) label.textContent = "Gráfico — " + instrLabel;
 
@@ -2737,7 +2733,7 @@
         // Auto-trade: dispara se sinal ativo + debounce de 15min (evita re-entradas imediatas)
         if (data.signal && data.signal.acao !== "NEUTRO") {
           var agora = Date.now();
-          var lastMs     = window._getLastTradeMs  ? window._getLastTradeMs()  : 0;
+          var lastMs     = window._getLastTradeMs  ? window._getLastTradeMs(sym)  : 0;
           var debounceMs = window._getDebounceMs   ? window._getDebounceMs()   : 900000;
           var dentroDebounce = (agora - lastMs) < debounceMs;
           var _autoOn    = window._getAutoEnabled ? window._getAutoEnabled() : false;
@@ -2836,7 +2832,8 @@
 (function () {
   var autoTradeEnabled   = false;
   var tradeMode          = "SCAN";   // "SCAN" | "MANAGE"
-  var _lastAutoTradeMs   = 0;        // timestamp da última tentativa de auto-trade
+  var _lastAutoTradeMs   = {};       // timestamp da última tentativa por símbolo (per-symbol)
+  var _inFlightSym       = {};       // flag de request em voo (evita duplo envio por símbolo)
   var _AUTO_DEBOUNCE_MS  = 15 * 60 * 1000; // 15 min — evita re-entrada imediata
   // Período de graça pós-execute: ignora respostas SCAN sem closed_trade durante
   // 30s após um execute bem-sucedido. Protege contra race-condition onde o MT5
@@ -2845,7 +2842,7 @@
   var _EXECUTE_GRACE_MS  = 30 * 1000;  // 30s de graça após execute
   window._getTradeMode    = function () { return tradeMode; };
   window._getAutoEnabled  = function () { return autoTradeEnabled; };
-  window._getLastTradeMs  = function () { return _lastAutoTradeMs; };
+  window._getLastTradeMs  = function (sym) { return _lastAutoTradeMs[sym || getSym()] || 0; };
   window._getDebounceMs   = function () { return _AUTO_DEBOUNCE_MS; };
   var manageTimer      = null;
   var el = function (id) { return document.getElementById(id); };
@@ -3344,8 +3341,10 @@
       return;
     }
 
-    // Marca timestamp da tentativa ANTES de enviar (evita re-entrada durante a request)
-    _lastAutoTradeMs = Date.now();
+    // Bloqueia envio duplo enquanto a request estiver em voo para este símbolo
+    var _sym = getSym();
+    if (_inFlightSym[_sym]) { return; }
+    _inFlightSym[_sym] = true;
 
     // Registra a tentativa no histórico imediatamente (será atualizada com o resultado)
     var _attempt = window._addTradeAttempt ? window._addTradeAttempt(data) : null;
@@ -3414,11 +3413,14 @@
           _activeEntry  = parseFloat(sig.entrada) || null;
           _activeAcao   = sig.acao || null;
           _activeVolume = parseFloat(volume) || 1;
+          // Marca debounce de 15min APENAS em trade executado com sucesso
+          _lastAutoTradeMs[getSym()] = Date.now();
           // Marca timestamp do execute para período de graça no fetchManage
           _lastExecuteMs = Date.now();
           enterManageMode();
           startManagePolling(30);
           loadAutoTradesHistory();
+          _inFlightSym[getSym()] = false;
         } else {
           // Bloqueado pela IA ou erro — mostra motivo com detalhes
           var bloqMsg   = d.error || "Erro desconhecido.";
@@ -3449,17 +3451,21 @@
               window.showSkipBanner("❌ Score " + (scoreRaw > 0 ? "+" : "") + scoreRaw + " não executado — " + bloqMsg.slice(0, 130), _bType);
             }
           }
-          // Libera debounce APENAS se foi bloqueio de IA (não erro de cooldown/rede)
-          // Bloqueio IA: permite nova tentativa no próximo ciclo de sinal
-          // Cooldown/erro: mantém debounce para não bombardear o servidor
-          if (isIABlock) {
-            _lastAutoTradeMs = 0;
-          }
+          // Bloqueado/erro: debounce NÃO é ativado (trade não foi executado)
+          // Próximo sinal forte pode tentar novamente imediatamente
           // Atualiza histórico de trades para mostrar o bloqueio no DB
           setTimeout(loadAutoTradesHistory, 600);
+          _inFlightSym[getSym()] = false;
         }
       })
-      .catch(function (err) { setStatus("❌ Erro de rede: " + err.message, true); });
+      .catch(function (err) {
+        _inFlightSym[getSym()] = false;
+        // Atualiza attempt para não ficar preso em "Enviando..." indefinidamente
+        if (_attempt && window._updateTradeAttempt) {
+          window._updateTradeAttempt(_attempt, "erro", "❌ Falha: " + (err.message || "erro de rede"), "");
+        }
+        setStatus("❌ Erro de rede: " + err.message, true);
+      });
   };
 
   // ── Listener: Aplicar recomendacao (breakeven / trailing) ─────────────

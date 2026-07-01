@@ -791,11 +791,9 @@ def analytics_signal_strength_performance():
                 "bucket":   bucket,
                 "total":    total,
                 "wins":     wins,
-                "losses":   total - wins,
-                "win_rate": round(wins / total * 100) if total else 0,
-                "avg_pnl":  r[3],
+                "win_rate": round(wins / total * 100, 1) if total else 0,
             })
+
         return result
-    except Exception as exc:
-        logger.warning("analytics_signal_strength_performance: %s", exc)
+    except Exception:
         return []

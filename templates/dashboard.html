@@ -1451,18 +1451,23 @@
     var API      = '/api/autotrade/partial-config';
     var _enabled = false;
 
+    function getSym() {
+      var sel = document.getElementById('mt5-instrument');
+      return (sel && sel.value) ? sel.value : 'BMFBOVESPA:WIN1!';
+    }
+
     function applyState(enabled) {
       _enabled = enabled;
       var btn   = document.getElementById(BTN_ID);
       var label = document.getElementById(LABEL_ID);
       if (!btn || !label) return;
       if (enabled) {
-        label.textContent  = 'ON ✅';
+        label.textContent     = 'ON ✅';
         btn.style.borderColor = '#3ecf8e';
         btn.style.color       = '#3ecf8e';
         btn.title = '3 contratos ATIVO — entra com 3, fecha 2 no TP1, mantém 1 até TP2';
       } else {
-        label.textContent  = 'OFF';
+        label.textContent     = 'OFF';
         btn.style.borderColor = '#6b7280';
         btn.style.color       = '';
         btn.title = '3 contratos: fecha 2 no TP1, mantém 1 até TP2 (2× distância do TP1)';
@@ -1470,7 +1475,7 @@
     }
 
     function fetchStatus() {
-      fetch(API)
+      fetch(API + '?tv_symbol=' + encodeURIComponent(getSym()))
         .then(function (r) { return r.json(); })
         .then(function (d) { if (d.ok) applyState(d.enabled); })
         .catch(function () {});
@@ -1480,7 +1485,7 @@
       fetch(API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: !_enabled }),
+        body: JSON.stringify({ enabled: !_enabled, tv_symbol: getSym() }),
       })
         .then(function (r) { return r.json(); })
         .then(function (d) {
@@ -1502,6 +1507,9 @@
     function init() {
       var btn = document.getElementById(BTN_ID);
       if (btn) { btn.addEventListener('click', toggle); }
+      // Recarrega estado quando o instrumento muda
+      var instr = document.getElementById('mt5-instrument');
+      if (instr) { instr.addEventListener('change', fetchStatus); }
       fetchStatus();
     }
 
