@@ -16,8 +16,8 @@ registra e (opcional) alerta no Telegram. PAUSAR e a unica acao que ele pode
 acionar diretamente, porque parar e sempre seguro.
 
 Uso:
-  python -c "from services.scalper_supervisor import run_supervision as r; print(r('BITM26'))"
-  # ou agende:  python -m services.scalper_supervisor BITM26 --telegram
+  python -c "from services.scalper_supervisor import run_supervision as r; print(r('BITN26'))"
+  # ou agende:  python -m services.scalper_supervisor BITN26 --telegram
 """
 import csv
 import json
@@ -104,7 +104,7 @@ def _heuristic(stats: dict) -> dict:
 
 _SYS = (
     "Voce e um supervisor quantitativo de um robo de SCALPING no futuro de Bitcoin da B3 "
-    "(BITM26). Voce NAO valida trades individuais — avalia o DESEMPENHO RECENTE e o REGIME "
+    "(BITN26). Voce NAO valida trades individuais — avalia o DESEMPENHO RECENTE e o REGIME "
     "e recomenda UMA acao de alto nivel para proteger o capital. Seja conservador: na duvida, "
     "prefira ENDURECER ou PAUSAR. Responda SOMENTE JSON valido."
 )
@@ -145,7 +145,7 @@ def _ask_ai(stats: dict) -> "dict | None":
         return None
 
 
-def run_supervision(symbol: str = "BITM26", apply_pause: bool = False,
+def run_supervision(symbol: str = "BITN26", apply_pause: bool = False,
                     telegram: bool = False) -> dict:
     """
     Avalia o scalper e retorna recomendacao. Combina heuristica + IA (se disponivel).
@@ -238,7 +238,7 @@ def start_supervisor_scheduler(symbol: str = None, interval_min: int = 20):
     if _sched_running:
         return
     import threading
-    symbol = symbol or os.getenv("SCALPER_SUPERVISOR_SYMBOL", "BITM26")
+    symbol = symbol or os.getenv("SCALPER_SUPERVISOR_SYMBOL", "BITN26")
     _sched_running = True
     t = threading.Thread(target=_supervisor_loop, args=(symbol, interval_min),
                          daemon=True, name="scalper-supervisor")
@@ -248,6 +248,6 @@ def start_supervisor_scheduler(symbol: str = None, interval_min: int = 20):
 
 if __name__ == "__main__":
     import sys
-    sym = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("--") else "BITM26"
+    sym = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("--") else "BITN26"
     r = run_supervision(sym, apply_pause=("--apply" in sys.argv), telegram=("--telegram" in sys.argv))
     print(json.dumps(r, ensure_ascii=False, indent=2))

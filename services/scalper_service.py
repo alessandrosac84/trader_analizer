@@ -31,8 +31,8 @@ SCALPER_SYMBOLS = {
     "WDO":    "WDON26",
     "WIN":    "WINM26",
     # Bitcoin Futuro B3 (mini contrato, 0.01 BTC, horário B3)
-    "BITM26": "BITM26",
-    "BIT":    "BITM26",
+    "BITN26": "BITN26",
+    "BIT":    "BITN26",
     # Forex / Metais (24h)
     "XAUUSD": "XAUUSD",
     "EURUSD": "EURUSD",
@@ -49,9 +49,9 @@ TICK_SIZE_OVERRIDE = {
     "WDON26": 0.5,
     "WDOM26": 0.5,
     "WINM26": 5.0,
-    # BITM26: cotado em BRL/BTC — variação mínima R$100 por BTC
+    # BITN26: cotado em BRL/BTC — variação mínima R$100 por BTC
     # Cada tick = 0.01 BTC × R$100 = R$1,00 por mini contrato
-    "BITM26": 100.0,
+    "BITN26": 100.0,
     "XAUUSD": 0.01,
     "EURUSD": 0.00010,
     "USDBRL": 0.0010,
@@ -65,7 +65,7 @@ TICK_VALUE_BRL = {
     "WDON26": 5.0,
     "WDOM26": 5.0,
     "WINM26": 1.0,
-    "BITM26": 1.0,
+    "BITN26": 1.0,
     "XAUUSD": 1.0,
     "EURUSD": 1.0,
     "USDBRL": 1.0,
@@ -125,9 +125,9 @@ SYMBOL_CONFIG: dict[str, dict] = {
         "volatility_min_ticks":      2,
     },
 
-    # ── Bitcoin Futuro B3 (BITM26) — liquidez baixa/média ─────────────────
+    # ── Bitcoin Futuro B3 (BITN26) — liquidez baixa/média ─────────────────
     # Tick rate muito menor que WDO/WIN: bursts de 2-5 ticks já são significativos.
-    "BITM26": {
+    "BITN26": {
         "burst_ratio_strong":        2.0,   # 2x já é burst forte p/ BTC
         "burst_ratio_med":           1.4,
         "burst_ratio_weak":          1.1,
@@ -141,7 +141,7 @@ SYMBOL_CONFIG: dict[str, dict] = {
         "book_weak_pct":             10,
         "book_penalty_pct":          15,
         "volatility_min_ticks":       1,
-        # Volatility 60s BITM26 — limiares menores (BTC tem menos ticks)
+        # Volatility 60s BITN26 — limiares menores (BTC tem menos ticks)
         "min_range_60s":              2,    # 2 ticks = R$200 de range mínimo em 60s
         "expansion_range_60s":        6,    # 6 ticks → bônus
     },
@@ -283,7 +283,7 @@ _sim_mode   = False
 
 _SIM_DEFAULT_PRICES = {
     "WDON26": 5850.0,  "WDOM26": 5850.0,  "WINM26": 132000.0,
-    "BITM26": 620000.0,  # BTC aprox. R$620.000 (BTC ~$107k × BRL ~5,80)
+    "BITN26": 620000.0,  # BTC aprox. R$620.000 (BTC ~$107k × BRL ~5,80)
     "XAUUSD": 3250.0,  "EURUSD": 1.0850,  "USDBRL": 5.75,
     "GOLD11": 385.0,   "BOVA11": 132.0,   "IVVB11": 320.0,
     "PETR4":  36.0,    "VALE3":  58.0,    "ITUB4":  35.0,
@@ -648,7 +648,7 @@ def _detect_absorption_exhaustion(mt5_sym: str) -> dict:
     total_vol = buy_vol + sell_vol
 
     # Absorção: muito volume de um lado mas preço NÃO se move (≤ 1 tick)
-    # Limiares por símbolo (BITM26 e ações têm vol muito menor que WDO/WIN)
+    # Limiares por símbolo (BITN26 e ações têm vol muito menor que WDO/WIN)
     cfg      = _sym_cfg(mt5_sym)
     abs_min  = cfg["absorption_min_vol"]
     exh_min  = cfg["exhaustion_min_vol"]
@@ -798,7 +798,7 @@ def _calc_multi_score(
     # Alinhamento VWAP: define se estamos operando A FAVOR da tendência
     vwap_context = vwap_data.get("context", "NEUTRO")
     vwap_aligned = (is_buy and vwap_context == "BULL") or (not is_buy and vwap_context == "BEAR")
-    # Hard-block de consistência: por símbolo (BITM26 tem buffer menor → mais tolerante)
+    # Hard-block de consistência: por símbolo (BITN26 tem buffer menor → mais tolerante)
     consistency_hard_block = scfg["consistency_hb_aligned"] if vwap_aligned else scfg["consistency_hard_block"]
 
     # ── 1. BURST VELOCITY — 30 pts ──────────────────────────────────────────
@@ -942,7 +942,7 @@ def _calc_multi_score(
     _burst_max       = pts.get("burst_vel", 0) >= 30
     _consistency_pts = pts.get("tick_consistency", 0)
 
-    # v6 ASSERTIVIDADE: dados reais (scalper_trades.csv, BITM26) mostram que
+    # v6 ASSERTIVIDADE: dados reais (scalper_trades.csv, BITN26) mostram que
     # score ALTO = PIOR resultado: faixa 90-109 teve 0% de acerto; 80-89 ~33%;
     # 60-79 (melhor) ~32-37%. A combinacao burst-maximo + tape-maximo indica que
     # o movimento JA aconteceu — estamos entrando no TETO do impulso, nao no

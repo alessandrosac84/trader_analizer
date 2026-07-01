@@ -230,7 +230,7 @@ _SYMBOL_TRADE_CFG: dict[str, dict] = {
         "opening_block_minutes": 15,
     },
     # Bitcoin Futuro B3 — baixa liquidez, movimentos mais lentos e maiores
-    "BITM26": {
+    "BITN26": {
         # ── v6 ASSERTIVIDADE ──────────────────────────────────────────────
         # Dados reais (scalper_trades.csv): score < 60 = ~0% de acerto;
         # faixa 60-79 e a unica com edge (~32-37%). Piso subiu 35 -> 60 para
@@ -244,8 +244,8 @@ _SYMBOL_TRADE_CFG: dict[str, dict] = {
         "max_daily":        6,     # v6: era 10 (limite diario menor)
         "tp_ticks":         4,     # BTC: 4 ticks = R$400 por contrato (4 × R$100)
         "sl_ticks":         2,
-        "use_atr_sizing":  False,  # ATR do BITM26 pode ser instável com poucos dados
-        # Time Exits BITM26 — movimentos mais lentos → janelas maiores
+        "use_atr_sizing":  False,  # ATR do BITN26 pode ser instável com poucos dados
+        # Time Exits BITN26 — movimentos mais lentos → janelas maiores
         "max_position_time_sec": 120,  # P3: 2 min (ticks chegam devagar)
         "time_stop_seconds":      30,  # P4: verificar em 30s
         "minimum_progress_r":    0.3,  # P4: 0.3R mínimo

@@ -9,44 +9,25 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 :root{
-  --bg:#05070d; --bg2:#070b14;
-  --panel:rgba(14,22,34,.62); --panel-solid:#0b1220;
-  --line:rgba(53,224,240,.18); --line-strong:rgba(53,224,240,.42);
-  --cyan:#35e0f0; --cyan-dim:#1c8f9c;
-  --gold:#f0b429; --gold2:#d4a853;
-  --red:#ff5b6e; --green:#34e0a1; --amber:#ffcf5c; --purple:#a98bff;
-  --text:#dcecf5; --muted:#7f96ab;
-  --glow-cyan:0 0 18px rgba(53,224,240,.35);
-  --glow-gold:0 0 18px rgba(240,180,41,.35);
+  --bg:#05070d;--panel:rgba(14,22,34,.62);--line:rgba(53,224,240,.18);--line-strong:rgba(53,224,240,.42);
+  --cyan:#35e0f0;--cyan-dim:#1c8f9c;--gold:#f0b429;--red:#ff5b6e;--green:#34e0a1;--amber:#ffcf5c;--purple:#a98bff;
+  --text:#dcecf5;--muted:#7f96ab;--glow-cyan:0 0 18px rgba(53,224,240,.35);--glow-gold:0 0 18px rgba(240,180,41,.35);
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
-body{
-  font-family:'Rajdhani',system-ui,sans-serif;background:var(--bg);color:var(--text);
-  overflow:hidden;letter-spacing:.3px;
-  background-image:
-    radial-gradient(1200px 700px at 78% -8%, rgba(53,224,240,.10), transparent 60%),
-    radial-gradient(900px 600px at 8% 110%, rgba(240,180,41,.08), transparent 55%),
-    linear-gradient(transparent 0 96%, rgba(53,224,240,.04) 96% 100%),
-    linear-gradient(90deg, transparent 0 96%, rgba(53,224,240,.04) 96% 100%);
-  background-size:auto,auto,26px 26px,26px 26px;
-}
+body{font-family:'Rajdhani',system-ui,sans-serif;background:var(--bg);color:var(--text);overflow:hidden;letter-spacing:.3px;
+  background-image:radial-gradient(1200px 700px at 78% -8%,rgba(53,224,240,.10),transparent 60%),radial-gradient(900px 600px at 8% 110%,rgba(240,180,41,.08),transparent 55%),linear-gradient(transparent 0 96%,rgba(53,224,240,.04) 96% 100%),linear-gradient(90deg,transparent 0 96%,rgba(53,224,240,.04) 96% 100%);
+  background-size:auto,auto,26px 26px,26px 26px;}
 .mono{font-family:'Share Tech Mono',monospace}
-/* ===== scanline + vignette overlay ===== */
 .fx{position:fixed;inset:0;pointer-events:none;z-index:60}
-.fx.scan{background:repeating-linear-gradient(transparent 0 3px, rgba(0,0,0,.16) 3px 4px);mix-blend-mode:overlay;opacity:.5}
+.fx.scan{background:repeating-linear-gradient(transparent 0 3px,rgba(0,0,0,.16) 3px 4px);mix-blend-mode:overlay;opacity:.5}
 .fx.vig{box-shadow:inset 0 0 240px rgba(0,0,0,.75)}
-
-/* ===== boot ===== */
-#boot{position:fixed;inset:0;z-index:100;background:radial-gradient(circle at 50% 45%, #0a1424, #04060b 70%);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;transition:opacity .8s ease, visibility .8s}
+#boot{position:fixed;inset:0;z-index:100;background:radial-gradient(circle at 50% 45%,#0a1424,#04060b 70%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;transition:opacity .8s ease,visibility .8s}
 #boot.gone{opacity:0;visibility:hidden}
 .boot-txt{font-family:'Share Tech Mono';color:var(--cyan);letter-spacing:3px;font-size:13px;text-shadow:var(--glow-cyan)}
 .boot-bar{width:280px;height:3px;background:rgba(53,224,240,.15);border-radius:3px;overflow:hidden}
 .boot-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--cyan),var(--gold));box-shadow:var(--glow-cyan);animation:load 2.2s ease forwards}
 @keyframes load{to{width:100%}}
-
-/* ===== arc reactor ===== */
 .reactor{position:relative;width:46px;height:46px;flex:none}
 .reactor .ring{position:absolute;inset:0;border-radius:50%;border:2px solid var(--cyan);opacity:.85;box-shadow:var(--glow-cyan),inset 0 0 10px rgba(53,224,240,.5)}
 .reactor .ring.r2{inset:7px;border-color:rgba(53,224,240,.5);border-style:dashed;animation:spin 8s linear infinite}
@@ -54,144 +35,125 @@ body{
 .reactor .core{position:absolute;inset:19px;border-radius:50%;background:radial-gradient(circle,#eaffff,var(--cyan));box-shadow:0 0 20px var(--cyan),0 0 40px rgba(53,224,240,.6);animation:pulse 2.4s ease-in-out infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes pulse{0%,100%{transform:scale(.85);opacity:.85}50%{transform:scale(1.05);opacity:1}}
-
-/* ===== layout ===== */
 .app{display:grid;grid-template-columns:230px 1fr;grid-template-rows:60px 1fr;height:100vh}
 .brand{grid-column:1;grid-row:1;display:flex;align-items:center;gap:12px;padding:0 16px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
-.brand b{font-size:20px;font-weight:700;letter-spacing:2px}
-.brand b span{color:var(--cyan);text-shadow:var(--glow-cyan)}
+.brand b{font-size:20px;font-weight:700;letter-spacing:2px}.brand b span{color:var(--cyan);text-shadow:var(--glow-cyan)}
 .brand small{display:block;color:var(--muted);font-size:10px;letter-spacing:3px;font-family:'Share Tech Mono'}
-
-/* topbar */
-.topbar{grid-column:2;grid-row:1;display:flex;align-items:center;gap:18px;padding:0 22px;border-bottom:1px solid var(--line);
-  background:linear-gradient(180deg, rgba(53,224,240,.05), transparent)}
-.topbar .sysline{font-family:'Share Tech Mono';font-size:12px;color:var(--cyan-dim)}
-.topbar .sysline b{color:var(--green)}
+.topbar{grid-column:2;grid-row:1;display:flex;align-items:center;gap:18px;padding:0 22px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,rgba(53,224,240,.05),transparent)}
+.topbar .sysline{font-family:'Share Tech Mono';font-size:12px;color:var(--cyan-dim)}.topbar .sysline b{color:var(--green)}
 .topbar .spacer{flex:1}
-.pill{display:flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--line);border-radius:20px;font-size:12px;
-  font-family:'Share Tech Mono';background:rgba(8,14,22,.6)}
+.pill{display:flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--line);border-radius:20px;font-size:12px;font-family:'Share Tech Mono';background:rgba(8,14,22,.6)}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 1.8s infinite}
-.dot.amber{background:var(--amber);box-shadow:0 0 8px var(--amber)}
-
-/* sidebar nav */
-.side{grid-column:1;grid-row:2;border-right:1px solid var(--line);padding:14px 10px;display:flex;flex-direction:column;gap:4px;
-  background:linear-gradient(180deg, rgba(8,14,22,.4), transparent)}
-.nav{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:9px;color:var(--muted);cursor:pointer;
-  border:1px solid transparent;transition:.18s;position:relative;font-weight:600;font-size:15px}
+.side{grid-column:1;grid-row:2;border-right:1px solid var(--line);padding:14px 10px;display:flex;flex-direction:column;gap:4px;background:linear-gradient(180deg,rgba(8,14,22,.4),transparent)}
+.nav{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:9px;color:var(--muted);cursor:pointer;border:1px solid transparent;transition:.18s;position:relative;font-weight:600;font-size:15px}
 .nav i{width:22px;text-align:center;font-style:normal;font-size:16px;filter:grayscale(.3)}
 .nav:hover{color:var(--text);background:rgba(53,224,240,.06);border-color:var(--line)}
-.nav.active{color:var(--text);background:linear-gradient(90deg, rgba(53,224,240,.14), transparent);border-color:var(--line-strong);box-shadow:inset 0 0 16px rgba(53,224,240,.08)}
+.nav.active{color:var(--text);background:linear-gradient(90deg,rgba(53,224,240,.14),transparent);border-color:var(--line-strong);box-shadow:inset 0 0 16px rgba(53,224,240,.08)}
 .nav.active::before{content:"";position:absolute;left:-10px;top:8px;bottom:8px;width:3px;background:var(--cyan);box-shadow:var(--glow-cyan);border-radius:3px}
 .side .navfoot{margin-top:auto;font-family:'Share Tech Mono';font-size:10px;color:var(--muted);padding:10px;line-height:1.7;border-top:1px solid var(--line)}
-
-/* main */
 .main{grid-column:2;grid-row:2;overflow-y:auto;padding:22px 26px 40px}
 .main::-webkit-scrollbar{width:9px}.main::-webkit-scrollbar-thumb{background:rgba(53,224,240,.25);border-radius:9px}
-.screen{display:none;animation:fade .5s ease}
-.screen.on{display:block}
+.screen{display:none;animation:fade .5s ease}.screen.on{display:block}
 @keyframes fade{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-.page-h{display:flex;align-items:flex-end;gap:14px;margin-bottom:20px}
-.page-h h1{font-size:26px;font-weight:700;letter-spacing:1px}
-.page-h h1 span{color:var(--cyan)}
+.page-h{display:flex;align-items:flex-end;gap:14px;margin-bottom:18px}
+.page-h h1{font-size:26px;font-weight:700;letter-spacing:1px}.page-h h1 span{color:var(--cyan)}
 .page-h .sub{color:var(--muted);font-family:'Share Tech Mono';font-size:12px;padding-bottom:4px}
-
-/* grid + panels */
-.grid{display:grid;gap:16px}
-.g2{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}
-.panel{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;
-  backdrop-filter:blur(8px);overflow:hidden}
+.grid{display:grid;gap:16px}.g1{grid-template-columns:1fr}.g2{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}.g6{grid-template-columns:repeat(6,1fr)}
+.panel{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;backdrop-filter:blur(8px);overflow:hidden}
 .panel::before,.panel::after{content:"";position:absolute;width:14px;height:14px;border:2px solid var(--cyan);opacity:.55}
-.panel::before{top:6px;left:6px;border-right:0;border-bottom:0}
-.panel::after{bottom:6px;right:6px;border-left:0;border-top:0}
-.panel.gold{border-color:rgba(240,180,41,.28)}
-.panel.gold::before,.panel.gold::after{border-color:var(--gold)}
+.panel::before{top:6px;left:6px;border-right:0;border-bottom:0}.panel::after{bottom:6px;right:6px;border-left:0;border-top:0}
+.panel.gold{border-color:rgba(240,180,41,.28)}.panel.gold::before,.panel.gold::after{border-color:var(--gold)}
 .panel h3{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--cyan);margin-bottom:12px;font-family:'Share Tech Mono';display:flex;gap:8px;align-items:center}
 .panel h3 .ln{flex:1;height:1px;background:linear-gradient(90deg,var(--line-strong),transparent)}
-
-.kpi{font-family:'Share Tech Mono'}
-.kpi .v{font-size:32px;font-weight:700;line-height:1;text-shadow:0 0 12px rgba(53,224,240,.25)}
+.kpi{font-family:'Share Tech Mono'}.kpi .v{font-size:30px;font-weight:700;line-height:1;text-shadow:0 0 12px rgba(53,224,240,.25)}
 .kpi .l{color:var(--muted);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-top:8px}
 .up{color:var(--green)}.down{color:var(--red)}.cy{color:var(--cyan)}.gd{color:var(--gold)}.pp{color:var(--purple)}
 .trend{font-size:12px;margin-top:6px;font-family:'Share Tech Mono'}
-
-.chip{display:inline-flex;align-items:center;gap:6px;font-family:'Share Tech Mono';font-size:11px;padding:4px 9px;border-radius:6px;
-  border:1px solid var(--line);color:var(--cyan)}
-.chip.g{color:var(--green);border-color:rgba(52,224,161,.4)}
-.chip.r{color:var(--red);border-color:rgba(255,91,110,.4)}
-.chip.gold{color:var(--gold);border-color:rgba(240,180,41,.4)}
-
-table{width:100%;border-collapse:collapse;font-family:'Share Tech Mono';font-size:12.5px}
-th{text-align:left;color:var(--muted);font-weight:400;padding:8px 10px;border-bottom:1px solid var(--line);letter-spacing:1px;font-size:11px}
-td{padding:9px 10px;border-bottom:1px solid rgba(53,224,240,.07)}
-tr:hover td{background:rgba(53,224,240,.05)}
-
-/* gauge ring */
-.gauge{position:relative;width:150px;height:150px;margin:0 auto}
-.gauge svg{transform:rotate(-90deg)}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:'Share Tech Mono';font-size:11px;padding:4px 9px;border-radius:6px;border:1px solid var(--line);color:var(--cyan)}
+.chip.g{color:var(--green);border-color:rgba(52,224,161,.4)}.chip.r{color:var(--red);border-color:rgba(255,91,110,.4)}.chip.gold{color:var(--gold);border-color:rgba(240,180,41,.4)}
+table{width:100%;border-collapse:collapse;font-family:'Share Tech Mono';font-size:12px}
+th{text-align:left;color:var(--muted);font-weight:400;padding:7px 9px;border-bottom:1px solid var(--line);letter-spacing:1px;font-size:10.5px}
+td{padding:8px 9px;border-bottom:1px solid rgba(53,224,240,.07)}tr:hover td{background:rgba(53,224,240,.05)}
+.gauge{position:relative;width:140px;height:140px;margin:0 auto}.gauge svg{transform:rotate(-90deg)}
 .gauge .txt{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.gauge .txt b{font-size:30px;font-family:'Share Tech Mono';text-shadow:var(--glow-cyan)}
+.gauge .txt b{font-size:28px;font-family:'Share Tech Mono';text-shadow:var(--glow-cyan)}
 .gauge .txt s{font-size:10px;color:var(--muted);letter-spacing:2px;text-decoration:none}
-
-/* order book ladder */
-.ladder{font-family:'Share Tech Mono';font-size:12px}
-.lrow{display:grid;grid-template-columns:1fr 70px;align-items:center;gap:8px;padding:3px 0;position:relative}
-.lrow .bar{height:20px;border-radius:3px;position:relative}
+.ladder{font-family:'Share Tech Mono';font-size:11.5px}
+.lrow{display:grid;grid-template-columns:1fr 62px 34px;align-items:center;gap:6px;padding:2px 0}
+.lrow .bar{height:18px;border-radius:3px}
 .lrow.ask .bar{background:linear-gradient(90deg,transparent,rgba(255,91,110,.32));border-right:2px solid var(--red)}
 .lrow.bid .bar{background:linear-gradient(90deg,transparent,rgba(52,224,161,.32));border-right:2px solid var(--green)}
-.lrow .px{text-align:right}.lrow.ask .px{color:var(--red)}.lrow.bid .px{color:var(--green)}
-.spread{text-align:center;color:var(--gold);padding:6px;font-family:'Share Tech Mono';font-size:12px;border-block:1px dashed rgba(240,180,41,.3);margin:5px 0}
-
-/* aggression bar */
-.aggr{height:26px;border-radius:6px;overflow:hidden;display:flex;border:1px solid var(--line);font-family:'Share Tech Mono';font-size:12px;font-weight:700}
-.aggr .b{display:flex;align-items:center;justify-content:center;transition:width .6s}
-.aggr .buy{background:linear-gradient(90deg,rgba(52,224,161,.5),rgba(52,224,161,.2));color:#eafff5}
-.aggr .sell{background:linear-gradient(90deg,rgba(255,91,110,.2),rgba(255,91,110,.5));color:#ffecef}
-
-.tape{font-family:'Share Tech Mono';font-size:12px;max-height:210px;overflow:hidden}
-.tape div{display:flex;justify-content:space-between;padding:3px 6px;border-bottom:1px solid rgba(53,224,240,.06)}
+.lrow .px{text-align:right}.lrow.ask .px{color:var(--red)}.lrow.bid .px{color:var(--green)}.lrow .vl{text-align:right;color:var(--muted)}
+.spread{text-align:center;color:var(--gold);padding:5px;font-family:'Share Tech Mono';font-size:11px;border-block:1px dashed rgba(240,180,41,.3);margin:4px 0}
+.aggr{height:24px;border-radius:6px;overflow:hidden;display:flex;border:1px solid var(--line);font-family:'Share Tech Mono';font-size:11px;font-weight:700}
+.aggr .b{display:flex;align-items:center;justify-content:center}.aggr .buy{background:linear-gradient(90deg,rgba(52,224,161,.5),rgba(52,224,161,.2));color:#eafff5}.aggr .sell{background:linear-gradient(90deg,rgba(255,91,110,.2),rgba(255,91,110,.5));color:#ffecef}
+.tape{font-family:'Share Tech Mono';font-size:11px;max-height:260px;overflow-y:auto}
+.tape::-webkit-scrollbar{width:6px}.tape::-webkit-scrollbar-thumb{background:rgba(53,224,240,.2)}
+.tape div{display:grid;grid-template-columns:52px 1fr 30px 16px;gap:4px;padding:2px 4px;border-bottom:1px solid rgba(53,224,240,.05)}
 .tape .B{color:var(--green)}.tape .S{color:var(--red)}
-
-.btn{font-family:'Rajdhani';font-weight:700;letter-spacing:1px;border:1px solid var(--line-strong);background:rgba(53,224,240,.08);
-  color:var(--text);padding:10px 16px;border-radius:8px;cursor:pointer;transition:.15s;font-size:14px}
+.btn{font-family:'Rajdhani';font-weight:700;letter-spacing:1px;border:1px solid var(--line-strong);background:rgba(53,224,240,.08);color:var(--text);padding:9px 14px;border-radius:8px;cursor:pointer;transition:.15s;font-size:14px}
 .btn:hover{background:rgba(53,224,240,.18);box-shadow:var(--glow-cyan)}
-.btn.buy{border-color:rgba(52,224,161,.5);background:rgba(52,224,161,.12);color:#d6ffee}
-.btn.buy:hover{box-shadow:0 0 18px rgba(52,224,161,.4)}
-.btn.sell{border-color:rgba(255,91,110,.5);background:rgba(255,91,110,.12);color:#ffdde1}
-.btn.sell:hover{box-shadow:0 0 18px rgba(255,91,110,.4)}
+.btn.buy{border-color:rgba(52,224,161,.5);background:rgba(52,224,161,.12);color:#d6ffee}.btn.buy:hover{box-shadow:0 0 18px rgba(52,224,161,.4)}
+.btn.sell{border-color:rgba(255,91,110,.5);background:rgba(255,91,110,.12);color:#ffdde1}.btn.sell:hover{box-shadow:0 0 18px rgba(255,91,110,.4)}
 .btn.gold{border-color:rgba(240,180,41,.5);background:rgba(240,180,41,.12);color:#ffeec2}
-
-.toggle{width:52px;height:26px;border-radius:20px;background:rgba(52,224,161,.2);border:1px solid rgba(52,224,161,.5);position:relative;cursor:pointer}
-.toggle i{position:absolute;top:2px;left:26px;width:20px;height:20px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green);transition:.2s}
-
-.bars{display:flex;gap:5px;align-items:flex-end;height:56px}
+.btn.sm{padding:6px 10px;font-size:12px}
+.toggle{width:48px;height:24px;border-radius:20px;background:rgba(52,224,161,.2);border:1px solid rgba(52,224,161,.5);position:relative;cursor:pointer}
+.toggle i{position:absolute;top:2px;left:24px;width:18px;height:18px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green);transition:.2s}
+.bars{display:flex;gap:4px;align-items:flex-end;height:50px}
 .bars i{flex:1;background:linear-gradient(180deg,var(--cyan),rgba(53,224,240,.15));border-radius:2px 2px 0 0;opacity:.85}
-
-.list-tight li{list-style:none;display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(53,224,240,.07);font-family:'Share Tech Mono';font-size:13px}
+.list-tight li{list-style:none;display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid rgba(53,224,240,.07);font-family:'Share Tech Mono';font-size:12.5px}
 .mini{color:var(--muted);font-size:11px;font-family:'Share Tech Mono';margin-top:4px}
-.slider{height:6px;border-radius:6px;background:rgba(53,224,240,.15);position:relative;margin:14px 0 6px}
+.slider{height:6px;border-radius:6px;background:rgba(53,224,240,.15);position:relative;margin:12px 0 6px}
 .slider i{position:absolute;height:100%;background:linear-gradient(90deg,var(--cyan-dim),var(--cyan));border-radius:6px;box-shadow:var(--glow-cyan)}
 .slider b{position:absolute;top:-6px;width:16px;height:16px;border-radius:50%;background:var(--cyan);box-shadow:var(--glow-cyan);transform:translateX(-50%)}
-.tag{font-family:'Share Tech Mono';font-size:10px;letter-spacing:2px;color:var(--muted)}
-.hex{color:var(--cyan);opacity:.6}
+.tag{font-family:'Share Tech Mono';font-size:10px;letter-spacing:2px;color:var(--muted)}.hex{color:var(--cyan);opacity:.6}
+/* monitor cards */
+.card-badge{font-family:'Share Tech Mono';font-size:11px;padding:3px 9px;border-radius:14px;border:1px solid}
+.b-compra{color:var(--green);border-color:rgba(52,224,161,.5);background:rgba(52,224,161,.1)}
+.b-venda{color:var(--red);border-color:rgba(255,91,110,.5);background:rgba(255,91,110,.1)}
+.b-manage{color:var(--cyan);border-color:var(--line-strong);background:rgba(53,224,240,.12);box-shadow:var(--glow-cyan)}
+.mrow{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(53,224,240,.06);font-size:12.5px}
+.mrow .ml{color:var(--muted)}.mrow .mv{font-family:'Share Tech Mono'}
+.rec{margin:10px 0;padding:8px 12px;border-radius:8px;font-family:'Share Tech Mono';font-size:12px;font-weight:600;border:1px solid}
+.rec-manter{color:var(--green);border-color:rgba(52,224,161,.4);background:rgba(52,224,161,.08)}
+.rec-be{color:var(--cyan);border-color:var(--line-strong);background:rgba(53,224,240,.08)}
+.confs{display:flex;flex-wrap:wrap;gap:5px;margin:4px 0 8px}
+.conf{font-family:'Share Tech Mono';font-size:10px;padding:3px 7px;border-radius:5px;border:1px solid var(--line);color:var(--muted)}
+.conf.bull{color:var(--green);border-color:rgba(52,224,161,.35)}.conf.bear{color:var(--red);border-color:rgba(255,91,110,.35)}
+.swapbtn{font-family:'Share Tech Mono';font-size:10px;color:var(--cyan);background:transparent;border:1px solid var(--line);border-radius:6px;padding:4px 8px;cursor:pointer}
+.swapbtn:hover{background:rgba(53,224,240,.1)}
+.sec-title{font-family:'Share Tech Mono';font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin:10px 0 4px}
+.fbox{background:rgba(8,14,22,.6);border:1px solid var(--line);border-radius:7px;padding:7px 6px;text-align:center}
+.fbox s{display:block;font-size:9px;color:var(--muted);letter-spacing:1px;text-decoration:none;text-transform:uppercase}
+.fbox b{font-size:15px;font-family:'Share Tech Mono'}
+/* swap sinal <-> gestão */
+.pane .mng,.pane .badge-mng{display:none}.pane .badge-sig{display:inline-flex}
+.pane.on-manage .sig,.pane.on-manage .badge-sig{display:none}
+.pane.on-manage .mng{display:block}.pane.on-manage .badge-mng{display:inline-flex}
+.iaverdict{font-family:'Share Tech Mono';font-size:11px;padding:8px 10px;border-radius:7px;border:1px solid rgba(52,224,161,.35);background:rgba(52,224,161,.06);color:var(--green);margin-top:8px}
+.segbtn{font-family:'Share Tech Mono';font-size:11px;color:var(--muted);border:1px solid var(--line);background:transparent;padding:5px 11px;cursor:pointer}
+.segbtn.on{color:var(--cyan);border-color:var(--line-strong);background:rgba(53,224,240,.1)}
+.seg{display:inline-flex;border-radius:7px;overflow:hidden}.seg .segbtn{border-radius:0}.seg .segbtn:first-child{border-radius:7px 0 0 7px}.seg .segbtn:last-child{border-radius:0 7px 7px 0}
+.sform{display:grid;grid-template-columns:1fr auto;gap:6px 12px;font-family:'Share Tech Mono';font-size:11.5px;align-items:center}
+.sform .k{color:var(--muted)}.sform .val{color:var(--cyan);text-align:right;background:rgba(8,14,22,.6);border:1px solid var(--line);border-radius:5px;padding:3px 8px;min-width:52px}
+.statbar{display:flex;gap:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;font-family:'Share Tech Mono'}
+.statbar div{flex:1;padding:8px 6px;text-align:center;border-right:1px solid var(--line)}
+.statbar div:last-child{border-right:0}.statbar s{display:block;font-size:9px;color:var(--muted);text-decoration:none;letter-spacing:1px}
+.statbar b{font-size:15px}
 </style>
 </head>
 <body>
 <div class="fx scan"></div><div class="fx vig"></div>
-
 <div id="boot">
   <div class="reactor" style="width:70px;height:70px"><div class="ring"></div><div class="ring r2"></div><div class="ring r3"></div><div class="core"></div></div>
   <div class="boot-txt" id="boottxt">INICIALIZANDO NÚCLEO J.A.R.V.I.S...</div>
   <div class="boot-bar"><i></i></div>
 </div>
-
 <div class="app">
-  <!-- brand -->
   <div class="brand">
     <div class="reactor"><div class="ring"></div><div class="ring r2"></div><div class="ring r3"></div><div class="core"></div></div>
     <div><b>TRADE<span>AI</span></b><small>STARK · HUD</small></div>
   </div>
-
-  <!-- topbar -->
   <div class="topbar">
     <div class="sysline">SISTEMA <b>ONLINE</b> · GATE IA <b>ATIVO</b> · MT5 <b>CONECTADO</b></div>
     <div class="spacer"></div>
@@ -199,495 +161,429 @@ tr:hover td{background:rgba(53,224,240,.05)}
     <div class="pill"><span class="hex">▲</span> P&amp;L HOJE <b class="up">+3.2R</b></div>
     <div class="pill mono" id="clock">--:--:--</div>
   </div>
-
-  <!-- sidebar -->
   <div class="side">
     <div class="nav active" data-s="dash"><i>◉</i> Dashboard</div>
     <div class="nav" data-s="monitor"><i>▚</i> Monitor MT5</div>
-    <div class="nav" data-s="trade"><i>⊞</i> Trade Manager</div>
     <div class="nav" data-s="scalp"><i>⚡</i> Scalper</div>
     <div class="nav" data-s="market"><i>▤</i> Market Center</div>
     <div class="nav" data-s="intel"><i>❖</i> Inteligência</div>
     <div class="nav" data-s="risk"><i>⛨</i> Risk Management</div>
     <div class="nav" data-s="analytics"><i>◵</i> Analytics</div>
     <div class="nav" data-s="profit"><i>⟲</i> Profit Bridge</div>
-    <div class="navfoot">MOTOR v6.2<br>WIN · WDOQ26 · BITM26<br>PROTÓTIPO VISUAL</div>
+    <div class="navfoot">MOTOR v6.2<br>WINQ26 · WDOQ26 · BITM26<br>PROTÓTIPO VISUAL</div>
   </div>
-
-  <!-- main -->
   <div class="main">
 
-  <!-- ============ DASHBOARD ============ -->
+  <!-- ===== DASHBOARD ===== -->
   <section class="screen on" id="dash">
-    <div class="page-h"><h1>MEU <span>DESEMPENHO</span></h1><div class="sub">// visão geral do sistema em tempo real</div></div>
+    <div class="page-h"><h1>MEU <span>DESEMPENHO</span></h1><div class="sub">// visão geral do sistema</div></div>
     <div class="grid g4">
-      <div class="panel"><div class="kpi"><div class="v up">+45.7R</div><div class="l">Expectância WDO (90d)</div><div class="trend up">▲ PF 1.34 · consistente</div></div></div>
-      <div class="panel"><div class="kpi"><div class="v cy">+5.1R</div><div class="l">Expectância WIN (90d)</div><div class="trend gd">◆ PF 1.10 · sinais fortes</div></div></div>
-      <div class="panel"><div class="kpi"><div class="v gd">48.6%</div><div class="l">Win Rate médio</div><div class="trend">alvo 1.5R · exit corrigido</div></div></div>
-      <div class="panel gold"><div class="kpi"><div class="v">72</div><div class="l">Trades no período</div><div class="trend cy">WDO 255 · WIN 90</div></div></div>
+      <div class="panel"><div class="kpi"><div class="v up">+45.7R</div><div class="l">Expectância WDO (90d)</div><div class="trend up">▲ PF 1.34</div></div></div>
+      <div class="panel"><div class="kpi"><div class="v cy">+5.1R</div><div class="l">Expectância WIN (90d)</div><div class="trend gd">◆ PF 1.10</div></div></div>
+      <div class="panel"><div class="kpi"><div class="v gd">48.6%</div><div class="l">Win Rate médio</div><div class="trend">alvo 1.5R</div></div></div>
+      <div class="panel gold"><div class="kpi"><div class="v">877</div><div class="l">Sinais no backtest</div><div class="trend cy">WDO+WIN</div></div></div>
     </div>
-
     <div class="grid g3" style="margin-top:16px">
-      <div class="panel">
-        <h3>Meu trade · execução real <span class="ln"></span></h3>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div><div class="tag">ATIVO</div><div class="mono" style="font-size:22px;color:var(--cyan)">WDOQ26</div></div>
-          <div class="chip g">◉ COMPRA · ABERTA</div>
-        </div>
-        <div class="grid g3" style="margin-top:14px;gap:10px">
-          <div><div class="tag">ENTRADA</div><div class="mono cy">5.842,0</div></div>
-          <div><div class="tag">STOP</div><div class="mono down">5.836,0</div></div>
-          <div><div class="tag">ALVO 1.5R</div><div class="mono up">5.851,0</div></div>
-        </div>
-        <div class="slider" style="margin-top:18px"><i style="width:62%"></i><b style="left:62%"></b></div>
-        <div class="mini">Progresso até o alvo · <span class="up">+0,9R</span> em andamento</div>
-      </div>
-
-      <div class="panel">
-        <h3>Alvos &amp; probabilidade <span class="ln"></span></h3>
-        <div class="gauge">
-          <svg width="150" height="150"><circle cx="75" cy="75" r="62" stroke="rgba(53,224,240,.12)" stroke-width="10" fill="none"/>
-          <circle cx="75" cy="75" r="62" stroke="url(#g1)" stroke-width="10" fill="none" stroke-linecap="round" stroke-dasharray="389" stroke-dashoffset="140"/>
-          <defs><linearGradient id="g1"><stop offset="0" stop-color="#35e0f0"/><stop offset="1" stop-color="#f0b429"/></linearGradient></defs></svg>
-          <div class="txt"><b class="up">64%</b><s>PROB. TP1</s></div>
-        </div>
-        <div class="grid g3" style="margin-top:12px;text-align:center">
-          <div><div class="tag">TP1</div><div class="mono up">64%</div></div>
-          <div><div class="tag">TP2</div><div class="mono gd">41%</div></div>
-          <div><div class="tag">TP3</div><div class="mono">22%</div></div>
-        </div>
-      </div>
-
-      <div class="panel">
-        <h3>Por que não operar? <span class="ln"></span></h3>
+      <div class="panel" style="grid-column:span 2"><h3>P&amp;L por dia <span class="ln"></span></h3><canvas id="chPnl" height="110"></canvas></div>
+      <div class="panel"><h3>Por que não operar? <span class="ln"></span></h3>
         <ul class="list-tight">
           <li><span>Tendência 1h</span><span class="chip g">alinhada</span></li>
           <li><span>Score / exaustão</span><span class="chip g">9 · ok</span></li>
-          <li><span>ADX</span><span class="chip g">27 · forte</span></li>
-          <li><span>Janela horário</span><span class="chip gold">14:20 · boa</span></li>
+          <li><span>ADX</span><span class="chip g">27 forte</span></li>
           <li><span>Gate IA</span><span class="chip g">EXECUTAR</span></li>
           <li><span>Order flow</span><span class="chip g">confirma</span></li>
         </ul>
       </div>
     </div>
-
-    <div class="grid g3" style="margin-top:16px">
-      <div class="panel" style="grid-column:span 2">
-        <h3>Relatório de trades · P&amp;L por dia <span class="ln"></span></h3>
-        <canvas id="chPnl" height="120"></canvas>
-      </div>
-      <div class="panel">
-        <h3>Histórico automático <span class="ln"></span></h3>
-        <table>
-          <tr><th>ATIVO</th><th>DIR</th><th>R</th></tr>
-          <tr><td>WDOQ26</td><td class="up">C</td><td class="up">+1.5</td></tr>
-          <tr><td>WDOQ26</td><td class="down">V</td><td class="down">-1.0</td></tr>
-          <tr><td>WINQ26</td><td class="up">C</td><td class="up">+1.5</td></tr>
-          <tr><td>WDOQ26</td><td class="up">C</td><td class="up">+1.5</td></tr>
-          <tr><td>WINQ26</td><td class="up">C</td><td class="up">+2.1</td></tr>
-        </table>
-      </div>
-    </div>
   </section>
 
-  <!-- ============ MONITOR MT5 ============ -->
+  <!-- ===== MONITOR MT5 (DUAL) ===== -->
   <section class="screen" id="monitor">
-    <div class="page-h"><h1>MONITOR <span>MT5</span></h1><div class="sub">// WIN &amp; WDO · gráfico + execução automática</div></div>
-
+    <div class="page-h"><h1>MONITOR <span>MT5</span></h1><div class="sub">// WIN &amp; WDO lado a lado · sem trocar de aba</div></div>
     <div class="panel" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px">
-      <div style="display:flex;gap:8px">
-        <span class="chip gold" id="symWDO">WDOQ26</span>
-        <span class="chip" id="symWIN" style="opacity:.55;cursor:pointer">WINQ26</span>
-      </div>
-      <div style="display:flex;gap:6px" class="tag">
-        <span class="chip" style="padding:3px 8px">1m</span><span class="chip cy" style="padding:3px 8px;border-color:var(--line-strong)">15m</span><span class="chip" style="padding:3px 8px">1h</span>
-      </div>
+      <span class="tag">VISÃO</span>
+      <div class="seg"><button class="segbtn on" id="segSplit" onclick="setView('split')">▚ SPLIT · 2 ativos</button><button class="segbtn" id="segFoco" onclick="setView('foco')">▢ FOCO · 1 ativo</button></div>
+      <span class="tag" style="margin-left:8px">TIMEFRAME</span><span class="chip cy">15m</span>
+      <span class="tag">ATUALIZAR</span><span class="chip">30s</span>
+      <button class="btn sm">❚❚ Pausar</button>
       <div class="spacer" style="flex:1"></div>
-      <div class="mono"><span class="tag">ÚLTIMO</span> <b class="down" style="font-size:20px">5.842,0</b></div>
-      <div class="mono"><span class="tag">VWAP</span> <b class="gd">5.848</b></div>
-      <div class="mono"><span class="tag">ADX</span> <b class="cy">24</b></div>
-      <div class="chip r">1h BAIXA</div>
-      <div style="display:flex;align-items:center;gap:8px"><span class="tag">MOTOR</span><div class="toggle"><i></i></div><span class="chip g">AUTO</span></div>
+      <div style="display:flex;align-items:center;gap:8px"><span class="tag">AUTO-TRADE</span><div class="toggle"><i></i></div><span class="chip g">LIGADO</span></div>
+      <span class="tag">ATUALIZADO</span><span class="mono cy" id="mt5upd">--:--:--</span>
     </div>
 
-    <div class="grid" style="grid-template-columns:1fr 320px;gap:16px">
-      <div class="panel">
-        <h3>Gráfico · WDOQ26 15m <span class="ln"></span>
-          <span class="tag" style="color:var(--cyan)">EMA9</span><span class="tag" style="color:var(--purple)">EMA21</span>
-          <span class="tag" style="color:var(--gold)">VWAP</span><span class="tag" style="color:var(--red)">EMA200</span></h3>
-        <div id="candlewrap" style="width:100%"></div>
-        <div class="mini" style="display:flex;gap:18px;margin-top:6px">
-          <span>▲ entrada COMPRA</span><span>■ zona de STOP</span><span>◎ alvo 1.5R</span><span>▼ saída</span>
+    <div class="grid g2" id="monPanes">
+      <!-- PANE WIN (VENDA em gestão) -->
+      <div class="panel pane on-manage" id="paneWIN" data-foco="WIN">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div><span class="mono cy" style="font-size:17px">WINQ26</span> <span class="tag">Mini Índice · 15m</span></div>
+          <span style="display:flex;gap:8px;align-items:center">
+            <span class="card-badge b-manage badge-mng">● MANAGE · VENDA</span>
+            <span class="card-badge b-venda badge-sig">SINAL VENDA</span>
+            <button class="swapbtn" onclick="toggleTrade('paneWIN')">⟳ simular execução</button>
+          </span>
         </div>
+        <div id="cwWIN" style="width:100%"></div>
+        <div class="mng">
+          <div style="display:flex;gap:8px;margin:10px 0">
+            <div class="fbox" style="flex:1"><s>P&amp;L Pontos</s><b class="down">−55</b></div>
+            <div class="fbox" style="flex:1"><s>P&amp;L R$</s><b class="down">−58,00</b></div>
+            <div class="fbox" style="flex:1"><s>Candles aberto</s><b class="cy">12</b></div>
+          </div>
+          <div class="mrow"><span class="ml">Entrada</span><span class="mv cy">172.245</span></div>
+          <div class="mrow"><span class="ml">Preço atual</span><span class="mv">172.520</span></div>
+          <div class="mrow"><span class="ml">Stop atual</span><span class="mv down">172.705 · dist 180pts</span></div>
+          <div class="mrow"><span class="ml">TP1</span><span class="mv up">171.520 · dist 1005pts</span></div>
+          <div class="rec rec-manter">MANTER · trade dentro dos parâmetros — aguardar alvos</div>
+          <div class="iaverdict" style="color:var(--green)">IA: EXECUTAR 91% — venda alinhada à 1h em baixa, score forte, ADX alto e fluxo</div>
+        </div>
+        <div class="sig">
+          <div class="sec-title">Análise de oportunidade</div>
+          <div class="mrow"><span class="ml">Sinal técnico</span><span class="mv down">VENDA · score −6</span></div>
+          <div class="mrow"><span class="ml">Entrada sugerida</span><span class="mv cy">172.520</span></div>
+          <div class="mrow"><span class="ml">Stop / TP1</span><span class="mv">172.705 / 171.520</span></div>
+          <div class="confs"><span class="conf bear">EMA9&lt;EMA21</span><span class="conf bear">1h baixa</span><span class="conf bear">&lt; VWAP</span></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px"><button class="btn buy sm" style="flex:1">▲ COMPRAR</button><button class="btn sell sm" style="flex:1">▼ VENDER</button><button class="btn sm">✕ Fechar</button></div>
       </div>
 
-      <div style="display:flex;flex-direction:column;gap:16px">
-        <div class="panel gold">
-          <h3>Sinal atual <span class="ln"></span></h3>
-          <div style="display:flex;align-items:center;gap:14px">
-            <div class="gauge" style="width:96px;height:96px">
-              <svg width="96" height="96"><circle cx="48" cy="48" r="38" stroke="rgba(240,180,41,.12)" stroke-width="7" fill="none"/>
-              <circle cx="48" cy="48" r="38" stroke="url(#g2)" stroke-width="7" fill="none" stroke-linecap="round" stroke-dasharray="239" stroke-dashoffset="70"/></svg>
-              <div class="txt"><b class="gd" style="font-size:22px">9</b><s>SCORE</s></div>
-            </div>
-            <div><div class="chip g" style="font-size:13px">▲ COMPRA</div><div class="mini" style="margin-top:8px">força FORTE<br>gate IA: <span class="up">EXECUTAR</span></div></div>
+      <!-- PANE WDO (COMPRA em gestão) -->
+      <div class="panel pane on-manage" id="paneWDO" data-foco="WDO">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div><span class="mono gd" style="font-size:17px">WDOQ26</span> <span class="tag">Mini Dólar · 15m</span></div>
+          <span style="display:flex;gap:8px;align-items:center">
+            <span class="card-badge b-manage badge-mng">● MANAGE · COMPRA</span>
+            <span class="card-badge b-compra badge-sig">SINAL COMPRA</span>
+            <button class="swapbtn" onclick="toggleTrade('paneWDO')">⟳ simular execução</button>
+          </span>
+        </div>
+        <div id="cwWDO" style="width:100%"></div>
+        <div class="mng">
+          <div style="display:flex;gap:8px;margin:10px 0">
+            <div class="fbox" style="flex:1"><s>P&amp;L Pontos</s><b class="up">+40</b></div>
+            <div class="fbox" style="flex:1"><s>P&amp;L R$</s><b class="up">+40,00</b></div>
+            <div class="fbox" style="flex:1"><s>Candles aberto</s><b class="cy">13</b></div>
           </div>
-          <table style="margin-top:12px">
-            <tr><td>Entrada</td><td class="mono cy" style="text-align:right">5.842,0</td></tr>
-            <tr><td>Stop</td><td class="mono down" style="text-align:right">5.836,0 (−6)</td></tr>
-            <tr><td>TP1 · 1.5R</td><td class="mono up" style="text-align:right">5.851,0</td></tr>
-            <tr><td>TP2 / TP3</td><td class="mono gd" style="text-align:right">5.857 / 5.866</td></tr>
-            <tr><td>R:R</td><td class="mono up" style="text-align:right">1:1.5</td></tr>
-          </table>
+          <div class="mrow"><span class="ml">Entrada</span><span class="mv cy">5.230</span></div>
+          <div class="mrow"><span class="ml">Preço atual</span><span class="mv">5.233,50</span></div>
+          <div class="mrow"><span class="ml">Stop atual</span><span class="mv down">5.222 · dist 10pts</span></div>
+          <div class="mrow"><span class="ml">TP1</span><span class="mv up">5.244 · dist 10pts</span></div>
+          <div class="rec rec-manter">MANTER · trade dentro dos parâmetros — aguardar alvos</div>
+          <div class="iaverdict">IA: EXECUTAR 78% — 1h alinhada, compra a favor da tendência, score 8 com ADX 23</div>
         </div>
-        <div class="panel">
-          <h3>Confluências <span class="ln"></span></h3>
-          <ul class="list-tight" style="font-size:12px">
-            <li><span>EMA9 &gt; EMA21</span><span class="chip g">✓</span></li>
-            <li><span>Preço &gt; EMA200</span><span class="chip g">✓</span></li>
-            <li><span>1h alinhada</span><span class="chip g">✓</span></li>
-            <li><span>Order flow</span><span class="chip g">confirma</span></li>
-            <li><span>Exaustão (teto 11)</span><span class="chip g">ok</span></li>
-          </ul>
+        <div class="sig">
+          <div class="sec-title">Análise de oportunidade</div>
+          <div class="mrow"><span class="ml">Sinal técnico</span><span class="mv up">COMPRA · score +7</span></div>
+          <div class="mrow"><span class="ml">Entrada sugerida</span><span class="mv cy">5.233,50</span></div>
+          <div class="mrow"><span class="ml">Stop / TP1 (1.5R)</span><span class="mv">5.222 / 5.244</span></div>
+          <div class="confs"><span class="conf bull">EMA9&gt;EMA21</span><span class="conf bull">1h alta</span><span class="conf bull">&gt; VWAP</span></div>
         </div>
+        <div style="display:flex;gap:8px;margin-top:10px"><button class="btn buy sm" style="flex:1">▲ COMPRAR</button><button class="btn sell sm" style="flex:1">▼ VENDER</button><button class="btn sm">✕ Fechar</button></div>
       </div>
+    </div>
+
+    <div class="panel" style="margin-top:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:8px"><span class="tag">SCORE MÍN</span><span class="chip cy">WIN 9 · WDO 7</span></div>
+      <div style="display:flex;align-items:center;gap:8px"><span class="tag">VOLUME</span><span class="chip">1</span></div>
+      <div style="display:flex;align-items:center;gap:8px"><span class="tag">AUTO-TRADE</span><span class="chip g">ON</span></div>
+      <button class="btn sm">✕ Fechar posições</button><button class="btn sm gold">3-Contratos</button><button class="btn sm">Meta +R</button>
+      <div class="spacer" style="flex:1"></div>
+      <span class="tag cy">MANAGE ativo · 2 posições abertas</span>
+    </div>
+
+    <div class="statbar" style="margin-top:16px">
+      <div><s>SINAIS</s><b class="cy">—</b></div><div><s>TP1</s><b class="up">—</b></div><div><s>TP2</s><b class="up">—</b></div>
+      <div><s>TP3</s><b class="up">—</b></div><div><s>STOP</s><b class="down">—</b></div><div><s>VERIFICADOS</s><b class="gd">✓</b></div>
     </div>
 
     <div class="panel" style="margin-top:16px">
-      <h3>Ordens executadas <span class="ln"></span></h3>
+      <h3>Histórico de trades automáticos <span class="ln"></span></h3>
       <table>
-        <tr><th>#</th><th>ATIVO</th><th>DIR</th><th>ENTRADA</th><th>SAÍDA</th><th>R</th><th>MOTIVO</th><th>SCORE</th><th>HORA</th></tr>
-        <tr><td>1042</td><td>WDOQ26</td><td class="up">COMPRA</td><td>5.838,0</td><td>5.847,0</td><td class="up">+1.5</td><td>TP1</td><td>8</td><td>14:22</td></tr>
-        <tr><td>1041</td><td>WINQ26</td><td class="up">COMPRA</td><td>134.100</td><td>134.320</td><td class="up">+2.1</td><td>TP2</td><td>10</td><td>13:58</td></tr>
-        <tr><td>1040</td><td>WDOQ26</td><td class="down">VENDA</td><td>5.851,0</td><td>5.857,0</td><td class="down">−1.0</td><td>STOP</td><td>7</td><td>13:31</td></tr>
-        <tr><td>1039</td><td>WDOQ26</td><td class="up">COMPRA</td><td>5.829,0</td><td>5.838,0</td><td class="up">+1.5</td><td>TP1</td><td>9</td><td>11:47</td></tr>
-        <tr><td>1038</td><td>WINQ26</td><td class="up">COMPRA</td><td>133.700</td><td>133.700</td><td class="gd">0.0</td><td>BREAK-EVEN</td><td>9</td><td>11:12</td></tr>
+        <tr><th>DATA/HORA</th><th>ATIVO</th><th>AÇÃO</th><th>SCORE</th><th>ENTRADA</th><th>STOP</th><th>TP1</th><th>SAÍDA</th><th>MOTIVO</th><th>R</th><th>IA</th></tr>
+        <tr><td>07-01 10:12</td><td>WINQ26</td><td class="down">VENDA</td><td>−6</td><td>172.245</td><td>172.704</td><td>171.519</td><td>—</td><td class="cy">aberto</td><td class="cy">aberto</td><td class="up">✓ EXECUTAR 91%</td></tr>
+        <tr><td>07-01 09:59</td><td>WDOQ26</td><td class="up">COMPRA</td><td>+8</td><td>5.230</td><td>5.223</td><td>5.244</td><td>—</td><td class="cy">aberto</td><td class="cy">aberto</td><td class="up">✓ EXECUTAR 78%</td></tr>
+        <tr><td>07-01 09:58</td><td>WINQ26</td><td class="down">VENDA</td><td>−7</td><td>172.405</td><td>172.863</td><td>171.718</td><td>172.405</td><td class="gd">IA bloqueou</td><td class="up">0.0</td><td class="down">✕ BLOQUEAR 96%</td></tr>
+        <tr><td>07-01 09:31</td><td>WDOQ26</td><td class="up">COMPRA</td><td>+9</td><td>5.219</td><td>5.212</td><td>5.230</td><td>5.230</td><td class="up">TP1</td><td class="up">+1.5</td><td class="up">✓ EXECUTAR 82%</td></tr>
       </table>
     </div>
   </section>
 
-  <!-- ============ TRADE MANAGER ============ -->
-  <section class="screen" id="trade">
-    <div class="page-h"><h1>GERENCIADOR DE <span>TRADE</span></h1><div class="sub">// posições abertas · estratégia 3 contratos · break-even</div></div>
-
-    <div class="grid g3">
-      <div class="panel gold" style="grid-column:span 2">
-        <h3>Posição aberta · WDOQ26 <span class="ln"></span> <span class="chip g">◉ COMPRA · 3 contratos</span></h3>
-        <div class="grid g4" style="gap:12px;margin:6px 0 14px">
-          <div><div class="tag">ENTRADA</div><div class="mono cy" style="font-size:18px">5.838,0</div></div>
-          <div><div class="tag">ATUAL</div><div class="mono up" style="font-size:18px">5.845,0</div></div>
-          <div><div class="tag">P&amp;L ABERTO</div><div class="mono up" style="font-size:18px">+R$ 210</div></div>
-          <div><div class="tag">R ATUAL</div><div class="mono up" style="font-size:18px">+1.2R</div></div>
-        </div>
-        <div class="slider"><i style="width:74%"></i><b style="left:74%"></b></div>
-        <div class="mini" style="display:flex;justify-content:space-between"><span>STOP 5.832 (BE movido ✓)</span><span>rumo ao TP2 5.857</span></div>
-        <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
-          <button class="btn gold">⇧ Mover Break-even</button>
-          <button class="btn">◐ Fechar parcial (1)</button>
-          <button class="btn sell">✕ Fechar tudo</button>
-        </div>
-      </div>
-      <div class="panel">
-        <h3>Estratégia 3 contratos <span class="ln"></span></h3>
-        <ul class="list-tight" style="font-size:12.5px">
-          <li><span>Contrato 1</span><span class="chip g">fechado · TP1</span></li>
-          <li><span>Contrato 2</span><span class="chip g">fechado · TP1</span></li>
-          <li><span>Contrato 3</span><span class="chip gold">rumo TP2</span></li>
-          <li><span>Stop restante</span><span class="chip g">break-even</span></li>
-        </ul>
-        <div class="mini" style="margin-top:10px">Risco travado: <span class="up">lucro garantido</span> no contrato final.</div>
-      </div>
-    </div>
-
-    <div class="grid g3" style="margin-top:16px">
-      <div class="panel"><div class="kpi"><div class="v cy">1.0%</div><div class="l">Risco por trade</div></div><div class="slider"><i style="width:33%"></i><b style="left:33%"></b></div></div>
-      <div class="panel"><div class="kpi"><div class="v gd">6 pts</div><div class="l">Stop (1.2× ATR)</div><div class="trend">dinâmico por volatilidade</div></div></div>
-      <div class="panel"><div class="kpi"><div class="v up">1.5R</div><div class="l">Alvo ativo</div><div class="trend cy">TP1 · piso garantido</div></div></div>
-    </div>
-
-    <div class="panel" style="margin-top:16px">
-      <h3>Ciclo de vida da posição <span class="ln"></span></h3>
-      <div class="tape" style="max-height:none">
-        <div><span class="cy">14:22:03</span><span>Sinal COMPRA score 8 · gate IA EXECUTAR</span><span class="up">ABRIR</span></div>
-        <div><span class="cy">14:22:04</span><span>Ordem enviada · 3 contratos @ 5.838,0</span><span class="up">OK</span></div>
-        <div><span class="cy">14:24:11</span><span>TP1 atingido · 2 contratos fechados</span><span class="up">+1.5R×2</span></div>
-        <div><span class="cy">14:24:12</span><span>Stop movido para break-even</span><span class="gd">PROTEGIDO</span></div>
-        <div><span class="cy">14:31:40</span><span>Contrato 3 rumo ao TP2 · +1.2R aberto</span><span class="cy">EM CURSO</span></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ============ SCALPER ============ -->
+  <!-- ===== SCALPER (fiel) ===== -->
   <section class="screen" id="scalp">
-    <div class="page-h"><h1>⚡ <span>SCALPER</span> · ORDER FLOW</h1><div class="sub">// BITM26 · micro-estrutura em tempo real</div></div>
-    <div class="grid g4">
-      <div class="panel"><div class="kpi"><div class="v cy">73</div><div class="l">Score de fluxo</div><div class="trend gd">zona 60-79 · ótima</div></div></div>
-      <div class="panel"><div class="kpi"><div class="v up">BULL</div><div class="l">Contexto VWAP</div><div class="trend">só COMPRA liberada</div></div></div>
-      <div class="panel"><div class="kpi"><div class="v gd">+2</div><div class="l">Delta acumulado</div><div class="trend up">comprador domina</div></div></div>
-      <div class="panel gold"><div class="kpi"><div class="v">EXP.</div><div class="l">Expansão 60s</div><div class="trend cy">6 ticks · movimento</div></div></div>
-    </div>
-
-    <div class="grid g3" style="margin-top:16px">
-      <div class="panel">
-        <h3>Book de ordens · DOM <span class="ln"></span></h3>
-        <div class="ladder">
-          <div class="lrow ask"><div class="bar" style="width:40%"></div><div class="px">620.900</div></div>
-          <div class="lrow ask"><div class="bar" style="width:68%"></div><div class="px">620.800</div></div>
-          <div class="lrow ask"><div class="bar" style="width:52%"></div><div class="px">620.700</div></div>
-          <div class="spread">SPREAD · 100 · imbalance +18% ▲</div>
-          <div class="lrow bid"><div class="bar" style="width:85%"></div><div class="px">620.500</div></div>
-          <div class="lrow bid"><div class="bar" style="width:60%"></div><div class="px">620.400</div></div>
-          <div class="lrow bid"><div class="bar" style="width:44%"></div><div class="px">620.300</div></div>
-        </div>
-      </div>
-
-      <div class="panel">
-        <h3>Agressão · tape <span class="ln"></span></h3>
-        <div class="aggr"><div class="b buy" style="width:64%">64% C</div><div class="b sell" style="width:36%">36% V</div></div>
-        <div class="mini">Agressão 30s · threshold 62%</div>
-        <div class="bars" style="margin:16px 0"><i style="height:40%"></i><i style="height:70%"></i><i style="height:55%"></i><i style="height:90%"></i><i style="height:60%"></i><i style="height:80%"></i><i style="height:50%"></i><i style="height:75%"></i><i style="height:95%"></i><i style="height:65%"></i></div>
-        <div class="tape">
-          <div><span class="B">▲ COMPRA</span><span>620.500</span><span>12</span></div>
-          <div><span class="B">▲ COMPRA</span><span>620.500</span><span>8</span></div>
-          <div><span class="S">▼ VENDA</span><span>620.400</span><span>5</span></div>
-          <div><span class="B">▲ COMPRA</span><span>620.600</span><span>20</span></div>
-          <div><span class="B">▲ COMPRA</span><span>620.600</span><span>15</span></div>
-        </div>
-      </div>
-
-      <div class="panel gold">
-        <h3>Motor de score <span class="ln"></span></h3>
-        <div class="gauge">
-          <svg width="150" height="150"><circle cx="75" cy="75" r="62" stroke="rgba(240,180,41,.12)" stroke-width="10" fill="none"/>
-          <circle cx="75" cy="75" r="62" stroke="url(#g2)" stroke-width="10" fill="none" stroke-linecap="round" stroke-dasharray="389" stroke-dashoffset="110"/>
-          <defs><linearGradient id="g2"><stop offset="0" stop-color="#f0b429"/><stop offset="1" stop-color="#35e0f0"/></linearGradient></defs></svg>
-          <div class="txt"><b class="gd">73</b><s>SCORE · MÍN 65</s></div>
-        </div>
-        <ul class="list-tight" style="margin-top:8px">
-          <li><span>Burst velocity</span><span class="cy">+20</span></li>
-          <li><span>Consistência tape</span><span class="cy">+22</span></li>
-          <li><span>Book pressure</span><span class="cy">+12</span></li>
-          <li><span>Exaustão (teto)</span><span class="chip g">ok</span></li>
-        </ul>
-      </div>
-    </div>
-
-    <div class="panel" style="margin-top:16px;display:flex;align-items:center;gap:20px;flex-wrap:wrap">
-      <div style="display:flex;align-items:center;gap:12px"><span class="tag">AUTO-SCALPER</span><div class="toggle"><i></i></div><span class="chip g">LIGADO</span></div>
-      <div class="tag">SUPERVISOR IA · <span class="cy">CONTINUAR</span> · vigiando a cada 20min</div>
+    <div class="page-h"><h1>⚡ <span>SCALPER</span></h1><div class="sub">// BITM26 · Bitcoin Futuro B3 · order flow</div></div>
+    <div class="panel" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px">
+      <span class="chip gold">BITM26 · Bitcoin Futuro</span>
+      <span class="chip g">B3 ABERTA</span><span class="chip">SIM OFF</span>
       <div class="spacer" style="flex:1"></div>
-      <button class="btn buy">▲ COMPRAR</button>
-      <button class="btn sell">▼ VENDER</button>
-      <button class="btn gold">⚙ Parâmetros</button>
+      <span class="tag">VWAP</span><span class="mono cy">308.585 ▲ BULL</span>
+      <span class="tag">ATR</span><span class="mono">3.8 tk</span>
+      <span class="tag">Δ CUM</span><span class="mono gd">−7 NEUTRO</span>
+      <span class="chip cy">PRIME 09:15-10:30</span>
+      <span class="chip g"><span class="dot"></span> CONECTADO</span>
+    </div>
+
+    <div class="grid" style="grid-template-columns:220px 1fr 300px;gap:16px">
+      <!-- book -->
+      <div class="panel">
+        <h3>Book de ordens <span class="ln"></span></h3>
+        <div class="ladder">
+          <div class="lrow ask"><div class="bar" style="width:12%"></div><div class="px">308.880</div><div class="vl">16</div></div>
+          <div class="lrow ask"><div class="bar" style="width:45%"></div><div class="px">308.820</div><div class="vl">67</div></div>
+          <div class="lrow ask"><div class="bar" style="width:100%"></div><div class="px">308.840</div><div class="vl">429</div></div>
+          <div class="lrow ask"><div class="bar" style="width:70%"></div><div class="px">308.880</div><div class="vl">307</div></div>
+          <div class="lrow ask"><div class="bar" style="width:30%"></div><div class="px">308.720</div><div class="vl">111</div></div>
+          <div class="spread">SPREAD 40.00 · imbalance +18% ▲</div>
+          <div class="lrow bid"><div class="bar" style="width:15%"></div><div class="px">308.540</div><div class="vl">42</div></div>
+          <div class="lrow bid"><div class="bar" style="width:55%"></div><div class="px">308.500</div><div class="vl">246</div></div>
+          <div class="lrow bid"><div class="bar" style="width:48%"></div><div class="px">308.480</div><div class="vl">222</div></div>
+          <div class="lrow bid"><div class="bar" style="width:40%"></div><div class="px">308.440</div><div class="vl">219</div></div>
+          <div class="lrow bid"><div class="bar" style="width:22%"></div><div class="px">308.400</div><div class="vl">120</div></div>
+        </div>
+      </div>
+
+      <!-- centro -->
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div class="panel" style="text-align:center">
+          <div class="mono" style="font-size:38px;text-shadow:var(--glow-cyan)">308.540,00</div>
+          <div class="mono" style="font-size:12px;color:var(--muted)">Bid <span class="up">308.540</span> · Ask <span class="down">308.580</span></div>
+          <div style="display:flex;justify-content:center;margin:8px 0">
+            <div class="gauge">
+              <svg width="140" height="140"><circle cx="70" cy="70" r="56" stroke="rgba(240,180,41,.12)" stroke-width="9" fill="none"/>
+              <circle cx="70" cy="70" r="56" stroke="url(#gr)" stroke-width="9" fill="none" stroke-linecap="round" stroke-dasharray="352" stroke-dashoffset="190"/>
+              <defs><linearGradient id="gr"><stop offset="0" stop-color="#ff5b6e"/><stop offset="1" stop-color="#35e0f0"/></linearGradient></defs></svg>
+              <div class="txt"><b class="gd">46%</b><s>AGRESSÃO C</s></div>
+            </div>
+          </div>
+          <div class="chip gold" style="font-size:13px">◌ AGUARDANDO</div>
+          <div class="mini">Score 57/100 — tape divergente (50% C nos últimos 5)</div>
+        </div>
+        <div class="panel">
+          <div style="display:flex;justify-content:space-between;align-items:center"><span class="tag">POSIÇÃO</span><span class="chip g">COMPRA</span></div>
+          <div class="mono down" style="font-size:22px;text-align:center;margin:6px 0">−R$ 0,20</div>
+          <div class="mrow"><span class="ml">Entrada / TP</span><span class="mv">308.500 / 308.460</span></div>
+          <button class="btn gold" style="width:100%;margin-top:10px">✕ Fechar manualmente</button>
+          <div style="display:flex;gap:8px;margin-top:10px"><button class="btn buy" style="flex:1">▲ COMPRA</button><button class="btn sell" style="flex:1">▼ VENDA</button></div>
+          <button class="btn" style="width:100%;margin-top:8px;border-color:var(--purple);color:var(--purple)">◉ AUTO-TRADE: ON</button>
+          <div class="mini" style="text-align:center">Cooldown: 54s restantes</div>
+        </div>
+        <div class="panel">
+          <h3>Parâmetros do robô <span class="ln"></span></h3>
+          <div class="sform">
+            <span class="k">Volume (cotas)</span><span class="val">1</span>
+            <span class="k">TP (ticks mín.)</span><span class="val">9</span>
+            <span class="k">SL (ticks mín.)</span><span class="val">5</span>
+            <span class="k">ATR sizing</span><span class="val">✓</span>
+            <span class="k">Filtro VWAP</span><span class="val">✓</span>
+            <span class="k">Threshold agr. (%)</span><span class="val">63</span>
+            <span class="k">Score mín. (0-100)</span><span class="val gd">62</span>
+            <span class="k">Confirmações</span><span class="val">1</span>
+            <span class="k">Cooldown (s)</span><span class="val">55</span>
+            <span class="k">Break-even (ticks)</span><span class="val">4</span>
+            <span class="k">Saída por tempo (s)</span><span class="val">300</span>
+            <span class="k">Máx. trades/dia</span><span class="val">30</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- direita -->
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div class="panel">
+          <h3>Agressão · últimos 30s <span class="ln"></span></h3>
+          <div class="aggr"><div class="b buy" style="width:46%">46% C</div><div class="b sell" style="width:54%">54% V</div></div>
+          <div class="mini">Negócios 26 · 213 lotes</div>
+        </div>
+        <div class="panel">
+          <h3>Fluxo do dia <span class="ln"></span></h3>
+          <div class="mini">Agressão acumulada</div>
+          <div class="aggr" style="margin-top:4px"><div class="b buy" style="width:45.5%">45.5%</div><div class="b sell" style="width:54.5%">54.5%</div></div>
+          <div class="mrow" style="margin-top:8px"><span class="ml">Probabilidade</span><span class="mv">50% NEUTRO</span></div>
+          <div class="mrow"><span class="ml">Abertura</span><span class="mv">308.080 · ampl 5.330</span></div>
+          <div class="mrow"><span class="ml">Máx / Mín</span><span class="mv">309.010 / 303.030</span></div>
+          <div class="mrow"><span class="ml">Dist. abert. / mín</span><span class="mv up">+3.440 / +4.760</span></div>
+        </div>
+        <div class="panel">
+          <h3>Tape · últimos negócios <span class="ln"></span></h3>
+          <div class="tape" id="scalpTape"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="statbar" style="margin-top:16px">
+      <div><s>TRADES</s><b class="cy">1</b></div><div><s>WINS</s><b class="up">0</b></div><div><s>BE</s><b class="gd">0</b></div>
+      <div><s>LOSSES</s><b class="down">0</b></div><div><s>RESULTADO</s><b>R$0,00</b></div><div><s>AUTO</s><b class="gd">PRIME</b></div>
     </div>
   </section>
 
-  <!-- ============ MARKET CENTER ============ -->
+  <!-- ===== MARKET CENTER ===== -->
   <section class="screen" id="market">
     <div class="page-h"><h1>MARKET <span>CENTER</span></h1><div class="sub">// instrumentos B3 · MetaTrader5</div></div>
     <div class="grid g3">
-      <div class="panel"><div style="display:flex;justify-content:space-between"><div><div class="tag">MINI ÍNDICE</div><div class="mono" style="font-size:22px">WINQ26</div></div><div class="chip g">▲ +0.84%</div></div>
-        <div class="mono up" style="font-size:28px;margin:10px 0">134.220</div>
+      <div class="panel"><div style="display:flex;justify-content:space-between"><div><div class="tag">MINI ÍNDICE</div><div class="mono" style="font-size:20px">WINQ26</div></div><div class="chip g">▲ +0.84%</div></div>
+        <div class="mono up" style="font-size:26px;margin:10px 0">134.220</div>
         <div class="bars"><i style="height:50%"></i><i style="height:65%"></i><i style="height:45%"></i><i style="height:80%"></i><i style="height:70%"></i><i style="height:90%"></i><i style="height:75%"></i><i style="height:88%"></i></div>
         <div class="mini">VWAP 133.980 · ADX 27 · 1h ALTA</div></div>
-      <div class="panel"><div style="display:flex;justify-content:space-between"><div><div class="tag">MINI DÓLAR</div><div class="mono" style="font-size:22px">WDOQ26</div></div><div class="chip r">▼ -0.21%</div></div>
-        <div class="mono down" style="font-size:28px;margin:10px 0">5.842,0</div>
-        <div class="bars"><i style="height:80%;background:linear-gradient(180deg,var(--red),transparent)"></i><i style="height:60%;background:linear-gradient(180deg,var(--red),transparent)"></i><i style="height:75%;background:linear-gradient(180deg,var(--red),transparent)"></i><i style="height:50%;background:linear-gradient(180deg,var(--red),transparent)"></i><i style="height:65%;background:linear-gradient(180deg,var(--red),transparent)"></i><i style="height:40%;background:linear-gradient(180deg,var(--red),transparent)"></i><i style="height:55%;background:linear-gradient(180deg,var(--red),transparent)"></i><i style="height:35%;background:linear-gradient(180deg,var(--red),transparent)"></i></div>
-        <div class="mini">VWAP 5.848 · ADX 24 · 1h BAIXA</div></div>
-      <div class="panel gold"><div style="display:flex;justify-content:space-between"><div><div class="tag">BITCOIN FUT</div><div class="mono" style="font-size:22px">BITM26</div></div><div class="chip gold">▲ +1.6%</div></div>
-        <div class="mono gd" style="font-size:28px;margin:10px 0">620.500</div>
+      <div class="panel"><div style="display:flex;justify-content:space-between"><div><div class="tag">MINI DÓLAR</div><div class="mono" style="font-size:20px">WDOQ26</div></div><div class="chip r">▼ -0.21%</div></div>
+        <div class="mono down" style="font-size:26px;margin:10px 0">5.233,50</div>
+        <div class="bars"><i style="height:80%;background:linear-gradient(180deg,var(--red),transparent)"></i><i style="height:60%;background:linear-gradient(180deg,var(--red),transparent)"></i><i style="height:75%;background:linear-gradient(180deg,var(--red),transparent)"></i><i style="height:50%;background:linear-gradient(180deg,var(--red),transparent)"></i><i style="height:65%;background:linear-gradient(180deg,var(--red),transparent)"></i><i style="height:40%;background:linear-gradient(180deg,var(--red),transparent)"></i><i style="height:55%;background:linear-gradient(180deg,var(--red),transparent)"></i><i style="height:70%;background:linear-gradient(180deg,var(--green),transparent)"></i></div>
+        <div class="mini">VWAP 5.229 · ADX 23 · 1h ALTA</div></div>
+      <div class="panel gold"><div style="display:flex;justify-content:space-between"><div><div class="tag">BITCOIN FUT</div><div class="mono" style="font-size:20px">BITM26</div></div><div class="chip gold">▲ +1.6%</div></div>
+        <div class="mono gd" style="font-size:26px;margin:10px 0">308.540</div>
         <div class="bars"><i style="height:40%;background:linear-gradient(180deg,var(--gold),transparent)"></i><i style="height:60%;background:linear-gradient(180deg,var(--gold),transparent)"></i><i style="height:80%;background:linear-gradient(180deg,var(--gold),transparent)"></i><i style="height:70%;background:linear-gradient(180deg,var(--gold),transparent)"></i><i style="height:90%;background:linear-gradient(180deg,var(--gold),transparent)"></i><i style="height:85%;background:linear-gradient(180deg,var(--gold),transparent)"></i><i style="height:95%;background:linear-gradient(180deg,var(--gold),transparent)"></i><i style="height:88%;background:linear-gradient(180deg,var(--gold),transparent)"></i></div>
         <div class="mini">VWAP BULL · delta comprador · scalper ativo</div></div>
     </div>
-    <div class="panel" style="margin-top:16px">
-      <h3>Fluxo consolidado do dia <span class="ln"></span></h3>
-      <canvas id="chMkt" height="90"></canvas>
-    </div>
+    <div class="panel" style="margin-top:16px"><h3>Fluxo consolidado do dia <span class="ln"></span></h3><canvas id="chMkt" height="90"></canvas></div>
   </section>
 
-  <!-- ============ INTELLIGENCE ============ -->
+  <!-- ===== INTELLIGENCE ===== -->
   <section class="screen" id="intel">
-    <div class="page-h"><h1>MOTOR DE <span>INTELIGÊNCIA</span></h1><div class="sub">// recomendações adaptativas do sistema</div></div>
+    <div class="page-h"><h1>MOTOR DE <span>INTELIGÊNCIA</span></h1><div class="sub">// recomendações adaptativas</div></div>
     <div class="grid g4">
-      <div class="panel"><div class="kpi"><div class="v cy">7</div><div class="l">Score mínimo · WDO</div></div><div class="slider"><i style="width:58%"></i><b style="left:58%"></b></div></div>
-      <div class="panel"><div class="kpi"><div class="v gd">9</div><div class="l">Score mínimo · WIN</div></div><div class="slider"><i style="width:75%"></i><b style="left:75%"></b></div></div>
-      <div class="panel"><div class="kpi"><div class="v">FORTE</div><div class="l">Força mínima do sinal</div></div><div class="mini">ADX ≥ 23 exigido</div></div>
-      <div class="panel gold"><div class="kpi"><div class="v gd">1.5R</div><div class="l">Alvo mínimo (RR)</div></div><div class="mini">nunca encurtar no S/R</div></div>
+      <div class="panel"><div class="kpi"><div class="v cy">7</div><div class="l">Score mín · WDO</div></div><div class="slider"><i style="width:58%"></i><b style="left:58%"></b></div></div>
+      <div class="panel"><div class="kpi"><div class="v gd">9</div><div class="l">Score mín · WIN</div></div><div class="slider"><i style="width:75%"></i><b style="left:75%"></b></div></div>
+      <div class="panel"><div class="kpi"><div class="v">FORTE</div><div class="l">Força mínima</div></div><div class="mini">ADX ≥ 23</div></div>
+      <div class="panel gold"><div class="kpi"><div class="v gd">1.5R</div><div class="l">Alvo mínimo</div></div><div class="mini">nunca encurtar no S/R</div></div>
     </div>
     <div class="grid g2" style="margin-top:16px">
-      <div class="panel">
-        <h3>Regimes para bloquear <span class="ln"></span></h3>
-        <ul class="list-tight">
-          <li><span>Contra tendência 1h</span><span class="chip r">bloqueado</span></li>
-          <li><span>Exaustão · |score| ≥ 11</span><span class="chip r">bloqueado</span></li>
-          <li><span>Janela morta 12-14h</span><span class="chip gold">cautela</span></li>
-          <li><span>ADX &lt; 20 · range</span><span class="chip r">bloqueado</span></li>
-        </ul>
-      </div>
-      <div class="panel">
-        <h3>Regimes para priorizar <span class="ln"></span></h3>
-        <ul class="list-tight">
-          <li><span>Tendência 1h alinhada</span><span class="chip g">prioridade</span></li>
-          <li><span>Prime 09:15-11:00</span><span class="chip g">prioridade</span></li>
-          <li><span>Expansão de volatilidade</span><span class="chip g">peso +</span></li>
-          <li><span>Order flow confirmando</span><span class="chip g">peso +</span></li>
-        </ul>
-      </div>
+      <div class="panel"><h3>Regimes para bloquear <span class="ln"></span></h3>
+        <ul class="list-tight"><li><span>Contra tendência 1h</span><span class="chip r">bloqueado</span></li><li><span>Exaustão · |score| ≥ 11</span><span class="chip r">bloqueado</span></li><li><span>Janela morta 12-14h</span><span class="chip gold">cautela</span></li><li><span>ADX &lt; 20 range</span><span class="chip r">bloqueado</span></li></ul></div>
+      <div class="panel"><h3>Regimes para priorizar <span class="ln"></span></h3>
+        <ul class="list-tight"><li><span>1h alinhada</span><span class="chip g">prioridade</span></li><li><span>Prime 09:15-11:00</span><span class="chip g">prioridade</span></li><li><span>Expansão de volatilidade</span><span class="chip g">peso +</span></li><li><span>Order flow confirma</span><span class="chip g">peso +</span></li></ul></div>
     </div>
-    <div class="panel" style="margin-top:16px">
-      <h3>Decisões recentes do gate de IA <span class="ln"></span></h3>
-      <table>
-        <tr><th>HORA</th><th>ATIVO</th><th>VEREDITO</th><th>CONFIANÇA</th><th>MOTIVO</th></tr>
+    <div class="panel" style="margin-top:16px"><h3>Decisões recentes do gate de IA <span class="ln"></span></h3>
+      <table><tr><th>HORA</th><th>ATIVO</th><th>VEREDITO</th><th>CONF.</th><th>MOTIVO</th></tr>
         <tr><td>14:22</td><td>WDOQ26</td><td class="up">EXECUTAR</td><td>78%</td><td>confluência clara, 1h alinhada</td></tr>
         <tr><td>14:05</td><td>WINQ26</td><td class="gd">AGUARDAR</td><td>61%</td><td>score borderline, ADX fraco</td></tr>
-        <tr><td>13:47</td><td>WDOQ26</td><td class="down">BLOQUEAR</td><td>84%</td><td>venda contra 1h em alta</td></tr>
-      </table>
-    </div>
+        <tr><td>13:47</td><td>WDOQ26</td><td class="down">BLOQUEAR</td><td>84%</td><td>venda contra 1h em alta</td></tr></table></div>
   </section>
 
-  <!-- ============ RISK ============ -->
+  <!-- ===== RISK ===== -->
   <section class="screen" id="risk">
     <div class="page-h"><h1>RISK <span>MANAGEMENT</span></h1><div class="sub">// proteção de capital · circuit breakers</div></div>
     <div class="grid g4">
-      <div class="panel"><div class="kpi"><div class="v up">2 / 3</div><div class="l">Stops consecutivos</div><div class="trend gd">1 restante p/ pausa</div></div></div>
-      <div class="panel"><div class="kpi"><div class="v cy">4 / 6</div><div class="l">Trades hoje · limite</div></div><div class="slider"><i style="width:66%"></i><b style="left:66%"></b></div></div>
+      <div class="panel"><div class="kpi"><div class="v up">2 / 3</div><div class="l">Stops consecutivos</div><div class="trend gd">1 p/ pausa</div></div></div>
+      <div class="panel"><div class="kpi"><div class="v cy">4 / 6</div><div class="l">Trades hoje</div></div><div class="slider"><i style="width:66%"></i><b style="left:66%"></b></div></div>
       <div class="panel"><div class="kpi"><div class="v up">-1.2R</div><div class="l">Drawdown do dia</div><div class="trend g">dentro do limite</div></div></div>
-      <div class="panel gold"><div class="kpi"><div class="v">ARMADO</div><div class="l">Circuit breaker</div><div class="trend cy">pausa 60min se 3 stops</div></div></div>
+      <div class="panel gold"><div class="kpi"><div class="v">ARMADO</div><div class="l">Circuit breaker</div><div class="trend cy">pausa 60min</div></div></div>
     </div>
     <div class="grid g2" style="margin-top:16px">
-      <div class="panel">
-        <h3>Proteção de capital <span class="ln"></span></h3>
-        <div class="gauge"><svg width="150" height="150"><circle cx="75" cy="75" r="62" stroke="rgba(52,224,161,.12)" stroke-width="10" fill="none"/>
-          <circle cx="75" cy="75" r="62" stroke="#34e0a1" stroke-width="10" fill="none" stroke-linecap="round" stroke-dasharray="389" stroke-dashoffset="70"/></svg>
-          <div class="txt"><b class="up">82%</b><s>CAPITAL OK</s></div></div>
-        <div class="mini" style="text-align:center">Soft-target ativo · risco por trade 1.0%</div>
-      </div>
-      <div class="panel">
-        <h3>Eventos de risco <span class="ln"></span></h3>
-        <table>
-          <tr><th>HORA</th><th>EVENTO</th><th>AÇÃO</th></tr>
-          <tr><td>11:38</td><td>2 stops seguidos</td><td class="gd">uplift +5</td></tr>
-          <tr><td>10:12</td><td>janela morta</td><td class="cy">cautela</td></tr>
-          <tr><td>09:00</td><td>abertura</td><td class="down">bloqueio 15min</td></tr>
-        </table>
-        <div class="mini" style="margin-top:10px">Supervisor: <span class="cy">CONTINUAR</span> · nenhuma pausa acionada</div>
-      </div>
+      <div class="panel"><h3>Proteção de capital <span class="ln"></span></h3>
+        <div class="gauge"><svg width="140" height="140"><circle cx="70" cy="70" r="56" stroke="rgba(52,224,161,.12)" stroke-width="9" fill="none"/><circle cx="70" cy="70" r="56" stroke="#34e0a1" stroke-width="9" fill="none" stroke-linecap="round" stroke-dasharray="352" stroke-dashoffset="63"/></svg><div class="txt"><b class="up">82%</b><s>CAPITAL OK</s></div></div>
+        <div class="mini" style="text-align:center">Soft-target ativo · risco 1.0%/trade</div></div>
+      <div class="panel"><h3>Eventos de risco <span class="ln"></span></h3>
+        <table><tr><th>HORA</th><th>EVENTO</th><th>AÇÃO</th></tr><tr><td>11:38</td><td>2 stops seguidos</td><td class="gd">uplift +5</td></tr><tr><td>10:12</td><td>janela morta</td><td class="cy">cautela</td></tr><tr><td>09:00</td><td>abertura</td><td class="down">bloqueio 15min</td></tr></table>
+        <div class="mini" style="margin-top:10px">Supervisor: <span class="cy">CONTINUAR</span></div></div>
     </div>
   </section>
 
-  <!-- ============ ANALYTICS ============ -->
+  <!-- ===== ANALYTICS ===== -->
   <section class="screen" id="analytics">
-    <div class="page-h"><h1><span>ANALYTICS</span> DASHBOARD</h1><div class="sub">// expectância · profit factor · backtest 877 sinais</div></div>
+    <div class="page-h"><h1><span>ANALYTICS</span></h1><div class="sub">// expectância · profit factor · backtest 877 sinais</div></div>
     <div class="grid g2">
       <div class="panel"><h3>Expectância por ativo (R/trade) <span class="ln"></span></h3><canvas id="chExp" height="150"></canvas></div>
       <div class="panel"><h3>Expectância por faixa de score <span class="ln"></span></h3><canvas id="chScore" height="150"></canvas></div>
     </div>
     <div class="grid g4" style="margin-top:16px">
-      <div class="panel"><div class="kpi"><div class="v up">1.34</div><div class="l">Profit Factor · WDO</div></div></div>
-      <div class="panel"><div class="kpi"><div class="v cy">1.10</div><div class="l">Profit Factor · WIN</div></div></div>
-      <div class="panel"><div class="kpi"><div class="v gd">877</div><div class="l">Sinais no backtest</div></div></div>
-      <div class="panel gold"><div class="kpi"><div class="v">+50.8R</div><div class="l">Resultado combinado</div></div></div>
+      <div class="panel"><div class="kpi"><div class="v up">1.34</div><div class="l">PF · WDO</div></div></div>
+      <div class="panel"><div class="kpi"><div class="v cy">1.10</div><div class="l">PF · WIN</div></div></div>
+      <div class="panel"><div class="kpi"><div class="v gd">877</div><div class="l">Sinais</div></div></div>
+      <div class="panel gold"><div class="kpi"><div class="v">+50.8R</div><div class="l">Combinado</div></div></div>
     </div>
   </section>
 
-  <!-- ============ PROFIT BRIDGE ============ -->
+  <!-- ===== PROFIT ===== -->
   <section class="screen" id="profit">
-    <div class="page-h"><h1>🔌 PROFIT <span>BRIDGE</span></h1><div class="sub">// ponte de dados · integração externa</div></div>
+    <div class="page-h"><h1>🔌 PROFIT <span>BRIDGE</span></h1><div class="sub">// ponte de dados · integração</div></div>
     <div class="grid g3">
       <div class="panel"><div class="kpi"><div class="v up">ATIVO</div><div class="l">Status da ponte</div><div class="trend g">◉ streaming</div></div></div>
-      <div class="panel"><div class="kpi"><div class="v cy">18ms</div><div class="l">Latência do feed</div></div></div>
-      <div class="panel"><div class="kpi"><div class="v gd">3</div><div class="l">Fontes conectadas</div><div class="trend">MT5 · Profit · Telegram</div></div></div>
+      <div class="panel"><div class="kpi"><div class="v cy">18ms</div><div class="l">Latência</div></div></div>
+      <div class="panel"><div class="kpi"><div class="v gd">3</div><div class="l">Fontes</div><div class="trend">MT5 · Profit · Telegram</div></div></div>
     </div>
-    <div class="panel" style="margin-top:16px">
-      <h3>Log de conexão <span class="ln"></span></h3>
+    <div class="panel" style="margin-top:16px"><h3>Log de conexão <span class="ln"></span></h3>
       <div class="tape" style="max-height:none">
-        <div><span class="B">◉ MT5</span><span>WDOQ26 · tick 620.500</span><span class="up">OK</span></div>
-        <div><span class="B">◉ MT5</span><span>WINQ26 · book atualizado</span><span class="up">OK</span></div>
-        <div><span class="cy">◉ Profit</span><span>bridge handshake</span><span class="up">OK</span></div>
-        <div><span class="gd">◉ Telegram</span><span>notificador · gate IA</span><span class="up">OK</span></div>
-        <div><span class="B">◉ MT5</span><span>heartbeat</span><span class="up">18ms</span></div>
-      </div>
-    </div>
+        <div><span class="B">◉ MT5</span><span>WDOQ26 tick 5.233</span><span></span><span class="up">OK</span></div>
+        <div><span class="B">◉ MT5</span><span>WINQ26 book</span><span></span><span class="up">OK</span></div>
+        <div><span class="cy">◉ Profit</span><span>handshake</span><span></span><span class="up">OK</span></div>
+        <div><span class="gd">◉ Tg</span><span>gate IA notifier</span><span></span><span class="up">OK</span></div>
+      </div></div>
   </section>
 
   </div>
 </div>
 
 <script>
-// boot sequence
 const steps=["INICIALIZANDO NÚCLEO J.A.R.V.I.S...","CALIBRANDO MOTOR v6.2...","CONECTANDO METATRADER 5...","VALIDANDO GATE DE IA...","SISTEMA PRONTO."];
 let si=0;const bt=document.getElementById('boottxt');
 const iv=setInterval(()=>{si++;if(si<steps.length)bt.textContent=steps[si];},440);
 setTimeout(()=>{clearInterval(iv);document.getElementById('boot').classList.add('gone');},2400);
 
-// nav
 document.querySelectorAll('.nav').forEach(n=>n.onclick=()=>{
   document.querySelectorAll('.nav').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('.screen').forEach(x=>x.classList.remove('on'));
   n.classList.add('active');document.getElementById(n.dataset.s).classList.add('on');
+  if(n.dataset.s==='monitor')setTimeout(drawMonitor,30);
+  if(n.dataset.s==='scalp')setTimeout(fillTape,30);
 });
 
-// clock
-setInterval(()=>{document.getElementById('clock').textContent=new Date().toLocaleTimeString('pt-BR');},1000);
-
-// charts
-const gridC='rgba(53,224,240,.08)', tick='#7f96ab';
-const baseOpts=(pfx='')=>({responsive:true,plugins:{legend:{display:false}},scales:{x:{grid:{color:gridC},ticks:{color:tick,font:{family:'Share Tech Mono',size:10}}},y:{grid:{color:gridC},ticks:{color:tick,font:{family:'Share Tech Mono',size:10}}}}});
-function mkGrad(ctx,c1,c2){const g=ctx.createLinearGradient(0,0,0,160);g.addColorStop(0,c1);g.addColorStop(1,c2);return g;}
-// ===== candlestick HUD chart (SVG) =====
-function renderCandles(){
-  const wrap=document.getElementById('candlewrap');if(!wrap)return;
-  const W=Math.max(560,wrap.clientWidth||680),H=320,pad=34,n=46;
-  let price=5836,seed=7;const rnd=()=>{seed=(seed*9301+49297)%233280;return seed/233280;};
-  const cd=[];for(let i=0;i<n;i++){const o=price;const drift=Math.sin(i/5)*3+(i>30?1.5:0);const ch=drift+(rnd()-.5)*4;const c=o+ch;const h=Math.max(o,c)+rnd()*3;const l=Math.min(o,c)-rnd()*3;cd.push({o,h,l,c});price=c;}
-  const hi=Math.max(...cd.map(d=>d.h)),lo=Math.min(...cd.map(d=>d.l));
-  const cw=(W-2*pad)/n, x=i=>pad+i*cw+cw/2, y=p=>pad+(1-(p-lo)/(hi-lo))*(H-2*pad);
-  // EMAs
-  const ema=(k)=>{let e=cd[0].c,a=2/(k+1),out=[];cd.forEach(d=>{e=d.c*a+e*(1-a);out.push(e);});return out;};
-  const e9=ema(9),e21=ema(21),e200=cd.map((d,i)=>lo+(hi-lo)*0.35+Math.sin(i/9)*2);
-  const path=arr=>arr.map((v,i)=>`${i?'L':'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
-  const vwap=lo+(hi-lo)*0.62;
-  let s=`<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block">`;
-  // grid
-  for(let g=0;g<=4;g++){const yy=pad+g*(H-2*pad)/4;s+=`<line x1="${pad}" y1="${yy}" x2="${W-pad}" y2="${yy}" stroke="rgba(53,224,240,.07)"/>`;
-    s+=`<text x="${W-pad+2}" y="${yy+3}" fill="#7f96ab" font-size="9" font-family="Share Tech Mono">${(hi-(hi-lo)*g/4).toFixed(0)}</text>`;}
-  // stop zone (entry 5838 -> stop 5832) + target
-  const entryI=30, entP=cd[entryI].c, stopP=entP-6, tpP=entP+9;
-  s+=`<rect x="${x(entryI)}" y="${y(entP)}" width="${W-pad-x(entryI)}" height="${y(stopP)-y(entP)}" fill="rgba(255,91,110,.09)"/>`;
-  s+=`<line x1="${x(entryI)}" y1="${y(tpP)}" x2="${W-pad}" y2="${y(tpP)}" stroke="var(--gold)" stroke-dasharray="4 4" opacity=".6"/>`;
-  s+=`<line x1="${x(entryI)}" y1="${y(stopP)}" x2="${W-pad}" y2="${y(stopP)}" stroke="var(--red)" stroke-dasharray="4 4" opacity=".5"/>`;
-  // candles
-  cd.forEach((d,i)=>{const up=d.c>=d.o,col=up?'#34e0a1':'#ff5b6e';
-    s+=`<line x1="${x(i)}" y1="${y(d.h)}" x2="${x(i)}" y2="${y(d.l)}" stroke="${col}" stroke-width="1"/>`;
-    const yo=y(d.o),yc=y(d.c),ht=Math.max(1.5,Math.abs(yc-yo));
-    s+=`<rect x="${x(i)-cw*0.3}" y="${Math.min(yo,yc)}" width="${cw*0.6}" height="${ht}" fill="${col}" opacity="${up?.9:.85}"/>`;});
-  // EMA/VWAP overlays
-  s+=`<line x1="${pad}" y1="${y(vwap)}" x2="${W-pad}" y2="${y(vwap)}" stroke="var(--gold)" stroke-width="1.5" stroke-dasharray="6 3" opacity=".8"/>`;
-  s+=`<path d="${path(e200)}" fill="none" stroke="#ff5b6e" stroke-width="1.2" opacity=".5"/>`;
-  s+=`<path d="${path(e21)}" fill="none" stroke="#a98bff" stroke-width="1.5" opacity=".85"/>`;
-  s+=`<path d="${path(e9)}" fill="none" stroke="#35e0f0" stroke-width="1.8" style="filter:drop-shadow(0 0 4px #35e0f0)"/>`;
-  // order markers
-  s+=`<polygon points="${x(entryI)-6},${y(entP)+14} ${x(entryI)+6},${y(entP)+14} ${x(entryI)},${y(entP)+4}" fill="#34e0a1" style="filter:drop-shadow(0 0 5px #34e0a1)"/>`;
-  s+=`<circle cx="${x(entryI)}" cy="${y(tpP)}" r="4" fill="none" stroke="var(--gold)" stroke-width="1.5"/>`;
-  s+=`<polygon points="${x(43)-6},${y(cd[43].h)-14} ${x(43)+6},${y(cd[43].h)-14} ${x(43)},${y(cd[43].h)-4}" fill="#ff5b6e"/>`;
-  s+=`</svg>`;wrap.innerHTML=s;
+// troca sinal <-> gestão dentro do pane (position_open)
+function toggleTrade(id){const c=document.getElementById(id);if(c)c.classList.toggle('on-manage');}
+// split vs foco
+let foco='WDO';
+function setView(v){
+  document.getElementById('segSplit').classList.toggle('on',v==='split');
+  document.getElementById('segFoco').classList.toggle('on',v==='foco');
+  const g=document.getElementById('monPanes');
+  if(v==='foco'){g.classList.remove('g2');g.classList.add('g1');
+    document.querySelectorAll('.pane').forEach(p=>p.style.display=(p.dataset.foco===foco?'block':'none'));}
+  else{g.classList.add('g2');g.classList.remove('g1');document.querySelectorAll('.pane').forEach(p=>p.style.display='block');}
+  setTimeout(drawMonitor,30);
 }
 
+setInterval(()=>{const t=new Date().toLocaleTimeString('pt-BR');
+  document.getElementById('clock').textContent=t;
+  const m=document.getElementById('mt5upd');if(m)m.textContent=t;},1000);
+
+// ===== candlestick HUD =====
+function renderCandles(id,seed0,upTrend){
+  const wrap=document.getElementById(id);if(!wrap||!wrap.clientWidth&&!wrap.offsetParent)return;
+  const W=Math.max(360,wrap.clientWidth||560),H=250,pad=30,n=44;
+  let price=upTrend?100:140,seed=seed0;const rnd=()=>{seed=(seed*9301+49297)%233280;return seed/233280;};
+  const cd=[];for(let i=0;i<n;i++){const o=price;const drift=(upTrend?1:-1)*(i>26?1.4:0)+Math.sin(i/5)*2.4;const ch=drift+(rnd()-.5)*3.2;const c=o+ch;const h=Math.max(o,c)+rnd()*2.5;const l=Math.min(o,c)-rnd()*2.5;cd.push({o,h,l,c});price=c;}
+  const hi=Math.max(...cd.map(d=>d.h)),lo=Math.min(...cd.map(d=>d.l));
+  const cw=(W-2*pad)/n,x=i=>pad+i*cw+cw/2,y=p=>pad+(1-(p-lo)/(hi-lo))*(H-2*pad);
+  const ema=k=>{let e=cd[0].c,a=2/(k+1),o=[];cd.forEach(d=>{e=d.c*a+e*(1-a);o.push(e);});return o;};
+  const e9=ema(9),e21=ema(21);
+  const path=a=>a.map((v,i)=>`${i?'L':'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const vwap=lo+(hi-lo)*(upTrend?.45:.6),entryI=26,entP=cd[entryI].c,stopP=entP+(upTrend?-4:4),tpP=entP+(upTrend?6:-6);
+  let s=`<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block">`;
+  for(let g=0;g<=4;g++){const yy=pad+g*(H-2*pad)/4;s+=`<line x1="${pad}" y1="${yy}" x2="${W-pad}" y2="${yy}" stroke="rgba(53,224,240,.07)"/>`;s+=`<text x="${W-pad+2}" y="${yy+3}" fill="#7f96ab" font-size="8" font-family="Share Tech Mono">${(hi-(hi-lo)*g/4).toFixed(0)}</text>`;}
+  s+=`<line x1="${x(entryI)}" y1="${y(tpP)}" x2="${W-pad}" y2="${y(tpP)}" stroke="var(--gold)" stroke-dasharray="4 4" opacity=".55"/>`;
+  s+=`<line x1="${x(entryI)}" y1="${y(stopP)}" x2="${W-pad}" y2="${y(stopP)}" stroke="var(--red)" stroke-dasharray="4 4" opacity=".45"/>`;
+  s+=`<line x1="${x(entryI)}" y1="${y(entP)}" x2="${W-pad}" y2="${y(entP)}" stroke="var(--cyan)" stroke-dasharray="2 3" opacity=".5"/>`;
+  cd.forEach((d,i)=>{const up=d.c>=d.o,col=up?'#34e0a1':'#ff5b6e';s+=`<line x1="${x(i)}" y1="${y(d.h)}" x2="${x(i)}" y2="${y(d.l)}" stroke="${col}" stroke-width="1"/>`;const yo=y(d.o),yc=y(d.c),ht=Math.max(1.4,Math.abs(yc-yo));s+=`<rect x="${x(i)-cw*0.3}" y="${Math.min(yo,yc)}" width="${cw*0.6}" height="${ht}" fill="${col}" opacity="${up?.9:.85}"/>`;});
+  s+=`<line x1="${pad}" y1="${y(vwap)}" x2="${W-pad}" y2="${y(vwap)}" stroke="var(--gold)" stroke-width="1.4" stroke-dasharray="6 3" opacity=".75"/>`;
+  s+=`<path d="${path(e21)}" fill="none" stroke="#a98bff" stroke-width="1.4" opacity=".8"/>`;
+  s+=`<path d="${path(e9)}" fill="none" stroke="#35e0f0" stroke-width="1.7"/>`;
+  const my=upTrend?y(cd[entryI].l)+12:y(cd[entryI].h)-12,dir=upTrend?1:-1;
+  s+=`<polygon points="${x(entryI)-5},${my+5*dir} ${x(entryI)+5},${my+5*dir} ${x(entryI)},${my-5*dir}" fill="${upTrend?'#34e0a1':'#ff5b6e'}"/>`;
+  s+=`</svg>`;wrap.innerHTML=s;
+}
+function drawMonitor(){renderCandles('cwWIN',11,false);renderCandles('cwWDO',7,true);}
+
+// ===== scalper tape =====
+function fillTape(){const el=document.getElementById('scalpTape');if(!el)return;let h='',p=308540,seed=3;
+  const rnd=()=>{seed=(seed*9301+49297)%233280;return seed/233280;};
+  for(let i=0;i<48;i++){const buy=rnd()>.52;p+=(buy?1:-1)*Math.round(rnd()*4)*20;const v=Math.max(1,Math.round(rnd()*18));
+    h+=`<div><span class="mono muted">10:23:${(30+i%30).toString().padStart(2,'0')}</span><span class="mono">${p.toLocaleString('pt-BR')}</span><span class="mono">${v}</span><span class="${buy?'B':'S'}">${buy?'C':'V'}</span></div>`;}
+  el.innerHTML=h;}
+
+const gridC='rgba(53,224,240,.08)',tick='#7f96ab';
+const baseOpts=()=>({responsive:true,plugins:{legend:{display:false}},scales:{x:{grid:{color:gridC},ticks:{color:tick,font:{family:'Share Tech Mono',size:10}}},y:{grid:{color:gridC},ticks:{color:tick,font:{family:'Share Tech Mono',size:10}}}}});
+function mkGrad(ctx,c1,c2){const g=ctx.createLinearGradient(0,0,0,160);g.addColorStop(0,c1);g.addColorStop(1,c2);return g;}
 window.addEventListener('load',()=>{
-  renderCandles();
-  const p=document.getElementById('chPnl');if(p){const c=p.getContext('2d');
-    new Chart(c,{type:'bar',data:{labels:['seg','ter','qua','qui','sex'],datasets:[{data:[2.1,-1.0,3.4,1.5,-0.6],
-      backgroundColor:['#34e0a1','#ff5b6e','#34e0a1','#34e0a1','#ff5b6e'],borderRadius:4}]},options:baseOpts()});}
-  const m=document.getElementById('chMkt');if(m){const c=m.getContext('2d');
-    new Chart(c,{type:'line',data:{labels:Array.from({length:14},(_,i)=>i+'h'),datasets:[
-      {data:[10,14,12,18,16,22,19,25,23,28,26,31,29,34],borderColor:'#35e0f0',backgroundColor:mkGrad(c,'rgba(53,224,240,.35)','rgba(53,224,240,0)'),fill:true,tension:.4,pointRadius:0,borderWidth:2}]},options:baseOpts()});}
-  const e=document.getElementById('chExp');if(e){const c=e.getContext('2d');
-    new Chart(c,{type:'bar',data:{labels:['WDO','WIN'],datasets:[{data:[0.179,0.057],backgroundColor:['#34e0a1','#35e0f0'],borderRadius:6}]},options:baseOpts()});}
-  const s=document.getElementById('chScore');if(s){const c=s.getContext('2d');
-    new Chart(c,{type:'line',data:{labels:['7','8','9','10','11'],datasets:[
-      {label:'WDO',data:[.18,.17,.17,.06,-.24],borderColor:'#34e0a1',tension:.35,pointRadius:3,borderWidth:2},
-      {label:'WIN',data:[-.04,-.05,.06,.34,-.30],borderColor:'#f0b429',tension:.35,pointRadius:3,borderWidth:2}]},
-      options:{...baseOpts(),plugins:{legend:{display:true,labels:{color:tick,font:{family:'Share Tech Mono',size:10}}}}}});}
+  fillTape();
+  const p=document.getElementById('chPnl');if(p){const c=p.getContext('2d');new Chart(c,{type:'bar',data:{labels:['seg','ter','qua','qui','sex'],datasets:[{data:[2.1,-1.0,3.4,1.5,-0.6],backgroundColor:['#34e0a1','#ff5b6e','#34e0a1','#34e0a1','#ff5b6e'],borderRadius:4}]},options:baseOpts()});}
+  const m=document.getElementById('chMkt');if(m){const c=m.getContext('2d');new Chart(c,{type:'line',data:{labels:Array.from({length:14},(_,i)=>i+'h'),datasets:[{data:[10,14,12,18,16,22,19,25,23,28,26,31,29,34],borderColor:'#35e0f0',backgroundColor:mkGrad(c,'rgba(53,224,240,.35)','rgba(53,224,240,0)'),fill:true,tension:.4,pointRadius:0,borderWidth:2}]},options:baseOpts()});}
+  const e=document.getElementById('chExp');if(e){const c=e.getContext('2d');new Chart(c,{type:'bar',data:{labels:['WDO','WIN'],datasets:[{data:[0.179,0.057],backgroundColor:['#34e0a1','#35e0f0'],borderRadius:6}]},options:baseOpts()});}
+  const sc=document.getElementById('chScore');if(sc){const c=sc.getContext('2d');new Chart(c,{type:'line',data:{labels:['7','8','9','10','11'],datasets:[{label:'WDO',data:[.18,.17,.17,.06,-.24],borderColor:'#34e0a1',tension:.35,pointRadius:3,borderWidth:2},{label:'WIN',data:[-.04,-.05,.06,.34,-.30],borderColor:'#f0b429',tension:.35,pointRadius:3,borderWidth:2}]},options:{...baseOpts(),plugins:{legend:{display:true,labels:{color:tick,font:{family:'Share Tech Mono',size:10}}}}}});}
 });
 </script>
 </body>
