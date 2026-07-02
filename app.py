@@ -75,6 +75,12 @@ app.register_blueprint(profit_bp)
 from blueprints.risk_bp import risk_bp
 app.register_blueprint(risk_bp)
 
+# ── Nova UI (STARK HUD) em paralelo — SOMENTE frontend, rota /newdashboard ──
+# Aditivo: serve um novo template que consome os MESMOS /api/* existentes.
+# Não altera nenhum módulo/endpoint. O /dashboard atual segue intacto.
+from blueprints.newui_bp import newui_bp
+app.register_blueprint(newui_bp)
+
 # ── Inicialização única no primeiro request ────────────────────────────────
 _app_initialized = False
 
