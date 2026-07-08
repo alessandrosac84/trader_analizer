@@ -946,7 +946,7 @@ function _onPositionClosed(ticket, profit) {
   fetch("/api/scalper/register-close", {
     method:  "POST",
     headers: { "Content-Type": "application/json" },
-    body:    JSON.stringify({ profit: profit, reason: reason, symbol: _symbol }),
+    body:    JSON.stringify({ profit: profit, reason: reason, symbol: _symbol, ticket: ticket }),
   })
   .then(function (r) { return r.json(); })
   .then(function () { _loadSession(); })
@@ -1000,6 +1000,7 @@ function _runTimeExitCheck() {
           profit: d.pnl || 0,
           reason: d.action,
           symbol: _symbol,
+          ticket: _lastPosTicket,
         }),
       })
       .then(function (r2) { return r2.json(); })

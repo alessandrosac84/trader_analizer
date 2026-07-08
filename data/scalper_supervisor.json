@@ -1,22 +1,22 @@
 {
   "symbol": "BITN26",
-  "timestamp": "2026-07-01T18:01:16.905175-03:00",
+  "timestamp": "2026-07-08T17:07:10.099096-03:00",
   "stats": {
-    "n": 2,
-    "wins": 1,
-    "losses": 1,
+    "n": 12,
+    "wins": 2,
+    "losses": 10,
     "be": 0,
-    "win_rate": 50.0,
-    "pnl": -4.4,
-    "consecutive_losses": 0,
-    "avg_score": 77.5,
+    "win_rate": 16.7,
+    "pnl": -126.4,
+    "consecutive_losses": 8,
+    "avg_score": 74.5,
     "exhaustion_hits": 0,
     "buys": 2,
-    "sells": 0
+    "sells": 2
   },
-  "recomendacao": "CONTINUAR",
-  "motivo": "Amostra pequena — sem base para intervir.",
-  "confianca": 40,
-  "ia_usada": false,
+  "recomendacao": "PAUSAR",
+  "motivo": "Sangria: 8 perdas seguidas / P&L -126.4.",
+  "confianca": 80,
+  "ia_usada": true,
   "score_min_sugerido": null
 }

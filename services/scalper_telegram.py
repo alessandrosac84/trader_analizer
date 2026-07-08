@@ -21,10 +21,24 @@ NÃO modifica nenhum outro módulo além de:
   - services/telegram_commander.py (3 linhas: elif /sc -> dispatch)
 """
 import logging
+import os
 import threading
 import requests
 
 logger = logging.getLogger(__name__)
+
+
+def _scalper_symbol() -> str:
+    """Símbolo ativo do scalper para os comandos do Telegram.
+
+    Fonte de verdade: env SCALPER_TG_SYMBOL (fallback SCALPER_SUPERVISOR_SYMBOL),
+    default BITN26 — o contrato atualmente operado. Antes estava 'WDON26'
+    fixo no código, o que fazia /sc_status, /sc_fechar e /sc_be agirem no
+    contrato errado.
+    """
+    return (os.getenv("SCALPER_TG_SYMBOL")
+            or os.getenv("SCALPER_SUPERVISOR_SYMBOL")
+            or "BITN26").upper().strip()
 
 
 # ── Envio base (reutiliza config sem depender do notifier original) ────────
@@ -156,7 +170,7 @@ def handle_sc_command(token: str, chat_id: str, text: str) -> None:
         try:
             from blueprints.scalper_bp import _session, _auto
             from services.scalper_service import get_scalper_position, get_sim_mode
-            symbol = "WDON26"
+            symbol = _scalper_symbol()
             pos, _ = get_scalper_position(symbol)
             auto_on  = _auto.get("enabled", False)
             sim_on   = get_sim_mode()
@@ -219,7 +233,7 @@ def handle_sc_command(token: str, chat_id: str, text: str) -> None:
     elif cmd == "/sc_fechar":
         try:
             from services.scalper_service import close_scalper_position
-            info, err = close_scalper_position("WDON26")
+            info, err = close_scalper_position(_scalper_symbol())
             if err:
                 reply(f"❌ Erro ao fechar: {err}")
                 return
@@ -238,7 +252,7 @@ def handle_sc_command(token: str, chat_id: str, text: str) -> None:
     elif cmd in ("/sc_be", "/sc_breakeven"):
         try:
             from services.scalper_service import move_sl_to_breakeven
-            result, err = move_sl_to_breakeven("WDON26")
+            result, err = move_sl_to_breakeven(_scalper_symbol())
             if err:
                 reply(f"❌ Erro: {err}")
             else:

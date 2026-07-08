@@ -267,7 +267,8 @@ def get_recent_decisions(limit: int = 50, period: str = _DEFAULT_PERIOD) -> list
                     closed_at,
                     pnl_pts,
                     pnl_brl,
-                    close_reason
+                    close_reason,
+                    ai_motivo
                 FROM auto_trades
                 WHERE ai_veredito IS NOT NULL
                   AND substr(closed_at, 1, 10) >= ?
@@ -295,7 +296,8 @@ def get_recent_decisions(limit: int = 50, period: str = _DEFAULT_PERIOD) -> list
                 "ai_verdict":    r[4],
                 "ai_confidence": r[5],
                 "score":         r[6],
-                "market_regime": None,   # nao disponivel em auto_trades
+                "close_reason":  r[10],
+                "ai_motivo":     r[11],
                 "was_traded":    1,      # sempre 1 — auto_trades so tem executados
                 "outcome_win":   outcome_win,
                 "outcome_pnl":   pnl_pts,

@@ -3319,6 +3319,14 @@
 
   // ── Chamado pelo monitor MT5 quando detecta novo sinal ─────────────────
   window.autoTradeOnSignal = function (data) {
+    // ⛔ ABERTURA AUTOMÁTICA DO DASHBOARD CLÁSSICO DESATIVADA.
+    // Fonte única de abertura agora é o painel novo (/newdashboard), que tem a
+    // trava por ativo. Isso impede o clássico de abrir trade por conta própria.
+    // Para reativar (não recomendado): window.__CLASSIC_AUTOOPEN_DISABLED = false
+    if (window.__CLASSIC_AUTOOPEN_DISABLED !== false) {
+      if (window.setStatus) setStatus("⛔ Abertura automática do clássico desativada — use o painel novo.");
+      return;
+    }
     if (!autoTradeEnabled) return;
 
     // Em MANAGE: já há trade aberto, não abre outro

@@ -124,16 +124,66 @@ def check_meta_atingida(token: str, chat_id: str) -> None:
 
 # ── Envio de resposta ──────────────────────────────────────────────────────
 
-def _reply(token: str, chat_id: str, text: str) -> None:
+def _reply(token: str, chat_id: str, text: str, reply_markup: dict = None) -> None:
     try:
+        payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+        if reply_markup is not None:
+            payload["reply_markup"] = reply_markup
         requests.post(
             f"https://api.telegram.org/bot{token}/sendMessage",
-            json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"},
+            json=payload,
             timeout=10,
             verify=False,
         )
     except Exception as exc:
         logger.warning("Erro ao responder comando Telegram: %s", exc)
+
+
+# ── Botões / teclado persistente ───────────────────────────────────────────
+# Teclado fixo abaixo da caixa de texto: tocar num botão envia o rótulo, que
+# é traduzido para o comando correspondente em _resolve_button(). Assim o
+# usuário não precisa digitar os comandos.
+
+_BTN_CMD = {
+    "📊 Status":            "/status",
+    "📈 Trades":            "/trade",
+    "📋 Resumo do dia":     "/relatorio",
+    "📅 Resumo da semana":  "/relatorio_semana",
+    "✋ Fechar tudo":        "/fechar",
+    "⚖️ Breakeven":         "/be",
+    "🛑 Parar bot":         "/stop",
+    "✅ Ativar bot":        "/ativar",
+    "⚡ Scalper status":    "/sc_status",
+    "📜 Scalper log":       "/sc_log",
+    "🟢 Scalper ON":        "/sc_on",
+    "🔴 Scalper OFF":       "/sc_off",
+    "⌨️ Menu":              "/menu",
+}
+
+# Layout do teclado (linhas de botões)
+_KEYBOARD_ROWS = [
+    ["📊 Status", "📈 Trades"],
+    ["📋 Resumo do dia", "📅 Resumo da semana"],
+    ["✋ Fechar tudo", "⚖️ Breakeven"],
+    ["🛑 Parar bot", "✅ Ativar bot"],
+    ["⚡ Scalper status", "📜 Scalper log"],
+    ["🟢 Scalper ON", "🔴 Scalper OFF"],
+]
+
+
+def _menu_markup() -> dict:
+    """ReplyKeyboardMarkup persistente com os principais comandos."""
+    return {
+        "keyboard": [[{"text": b} for b in row] for row in _KEYBOARD_ROWS],
+        "resize_keyboard": True,
+        "is_persistent": True,
+        "input_field_placeholder": "Toque num botão ou digite /help",
+    }
+
+
+def _resolve_button(text: str) -> "str | None":
+    """Traduz o rótulo de um botão para o comando correspondente."""
+    return _BTN_CMD.get((text or "").strip())
 
 
 # ── Processamento de comandos ──────────────────────────────────────────────
@@ -144,6 +194,11 @@ def _handle_command(token: str, chat_id: str, allowed_chat_id: str, text: str) -
     if str(chat_id) != str(allowed_chat_id):
         logger.warning("Comando recebido de chat não autorizado: %s", chat_id)
         return
+
+    # Se veio de um botão do teclado, traduz o rótulo para o comando
+    _btn = _resolve_button(text)
+    if _btn:
+        text = _btn
 
     cmd = (text or "").strip().lower().split()[0] if text else ""
 
@@ -169,9 +224,37 @@ def _handle_command(token: str, chat_id: str, allowed_chat_id: str, text: str) -
         set_autotrade_enabled(True)
         _reply(token, chat_id,
             "✅ <b>Auto-Trade ATIVADO</b>\n\n"
-            "O bot voltará a abrir trades automaticamente."
+            "O bot voltará a abrir trades automaticamente.\n"
+            "⌨️ Use os botões abaixo para os comandos principais.",
+            reply_markup=_menu_markup(),
         )
         logger.info("Auto-trade ativado via Telegram.")
+
+    elif cmd in ("/menu", "/teclado", "/botoes", "/botões"):
+        _reply(token, chat_id,
+            "⌨️ <b>Menu de comandos ativado</b>\n\n"
+            "Toque nos botões abaixo da caixa de texto para executar os "
+            "comandos sem precisar digitar.",
+            reply_markup=_menu_markup(),
+        )
+
+    elif cmd in ("/relatorio", "/relatório", "/relatorio_dia"):
+        try:
+            from services.daily_report import send_daily_report
+            ok = send_daily_report()
+            if not ok:
+                _reply(token, chat_id, "⚠️ Não foi possível enviar o relatório (Telegram configurado?).")
+        except Exception as exc:
+            _reply(token, chat_id, f"❌ Erro ao gerar relatório do dia: {exc}")
+
+    elif cmd in ("/relatorio_semana", "/resumo_semana", "/semana"):
+        try:
+            from services.daily_report import send_weekly_report
+            ok = send_weekly_report()
+            if not ok:
+                _reply(token, chat_id, "⚠️ Não foi possível enviar o resumo semanal.")
+        except Exception as exc:
+            _reply(token, chat_id, f"❌ Erro ao gerar resumo da semana: {exc}")
 
     elif cmd == "/status":
         enabled = is_autotrade_enabled()
@@ -548,10 +631,12 @@ def _handle_command(token: str, chat_id: str, allowed_chat_id: str, text: str) -
     elif cmd in ("/help", "/ajuda", "/comandos"):
         _reply(token, chat_id,
             "🤖 <b>Comandos disponíveis:</b>\n\n"
+            "⌨️ <b>Dica:</b> use os botões abaixo da caixa de texto (/menu).\n\n"
             "📊 <b>Informação</b>\n"
             "/status — Bot ativo/pausado + P&L do dia\n"
             "/trade — Todos os trades abertos (WIN + WDO + PETR4)\n"
-            "/resumo — Resumo completo do dia agora\n\n"
+            "/relatorio — Relatório do dia (Monitor + Scalper)\n"
+            "/relatorio_semana — Resumo da semana\n\n"
             "⚙️ <b>Controle do bot</b>\n"
             "/stop — Pausa novos trades\n"
             "/ativar — Reativa o auto-trade\n"
@@ -565,7 +650,10 @@ def _handle_command(token: str, chat_id: str, allowed_chat_id: str, text: str) -
             "/be WIN — Move stop para breakeven no WIN\n"
             "/be WDO — Move stop para breakeven no WDO\n"
             "/be PETR4 — Move stop para breakeven no PETR4\n\n"
-            "/help — Esta mensagem"
+            "⚡ <b>Scalper</b>\n"
+            "/sc_status /sc_log /sc_on /sc_off /sc_fechar /sc_be\n\n"
+            "/menu — Mostra os botões · /help — Esta mensagem",
+            reply_markup=_menu_markup(),
         )
 
     else:
@@ -601,7 +689,8 @@ def _polling_loop(token: str, chat_id: str) -> None:
                 msg = upd.get("message", {})
                 msg_chat_id = str(msg.get("chat", {}).get("id", ""))
                 text = msg.get("text", "")
-                if text.startswith("/"):
+                # Aceita comandos (/...) e toques nos botões do teclado (rótulos)
+                if text.startswith("/") or _resolve_button(text):
                     _handle_command(token, msg_chat_id, chat_id, text)
 
         except requests.exceptions.ReadTimeout:
@@ -616,6 +705,37 @@ def _polling_loop(token: str, chat_id: str) -> None:
 _commander_started = False
 
 
+def _setup_bot_ui(token: str, chat_id: str) -> None:
+    """Registra a lista de comandos (menu '/') e mostra o teclado persistente."""
+    # Lista que aparece ao digitar '/' no Telegram
+    commands = [
+        {"command": "menu",             "description": "⌨️ Mostrar os botões de comando"},
+        {"command": "status",           "description": "📊 Bot ativo/pausado + P&L do dia"},
+        {"command": "trade",            "description": "📈 Trades abertos (WIN/WDO/PETR4)"},
+        {"command": "relatorio",        "description": "📋 Relatório do dia (Monitor+Scalper)"},
+        {"command": "relatorio_semana", "description": "📅 Resumo da semana"},
+        {"command": "fechar",           "description": "✋ Fecha todas as posições"},
+        {"command": "be",               "description": "⚖️ Move stop para breakeven"},
+        {"command": "stop",             "description": "🛑 Pausa novos trades"},
+        {"command": "ativar",           "description": "✅ Reativa o auto-trade"},
+        {"command": "sc_status",        "description": "⚡ Status do Scalper"},
+        {"command": "sc_log",           "description": "📜 Log do Scalper"},
+        {"command": "help",             "description": "❓ Ajuda"},
+    ]
+    try:
+        requests.post(f"https://api.telegram.org/bot{token}/setMyCommands",
+                      json={"commands": commands}, timeout=10, verify=False)
+    except Exception as exc:
+        logger.debug("setMyCommands falhou: %s", exc)
+    # Faz o teclado persistente aparecer imediatamente
+    try:
+        _reply(token, chat_id,
+               "🤖 <b>Bot online.</b> Use os botões abaixo para os comandos principais.",
+               reply_markup=_menu_markup())
+    except Exception as exc:
+        logger.debug("startup menu falhou: %s", exc)
+
+
 def start_commander() -> None:
     """Inicia o listener de comandos Telegram em background. Chamar no startup do app."""
     global _commander_started
@@ -628,6 +748,10 @@ def start_commander() -> None:
         return
 
     _commander_started = True
+    try:
+        _setup_bot_ui(Config.TELEGRAM_BOT_TOKEN, Config.TELEGRAM_CHAT_ID)
+    except Exception as exc:
+        logger.debug("_setup_bot_ui erro: %s", exc)
     t = threading.Thread(
         target=_polling_loop,
         args=(Config.TELEGRAM_BOT_TOKEN, Config.TELEGRAM_CHAT_ID),

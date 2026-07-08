@@ -142,6 +142,50 @@ def log_entry(
         logger.warning("trade_logger.log_entry error: %s", exc)
 
 
+def peek_pending_id(symbol: str):
+    """Retorna o id do registro pendente (aberto) para o simbolo, sem removê-lo."""
+    p = _pending.get(symbol)
+    return p.get("id") if p else None
+
+
+def patch_exit_by_id(row_id, profit: float, exit_price=None,
+                     exit_reason: str = None) -> bool:
+    """
+    Reconciliação: corrige o P&L (e resultado) de uma linha já gravada no CSV,
+    identificada pelo id. Usado quando o deal do MT5 só apareceu depois de o
+    trade ter sido registrado zerado. Retorna True se atualizou.
+    """
+    try:
+        _ensure_file()
+        with _lock:
+            with open(LOG_FILE, "r", encoding="utf-8") as f:
+                rows = list(csv.DictReader(f))
+            changed = False
+            for r in rows:
+                if str(r.get("id")) == str(row_id):
+                    r["profit"] = round(float(profit), 2)
+                    if exit_price is not None:
+                        r["exit_price"] = round(float(exit_price), 4)
+                    if exit_reason:
+                        r["exit_reason"] = exit_reason
+                    if   profit > 0.01:  r["resultado"] = "WIN"
+                    elif profit < -0.01: r["resultado"] = "LOSS"
+                    else:                r["resultado"] = "BE"
+                    changed = True
+                    break
+            if not changed:
+                return False
+            with open(LOG_FILE, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=COLUMNS, extrasaction="ignore")
+                writer.writeheader()
+                writer.writerows(rows)
+        logger.info("TradeLog PATCH: id=%s profit=%.2f", row_id, profit)
+        return True
+    except Exception as exc:
+        logger.warning("trade_logger.patch_exit_by_id error: %s", exc)
+        return False
+
+
 def log_exit(
     symbol: str, exit_price: float, profit: float,
     exit_reason: str = "manual",
@@ -154,8 +198,20 @@ def log_exit(
         _ensure_file()
         pending = _pending.pop(symbol, None)
         if not pending:
-            logger.warning("trade_logger.log_exit: nenhuma entrada pendente para %s", symbol)
-            return
+            # Resiliência: sem entrada pendente (ex.: app reiniciou no meio do
+            # trade). Em vez de descartar o fechamento, grava um registro mínimo
+            # para a planilha nunca perder um trade.
+            logger.warning("trade_logger.log_exit: sem entrada pendente para %s — gravando registro mínimo.", symbol)
+            brt_now = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=-3)))
+            pending = {c: "" for c in COLUMNS}
+            pending.update({
+                "id":           _next_id(),
+                "datetime_brt": brt_now.strftime("%Y-%m-%d %H:%M:%S"),
+                "symbol":       symbol,
+                "mode":         "REAL",
+                "direcao":      "?",
+                "auto":         1,
+            })
 
         entry_ts   = pending.pop("_entry_ts", None)
         duration_s = round((datetime.now(timezone.utc).timestamp() - entry_ts), 1) if entry_ts else ""

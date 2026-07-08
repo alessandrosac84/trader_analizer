@@ -145,6 +145,61 @@ def _safe_notify_exit(symbol, info, profit, reason):
     except Exception as exc:
         logger.warning("safe_notify_exit: %s", exc)
 
+# ── Reconciliação de P&L (rede de segurança das "zeradas") ────────────────
+# Se o trade foi gravado com profit≈0 mas o motivo era TP/SL, o deal do MT5
+# provavelmente ainda não tinha aparecido no histórico. Aqui re-consultamos o
+# histórico por até ~2min; ao achar o P&L real, corrigimos a linha do CSV, a
+# sessão em memória e enviamos uma correção no Telegram.
+import threading as _threading
+
+_reconcile_lock = _threading.Lock()
+
+
+def _reconcile_worker(ticket: int, symbol: str, row_id, reason: str):
+    import time as _t
+    try:
+        # espera o deal aparecer (retry longo)
+        profit, found = _fetch_realized_profit(ticket, tries=40, delay=3.0)
+        if not found or profit is None or abs(profit) < 0.01:
+            logger.info("Reconcile: ticket=%s sem P&L real (segue como BE).", ticket)
+            return
+        # corrige o CSV
+        try:
+            from services.trade_logger import patch_exit_by_id
+            patch_exit_by_id(row_id, profit, exit_reason=reason)
+        except Exception as exc:
+            logger.warning("Reconcile patch CSV falhou: %s", exc)
+        # ajusta a sessão em memória (remove do BE, soma no win/loss)
+        with _reconcile_lock:
+            if _session.get("breakevens", 0) > 0:
+                _session["breakevens"] -= 1
+            if profit > 0:
+                _session["wins"] = _session.get("wins", 0) + 1
+            else:
+                _session["losses"] = _session.get("losses", 0) + 1
+            _session["pnl"] = _session.get("pnl", 0.0) + profit
+        # correção no Telegram
+        try:
+            from services.scalper_telegram import _send_async as _tg
+            res = "✅ GAIN" if profit > 0 else "❌ LOSS"
+            _tg(f"⚡ <b>SCALPER — correção de resultado</b>\n"
+                f"O trade #{row_id} ({symbol}) foi registrado como zerado, mas o "
+                f"resultado real foi <b>{res}</b>: {('R$%+.2f' % profit).replace('.', ',')}")
+        except Exception as exc:
+            logger.debug("Reconcile telegram: %s", exc)
+        logger.info("Reconcile OK: ticket=%s id=%s profit=%.2f", ticket, row_id, profit)
+    except Exception as exc:
+        logger.warning("Reconcile worker error: %s", exc)
+
+
+def _enqueue_reconcile(ticket, symbol, row_id, reason):
+    if not ticket or row_id is None:
+        return
+    _threading.Thread(target=_reconcile_worker,
+                      args=(int(ticket), symbol, row_id, reason),
+                      daemon=True, name=f"reconcile-{ticket}").start()
+
+
 scalper_bp = Blueprint("scalper", __name__, url_prefix="")
 
 # Estado da sessao (em memoria, por processo Flask)
@@ -188,6 +243,19 @@ _pause_cfg = {
     "max_consecutive_losses": 3,
     "pause_duration_sec":     1800,
 }
+
+# ── Guard-rails de assertividade do Scalper (v6.4) ──────────────────────────
+# Regras anti-overtrading e anti-exaustão adicionadas ao gate de auto-check.
+# Objetivo: menos trades, melhores. NÃO afeta o Monitor MT5.
+_ASSERT = {
+    "min_cooldown_floor_sec": 45,        # piso de cooldown (mesmo se o front mandar menos)
+    "max_trades_per_min":      2,        # teto de execuções em 60s (mata o "machine-gun")
+    "good_sessions": {"PRIME", "BOM"},   # só opera em sessão definida e boa
+    "block_undefined_session": True,     # bloqueia sessão "?"/vazia
+    # Teto de score por símbolo: acima disso = zona de exaustão (dados: ~0% acerto)
+    "score_ceiling": {"BITN26": 84, "_default": 88},
+}
+_recent_exec_ts: list = []   # timestamps das últimas execuções (teto por minuto)
 
 # ── Parâmetros de execução por símbolo ──────────────────────────────────────
 # Cada ativo tem thresholds calibrados para sua liquidez.
@@ -558,10 +626,19 @@ def api_scalper_auto_check():
             CODE_MAX_DAILY_TRADES,
         )
 
+    eff_cooldown = max(cooldown_sec, _ASSERT["min_cooldown_floor_sec"])
     elapsed = time.time() - _auto["last_trade_ts"]
-    if elapsed < cooldown_sec:
+    if elapsed < eff_cooldown:
         return _deny(
-            f"Cooldown: {int(cooldown_sec - elapsed)}s restantes.",
+            f"Cooldown: {int(eff_cooldown - elapsed)}s restantes.",
+            CODE_COOLDOWN_ACTIVE,
+        )
+    # Teto de execuções por minuto (anti-machine-gun)
+    _now_ts = time.time()
+    _recent_exec_ts[:] = [t for t in _recent_exec_ts if _now_ts - t < 60]
+    if len(_recent_exec_ts) >= _ASSERT["max_trades_per_min"]:
+        return _deny(
+            f"🚫 Teto de {_ASSERT['max_trades_per_min']} trades/min — evitando overtrading.",
             CODE_COOLDOWN_ACTIVE,
         )
 
@@ -616,6 +693,25 @@ def api_scalper_auto_check():
             return _deny(
                 f"🚫 Score srv {sv_score:.0f} < mín {score_min_sv} — entrada bloqueada",
                 CODE_SCORE_BELOW_MINIMUM, hard=True,
+            )
+
+        # Hard-block 1b: ANTI-EXAUSTÃO — score alto demais = perseguindo o impulso.
+        # Dados históricos: faixa alta teve ~0% de acerto. Bloqueia a zona de exaustão.
+        _ceil = _ASSERT["score_ceiling"].get(symbol, _ASSERT["score_ceiling"]["_default"])
+        if sv_score > _ceil:
+            _auto["signal_count"] = 0
+            return _deny(
+                f"🚫 Score {sv_score:.0f} > teto {_ceil} — zona de exaustão (anti-perseguição)",
+                CODE_SCORE_BELOW_MINIMUM, hard=True,
+            )
+
+        # Hard-block 1c: DISCIPLINA DE SESSÃO — só operar em sessão definida e boa.
+        _sess = ((macro_sv.get("time", {}) or {}).get("session", "") or "").upper()
+        if _ASSERT["block_undefined_session"] and _sess not in _ASSERT["good_sessions"]:
+            _auto["signal_count"] = 0
+            return _deny(
+                f"🚫 Sessão '{_sess or '?'}' fora de PRIME/BOM — sem contexto p/ operar",
+                CODE_OUTSIDE_TRADING_HOURS, hard=True,
             )
 
         # Hard-block Volatilidade 60s (P2) — mercado morto, sem range suficiente
@@ -680,6 +776,7 @@ def api_scalper_auto_check():
     if result and not err:
         _session["trades"] += 1
         _auto["last_trade_ts"]  = time.time()
+        _recent_exec_ts.append(time.time())   # p/ teto de trades por minuto
         _auto["last_trade_dir"] = signal
         _auto["signal_count"]   = 0
         _auto["last_signal"]    = ""
@@ -789,6 +886,18 @@ def api_scalper_register_close():
     profit = float(body.get("profit", 0))
     reason = body.get("reason", "MT5")
     symbol = body.get("symbol", "")
+    ticket = body.get("ticket")
+
+    # Servidor autoritativo: havendo ticket, o P&L realizado do MT5 sempre vale
+    # mais que o profit flutuante do cliente. Busca com retry antes de gravar —
+    # evita a "zerada" (deal ainda não settado no instante do fechamento).
+    if ticket and reason not in ("manual", "breakeven", "BE"):
+        try:
+            real, found = _fetch_realized_profit(int(ticket))
+            if found and real is not None:
+                profit = real
+        except Exception as exc:
+            logger.debug("register-close fetch real profit: %s", exc)
 
     _session["pnl"] += profit
     if abs(profit) < 0.01:
@@ -801,42 +910,67 @@ def api_scalper_register_close():
 
     logger.info("Scalper fechamento registrado: reason=%s profit=%.2f symbol=%s", reason, profit, symbol)
     if symbol:
+        # id da linha que será gravada (para eventual reconciliação)
+        row_id = None
+        try:
+            from services.trade_logger import peek_pending_id
+            row_id = peek_pending_id(symbol)
+        except Exception:
+            pass
         _safe_log_exit(symbol, 0.0, profit, reason)
         _safe_notify_exit(symbol, {}, profit, reason)
+        # Rede de segurança: gravou zerado mas era TP/SL → reconcilia em background
+        if ticket and abs(profit) < 0.01 and reason not in ("manual", "breakeven", "BE"):
+            _enqueue_reconcile(ticket, symbol, row_id, reason)
     return jsonify({"ok": True})
 
 
-# Busca P&L real do historico MT5 pelo ticket
+# ── Captura do P&L realizado no MT5 (com retry) ───────────────────────────
+# O deal de saida (DEAL_ENTRY_OUT) pode demorar 1-2s para aparecer no historico
+# apos o TP/SL disparar. Sem retry, a consulta volta vazia e o trade e gravado
+# com profit=0 -> vira BE ("zerada"). Aqui tentamos algumas vezes com pequeno
+# atraso antes de desistir.
+def _fetch_realized_profit(ticket: int, tries: int = 8, delay: float = 0.35):
+    """Busca o P&L realizado de uma posicao fechada. Retorna (profit|None, found)."""
+    from services.scalper_service import get_sim_mode, get_sim_closed_profit
+    if get_sim_mode():
+        profit = get_sim_closed_profit(ticket)
+        return (round(float(profit), 2), True) if profit is not None else (None, False)
+    try:
+        import MetaTrader5 as mt5
+        import time as _t
+        from services.scalper_service import _mt5_init
+        if not _mt5_init():
+            return None, False
+        for i in range(max(1, tries)):
+            deals = mt5.history_deals_get(position=ticket)
+            if deals:
+                out = sum(d.profit for d in deals
+                          if hasattr(d, "entry") and d.entry == mt5.DEAL_ENTRY_OUT)
+                total = sum(d.profit for d in deals)
+                profit = out if out != 0 else total
+                # so aceita como "encontrado" quando ha deal de saida (evita 0 prematuro)
+                has_out = any(getattr(d, "entry", None) == mt5.DEAL_ENTRY_OUT for d in deals)
+                if has_out:
+                    return round(profit, 2), True
+            if i < tries - 1:
+                _t.sleep(delay)
+        return None, False
+    except Exception as exc:
+        logger.warning("_fetch_realized_profit error: %s", exc)
+        return None, False
+
+
+# Busca P&L real do historico MT5 pelo ticket (usado pelos frontends)
 @scalper_bp.route("/api/scalper/last-deal")
 def api_scalper_last_deal():
-    from services.scalper_service import _mt5_init, get_sim_mode, get_sim_closed_profit
     ticket = request.args.get("ticket", type=int)
     if not ticket:
         return jsonify({"ok": False, "error": "ticket obrigatorio"})
-
-    if get_sim_mode():
-        profit = get_sim_closed_profit(ticket)
-        if profit is not None:
-            return jsonify({"ok": True, "found": True, "profit": round(float(profit), 2)})
-        return jsonify({"ok": True, "found": False, "profit": None})
-
-    try:
-        import MetaTrader5 as mt5
-        if not _mt5_init():
-            return jsonify({"ok": False, "profit": None})
-        deals = mt5.history_deals_get(position=ticket)
-        if deals is None or len(deals) == 0:
-            return jsonify({"ok": True, "found": False, "profit": None})
-        profit = sum(
-            d.profit for d in deals
-            if hasattr(d, "entry") and d.entry == mt5.DEAL_ENTRY_OUT
-        )
-        if profit == 0:
-            profit = sum(d.profit for d in deals)
-        return jsonify({"ok": True, "found": True, "profit": round(profit, 2)})
-    except Exception as exc:
-        logger.warning("last-deal error: %s", exc)
-        return jsonify({"ok": False, "profit": None, "error": str(exc)})
+    profit, found = _fetch_realized_profit(ticket)
+    if found:
+        return jsonify({"ok": True, "found": True, "profit": profit})
+    return jsonify({"ok": True, "found": False, "profit": None})
 
 
 # Modo Simulacao: liga/desliga

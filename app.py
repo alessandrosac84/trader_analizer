@@ -170,6 +170,12 @@ def _startup_once():
         _start_sup()
     except Exception as e:
         logger.warning("Scalper Supervisor nao iniciou (nao bloqueante): %s", e)
+    try:
+        # v6.3 — Relatorio diario consolidado (Monitor + Scalper) via Telegram as 18:05 BRT
+        from services.daily_report import start_daily_report_scheduler as _start_dr
+        _start_dr()
+    except Exception as e:
+        logger.warning("Daily Report Scheduler nao iniciou (nao bloqueante): %s", e)
 
 
 def allowed_file(filename: str) -> bool:
@@ -739,6 +745,17 @@ def api_autotrade_remote_state():
     return jsonify({"ok": True, "enabled": is_autotrade_enabled()})
 
 
+@app.route("/api/autotrade/symbol-gate", methods=["GET", "POST"])
+def api_autotrade_symbol_gate():
+    """Trava de trades por ativo (token). POST {token, enabled}. Só bloqueia execuções."""
+    from services.trade_gate import set_token, disabled_tokens
+    if request.method == "POST":
+        body = request.get_json(silent=True) or {}
+        set_token(body.get("token", ""), bool(body.get("enabled", True)))
+        return jsonify({"ok": True, "disabled": disabled_tokens()})
+    return jsonify({"ok": True, "disabled": disabled_tokens()})
+
+
 @app.route("/api/autotrade/status")
 def api_autotrade_status():
     """Retorna posições abertas do bot."""
@@ -787,6 +804,21 @@ def api_autotrade_execute():
     # Lê o símbolo antecipadamente para aplicar cooldowns por ativo
     _early_body  = request.get_json(silent=True, force=True) or {}
     _sym_key     = (_early_body.get("tv_symbol") or "").strip().upper() or "DEFAULT"
+
+    # ── TRAVA POR ATIVO (safety switch server-side) ───────────────────────────
+    # Recusa abrir trade de um ativo marcado OFF, venha de onde vier (painel novo,
+    # dashboard clássico, outra aba). Só bloqueia — não toca no motor.
+    try:
+        from services.trade_gate import symbol_enabled
+        if not symbol_enabled(_sym_key):
+            logger.warning("Execute BLOQUEADO: trades OFF para %s (trava por ativo).", _sym_key)
+            return jsonify({
+                "ok": False, "result": None,
+                "error": f"🔒 Trades DESATIVADOS para {_sym_key} (trava por ativo). "
+                         f"Reative o botão TRADES do ativo no painel.",
+            })
+    except Exception as _tg_exc:
+        logger.warning("trade_gate check falhou (não bloqueia): %s", _tg_exc)
 
     # Cooldown no servidor — evita re-entrada mesmo se o JS resetar o debounce
     if _autotrade_in_cooldown(_sym_key):
