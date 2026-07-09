@@ -287,8 +287,24 @@ def build_daily_report() -> str:
     return "\n".join(l for l in lines if l is not None)
 
 
+def _export_records() -> None:
+    """Exporta os registros do Monitor para logs/monitor_trades.csv (durável,
+    sem WAL — legível mesmo com a pasta em nuvem). Best-effort, nunca quebra."""
+    try:
+        import importlib.util, os
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        spec = importlib.util.spec_from_file_location("analise_dia", os.path.join(base, "analise_dia.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        n = mod.export_monitor_csv()
+        logger.info("daily_report: exportados %d trade(s) do Monitor para CSV.", n)
+    except Exception as exc:
+        logger.debug("daily_report: export CSV falhou: %s", exc)
+
+
 def send_daily_report() -> bool:
     """Monta e envia o relatório diário via Telegram. Retorna True se enviado."""
+    _export_records()   # sempre atualiza o CSV durável, mesmo sem Telegram
     try:
         from services.config import Config
         if not Config.use_telegram():

@@ -539,14 +539,14 @@ async function driveMonitorExecute(side,sym,sig){
 async function loadMonitor(){
   if(!_monInit){_monInit=true;loadTradesState();}
   load3C();   // reflete o estado do 3-contratos por ativo (não bloqueia o resto)
-  const at=await api('/api/autotrade/trades');
+  const at=await api('/api/autotrade/trades?limit=200');   // todos os sinais do dia
   if(at&&at.stats){const st=at.stats;
-    setTxt('mTotal',st.total??'—');setTxt('mGains',st.gains??st.wins??'—');setTxt('mStops',st.stops??st.losses??'—');
-    setTxt('mWin',(st.win_rate!=null?fmt(st.win_rate,0)+'%':'—'));
+    const ger=+(st.total||0),bloq=+(st.bloqueados_ia??st.ia_bloqueados??st.blocked??0),exe=Math.max(0,ger-bloq);
+    setTxt('mTotal',exe);setTxt('mGains',st.gains??st.wins??'—');setTxt('mStops',st.stops??st.losses??'—');
+    const wr=st.win_rate_pct??st.win_rate;setTxt('mWin',(wr!=null?fmt(wr,0)+'%':'—'));
     const pnl=st.pnl_total_brl??st.pnl_brl;const el=document.getElementById('mPnl');if(el){el.textContent='R$ '+sign(pnl,2);el.className=cls(pnl);}
-    setTxt('mBlock',st.ia_bloqueados??st.blocked??'—');
+    setTxt('mBlock',bloq);
     // Funil de sinais do dia: gerados → executados → bloqueados
-    const ger=+(st.total||0),bloq=+(st.ia_bloqueados??st.blocked??0),exe=Math.max(0,ger-bloq);
     setTxt('fGer',ger);setTxt('fExec',exe);setTxt('fBloq',bloq);
     const note=ger===0?'Nenhum sinal atingiu o gatilho hoje — mercado sem setup válido (não é falha do motor).'
       :exe===0?'Todos os sinais foram segurados pela IA (menos trades, mais qualidade).'
@@ -976,17 +976,18 @@ function renderTape(tape){
 
 // ===== Dashboard =====
 async function loadDashboard(){
-  const at=await api('/api/autotrade/trades');
+  const at=await api('/api/autotrade/trades?limit=200');   // pega TODOS os sinais do dia (não só 50)
   if(at&&at.stats){const st=at.stats;
-    setTxt('dTotal',st.total??'—');setTxt('dWin',st.win_rate!=null?fmt(st.win_rate,0)+'%':'—');
+    // GERADOS = todos os sinais; BLOQUEADOS = IA aguardou/bloqueou; EXECUTADOS = o resto (trades reais)
+    const ger=+(st.total||0),bloq=+(st.bloqueados_ia??st.ia_bloqueados??st.blocked??0),exe=Math.max(0,ger-bloq);
+    setTxt('dTotal',exe);   // "Trades hoje" = EXECUTADOS de verdade (não sinais)
+    const wr=st.win_rate_pct??st.win_rate;setTxt('dWin',wr!=null?fmt(wr,0)+'%':'—');
     const pnl=st.pnl_total_brl??st.pnl_brl;const el=document.getElementById('dPnl');if(el){el.textContent=sign(pnl,2);el.className='v '+cls(pnl);}
-    setTxt('dBlock',st.ia_bloqueados??st.blocked??'—');
+    setTxt('dBlock',bloq);
     const ph=document.getElementById('pnlHoje');if(ph){ph.textContent='R$ '+sign(pnl,0);ph.className=cls(pnl);}
-    // Funil de sinais (visão executiva — sem repetir a tabela operacional do Monitor)
-    const ger=+(st.total||0),bloq=+(st.ia_bloqueados??st.blocked??0),exe=Math.max(0,ger-bloq);
     setTxt('dFGer',ger);setTxt('dFExec',exe);setTxt('dFBloq',bloq);
     setTxt('dFNote',ger===0?'Nenhum sinal atingiu o gatilho hoje — mercado sem setup válido (não é falha).'
-      :exe===0?'Todos os sinais foram segurados pela IA (menos trades, mais qualidade).'
+      :exe===0?'Todos os '+ger+' sinais foram segurados pela IA (menos trades, mais qualidade).'
       :exe+' executado(s) de '+ger+' sinal(is) · '+bloq+' bloqueado(s) pela IA.');
     renderBySym('dBySym',at.items);
   }
@@ -1184,6 +1185,17 @@ async function loadReport(){
   const tr=(d.trades||[]).filter(t=>t.closed_at&&t.close_reason!=='BLOQUEADO_IA'&&t.close_reason!=='AGUARDADO_IA');
   let gw=0,gl=0;tr.forEach(t=>{const v=t.pnl_brl||0;if(v>0)gw+=v;else gl+=-v;});
   const pf=gl>0?(gw/gl):(gw>0?99:0),pnl=s.pnl_total_brl;
+  // Melhor/Pior: por DIA (Semana/Mês) ou por TRADE (Dia). Cor pelo valor real.
+  let card3='',card4='';
+  if(_rpPeriod!=='day'&&s.best_day){
+    card3=`<div class="panel"><div class="kpi"><div class="v ${cls(s.best_day.pnl_brl)}">R$ ${fmt(s.best_day.pnl_brl,0)}</div><div class="l">Melhor dia</div><div class="trend">${s.best_day.date}</div></div></div>`;
+    card4=s.worst_day?`<div class="panel"><div class="kpi"><div class="v ${cls(s.worst_day.pnl_brl)}">R$ ${fmt(s.worst_day.pnl_brl,0)}</div><div class="l">Pior dia</div><div class="trend">${s.worst_day.date}</div></div></div>`:'';
+  } else {
+    let bt=null,wt=null;tr.forEach(t=>{const v=t.pnl_brl;if(v==null)return;if(!bt||v>bt.pnl_brl)bt=t;if(!wt||v<wt.pnl_brl)wt=t;});
+    const lab=t=>`${(t.tv_symbol||'').slice(-6)} ${(t.opened_at||'').slice(11,16)}`;
+    card3=bt?`<div class="panel"><div class="kpi"><div class="v ${cls(bt.pnl_brl)}">R$ ${fmt(bt.pnl_brl,0)}</div><div class="l">Melhor trade</div><div class="trend">${lab(bt)}</div></div></div>`:'';
+    card4=wt?`<div class="panel"><div class="kpi"><div class="v ${cls(wt.pnl_brl)}">R$ ${fmt(wt.pnl_brl,0)}</div><div class="l">Pior trade</div><div class="trend">${lab(wt)}</div></div></div>`:'';
+  }
   let h='<div class="grid g4">'
     +`<div class="panel gold"><div class="kpi"><div class="v ${cls(pnl)}">R$ ${sign(pnl,2)}</div><div class="l">P&L do período</div><div class="trend cy">${s.pnl_total_pts!=null?sign(s.pnl_total_pts,0)+' pts':''}</div></div></div>`
     +`<div class="panel"><div class="kpi"><div class="v up">${s.win_rate!=null?s.win_rate+'%':'—'}</div><div class="l">Win rate</div><div class="trend">${s.wins??0}W / ${s.losses??0}L</div></div></div>`
@@ -1192,8 +1204,7 @@ async function loadReport(){
     +'</div><div class="grid g4" style="margin-top:16px">'
     +`<div class="panel"><div class="kpi"><div class="v">${s.expectativa!=null?sign(s.expectativa,1):'—'}</div><div class="l">Expectativa (pts)</div></div></div>`
     +`<div class="panel"><div class="kpi"><div class="v gd">${s.avg_score??'—'}</div><div class="l">Score médio</div></div></div>`
-    +`<div class="panel"><div class="kpi"><div class="v up">${s.best_day?'R$ '+fmt(s.best_day.pnl_brl,0):'—'}</div><div class="l">Melhor dia</div><div class="trend">${s.best_day?s.best_day.date:''}</div></div></div>`
-    +`<div class="panel"><div class="kpi"><div class="v down">${s.worst_day?'R$ '+fmt(s.worst_day.pnl_brl,0):'—'}</div><div class="l">Pior dia</div><div class="trend">${s.worst_day?s.worst_day.date:''}</div></div></div>`
+    +card3+card4
     +'</div>';
   const daily=(d.daily||[]).filter(x=>(x.trades-x.abertos)>0);
   if(daily.length)h+=panelHTML('Resultado por dia','<table><thead><tr><th>DIA</th><th>TRADES</th><th>WINS</th><th>LOSSES</th><th>P&L pts</th><th>P&L R$</th></tr></thead><tbody>'

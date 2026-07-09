@@ -43,11 +43,20 @@ def _num(x, default=0.0):
 
 
 def _recent_trades(symbol: str, limit: int = _WINDOW) -> list[dict]:
+    """Trades do símbolo APENAS do dia corrente (BRT).
+
+    O supervisor avalia o desempenho de HOJE. Sem o filtro de data, uma sequência
+    de perdas de ontem ficava valendo o dia inteiro — recomendando PAUSAR e
+    (com apply_pause) mantendo o scalper pausado sem parar. A cada novo dia o
+    contador de sangria zera.
+    """
     if not _CSV.exists():
         return []
     try:
+        today = datetime.now(timezone(timedelta(hours=-3))).strftime("%Y-%m-%d")
         rows = [r for r in csv.DictReader(open(_CSV, encoding="utf-8"))
-                if (r.get("symbol") or "").upper() == symbol.upper()]
+                if (r.get("symbol") or "").upper() == symbol.upper()
+                and (r.get("datetime_brt") or "").startswith(today)]
         return rows[-limit:]
     except Exception as exc:
         logger.warning("supervisor: falha lendo CSV: %s", exc)
@@ -175,14 +184,24 @@ def run_supervision(symbol: str = "BITN26", apply_pause: bool = False,
         "score_min_sugerido": (ai or {}).get("score_min_sugerido"),
     }
 
+    # Recomendação anterior (para só alertar/pausar quando MUDA de estado)
+    prev_acao = None
+    try:
+        if _STATE.exists():
+            prev_acao = json.loads(_STATE.read_text(encoding="utf-8")).get("recomendacao")
+    except Exception:
+        prev_acao = None
+    changed = final["acao"] != prev_acao
+
     # Persistir para o dashboard
     try:
         _STATE.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception as exc:
         logger.debug("supervisor: falha salvando estado: %s", exc)
 
-    # Acao segura: pausar
-    if apply_pause and final["acao"] == "PAUSAR":
+    # Acao segura: pausar — mantém a pausa enquanto houver sangria HOJE (amostra
+    # real ≥5 trades). O filtro de data já impede pausar por dado de ontem.
+    if apply_pause and final["acao"] == "PAUSAR" and stats.get("n", 0) >= 5:
         try:
             from blueprints.scalper_bp import _auto
             import time as _t
@@ -192,7 +211,8 @@ def run_supervision(symbol: str = "BITN26", apply_pause: bool = False,
         except Exception as exc:
             logger.warning("supervisor: falha ao aplicar pausa: %s", exc)
 
-    if telegram and final["acao"] in ("PAUSAR", "ENDURECER", "REVISAR"):
+    # Telegram: só avisa quando a recomendação MUDA (sem spam a cada ciclo)
+    if telegram and changed and final["acao"] in ("PAUSAR", "ENDURECER", "REVISAR"):
         try:
             from services.telegram_notifier import _send as _tg
             _tg(f"🧭 <b>Supervisor Scalper</b> [{symbol}]\n"
