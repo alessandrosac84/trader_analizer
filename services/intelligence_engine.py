@@ -33,42 +33,49 @@ def _conn():
 
 def analyze_score_performance() -> list:
     """
-    Win rate e P&L medio por valor de score.
-    Retorna lista ordenada por score desc.
+    Win rate e P&L medio por FAIXA DE SCORE (|score|), a partir dos trades REAIS
+    executados (tabela auto_trades — dados vivos). Antes lia trade_opportunities,
+    que parou de ser alimentada em jun/2026 e deixava a tela congelada.
+
+    Classificacao: win = pnl_pts>0, loss = pnl_pts<0, BE (=0) e neutro (nao conta
+    como loss). win_rate = wins / (wins+losses).
     """
     try:
         with _conn() as conn:
             rows = conn.execute("""
                 SELECT
-                    score,
-                    COUNT(*)                                           AS total,
-                    SUM(CASE WHEN outcome_win = 1 THEN 1 ELSE 0 END)  AS wins,
-                    ROUND(AVG(CASE WHEN outcome_win IS NOT NULL
-                              THEN outcome_pnl_pts END), 1)            AS avg_pnl,
-                    ROUND(AVG(CASE WHEN outcome_win IS NOT NULL
-                              THEN outcome_pnl_brl END), 2)            AS avg_brl
-                FROM trade_opportunities
-                WHERE was_traded = 1
-                  AND outcome_win IS NOT NULL
+                    ABS(score)                                        AS sc,
+                    COUNT(*)                                          AS total,
+                    SUM(CASE WHEN pnl_pts > 0 THEN 1 ELSE 0 END)      AS wins,
+                    SUM(CASE WHEN pnl_pts < 0 THEN 1 ELSE 0 END)      AS losses,
+                    ROUND(AVG(pnl_pts), 1)                            AS avg_pnl,
+                    ROUND(AVG(pnl_brl), 2)                            AS avg_brl
+                FROM auto_trades
+                WHERE close_reason NOT IN ('BLOQUEADO_IA','AGUARDADO_IA','DADOS_CORROMPIDOS')
+                  AND closed_at IS NOT NULL
+                  AND pnl_pts IS NOT NULL
                   AND score IS NOT NULL
-                  AND action IN ('COMPRA', 'VENDA')
-                GROUP BY score
-                ORDER BY score DESC
+                  AND acao IN ('COMPRA', 'VENDA')
+                GROUP BY ABS(score)
+                ORDER BY sc DESC
             """).fetchall()
 
         result = []
         for r in rows:
-            total = r[1] or 0
-            wins  = r[2] or 0
-            wr    = round(wins / total * 100) if total else 0
+            total  = r[1] or 0
+            wins   = r[2] or 0
+            losses = r[3] or 0
+            dec    = wins + losses
+            wr     = round(wins / dec * 100) if dec else 0
             result.append({
                 "score":    r[0],
                 "total":    total,
                 "wins":     wins,
-                "losses":   total - wins,
+                "losses":   losses,
+                "be":       total - wins - losses,
                 "win_rate": wr,
-                "avg_pnl":  r[3],
-                "avg_brl":  r[4],
+                "avg_pnl":  r[4],
+                "avg_brl":  r[5],
             })
         return result
     except Exception as exc:

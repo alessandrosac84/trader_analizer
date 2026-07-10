@@ -49,34 +49,48 @@ def get_daily_stats() -> dict:
                     OR
                     (closed_at IS NULL AND substr(opened_at, 1, 10) = ?)
                 )
+                ORDER BY COALESCE(closed_at, opened_at)
             """, (today, today)).fetchall()
 
-        total = wins = losses = consec = max_consec_cur = 0
+        total = wins = losses = be = consec = 0
         pnl_brl_total = 0.0
         pnl_pts_total = 0.0
 
         for r in rows:
-            pnl_pts  = r[0] or 0
-            pnl_brl  = r[1] or 0.0
-            reason   = (r[2] or "").upper()
+            pnl_pts_raw = r[0]
+            pnl_brl_raw = r[1]
+            reason      = (r[2] or "").upper()
+            closed      = r[3]
             if reason in _SKIP:
                 continue
             total += 1
-            pnl_brl_total += pnl_brl
-            pnl_pts_total += pnl_pts
-            if pnl_pts > 0:
+            pnl_brl_total += (pnl_brl_raw or 0.0)
+            pnl_pts_total += (pnl_pts_raw or 0)
+            # CLASSIFICAÇÃO CORRETA (só trades FECHADOS com P&L conhecido):
+            #  - Trade ABERTO ou sem P&L (reconciliando) = NEUTRO (nunca é perda).
+            #  - BREAKEVEN (P&L ~0) NÃO é perda — RESETA a sequência de losses.
+            #  - Só perda REAL (P&L < 0) soma na sequência.
+            if not closed or pnl_brl_raw is None:
+                continue
+            if pnl_brl_raw > 0.009:            # WIN → zera a sequência
                 wins += 1
                 consec = 0
-            else:
+            elif pnl_brl_raw < -0.009:         # LOSS real → soma na sequência
                 losses += 1
                 consec += 1
-                max_consec_cur = max(max_consec_cur, consec)
+            else:                              # BREAKEVEN (0) → não é perda, zera
+                be += 1
+                consec = 0
 
         return {
             "total":              total,
             "wins":               wins,
             "losses":             losses,
-            "consecutive_losses": max_consec_cur,
+            "breakevens":         be,
+            # Sequência ATUAL de perdas (um WIN ou BREAKEVEN a zera). Antes usava o
+            # máximo do dia E contava BE/abertos como loss — o que bloqueava o dia
+            # indevidamente (ex.: 2 stops + 1 BE + 1 aberto viravam "5 losses").
+            "consecutive_losses": consec,
             "pnl_brl":            round(pnl_brl_total, 2),
             "pnl_pts":            round(pnl_pts_total, 1),
         }
