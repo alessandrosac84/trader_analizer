@@ -516,7 +516,7 @@ const mgCtx={};         // side -> {mode, side, entry, sl, tp, sym}
 // ── liga/desliga trades POR ATIVO (independente) ──
 const tradeOn={WIN:false,WDO:false};
 const _monMin={WIN:9,WDO:7};   // gate no cliente; o backend re-checa MIN_SCORE_BY_SYMBOL
-const _monLastMs={},_monInFlight={};const _MON_DEBOUNCE=15*60*1000;
+const _monLastMs={},_monInFlight={},_monBlockMs={};const _MON_DEBOUNCE=15*60*1000;const _MON_BLOCK_COOLDOWN=45*1000;
 let _monInit=false;
 function setTrBtn(side){const b=document.getElementById('tr'+side);if(!b)return;b.textContent='TRADES: '+(tradeOn[side]?'ON':'OFF');b.classList.toggle('on',tradeOn[side]);}
 function _syncGate(side){try{post('/api/autotrade/symbol-gate',{token:side,enabled:!!tradeOn[side]});}catch(e){}}
@@ -530,11 +530,14 @@ async function driveMonitorExecute(side,sym,sig){
   if(_monInFlight[sym]){_setReason(side,'enviando…');return;}
   const wait=_MON_DEBOUNCE-(Date.now()-(_monLastMs[sym]||0));
   if(wait>0){_setReason(side,'anti-reentrada ~'+Math.ceil(wait/60000)+'min');return;}
+  // cooldown após bloqueio/aguardar: evita martelar o mesmo sinal (ex.: feed parado)
+  const bwait=_MON_BLOCK_COOLDOWN-(Date.now()-(_monBlockMs[sym]||0));
+  if(bwait>0){_setReason(side,'IA segurou · reavalia ~'+Math.ceil(bwait/1000)+'s');return;}
   _monInFlight[sym]=true;_setReason(side,'⏳ enviando ordem '+sig.acao+'…');
   const r=await post('/api/autotrade/execute',{tv_symbol:sym,acao:sig.acao,score:sig.score,entrada:sig.entrada||null,stop:sig.stop||null,tp1:sig.tp1||null,volume:1,interval:monTF.v,signal:sig});
   _monInFlight[sym]=false;
-  if(r&&r.ok&&r.result){_monLastMs[sym]=Date.now();_setReason(side,'✅ ordem executada');}
-  else{_setReason(side,'✕ '+String((r&&r.error)||'bloqueado').slice(0,60));}
+  if(r&&r.ok&&r.result){_monLastMs[sym]=Date.now();_monBlockMs[sym]=0;_setReason(side,'✅ ordem executada');}
+  else{_monBlockMs[sym]=Date.now();_setReason(side,'✕ '+String((r&&r.error)||'bloqueado').slice(0,60));}
 }
 async function loadMonitor(){
   if(!_monInit){_monInit=true;loadTradesState();}

@@ -765,6 +765,13 @@ def api_autotrade_status():
     return jsonify({"ok": error is None, "positions": positions, "error": error})
 
 
+# Dedup de bloqueios da IA: evita gravar/notificar o MESMO bloqueio em loop
+# quando o feed fica congelado (ex.: app ligada antes da abertura, sinal parado).
+# Chave: símbolo → (assinatura acao:score, timestamp do último registro).
+_ia_block_dedup: dict = {}
+_IA_BLOCK_COOLDOWN = 900   # 15 min: só repete o aviso do mesmo sinal após isso
+
+
 @app.route("/api/autotrade/execute", methods=["POST"])
 def api_autotrade_execute():
     """
@@ -819,6 +826,20 @@ def api_autotrade_execute():
             })
     except Exception as _tg_exc:
         logger.warning("trade_gate check falhou (não bloqueia): %s", _tg_exc)
+
+    # ── TRAVA DE HORÁRIO DE PREGÃO ────────────────────────────────────────────
+    # WIN/WDO (índice/dólar) só operam 09:00–18:30 BRT, seg–sex. Fora disso o
+    # feed pode ficar congelado no último sinal; não faz sentido processar. Retorna
+    # cedo, ANTES da IA/notificação — evita ordens e spam fora de hora.
+    if any(k in _sym_key for k in ("WIN", "WDO", "IND", "DOL")):
+        from datetime import datetime as _dtn, timezone as _tzn, timedelta as _tdn
+        _now_brt = _dtn.now(_tzn(_tdn(hours=-3)))
+        _mins = _now_brt.hour * 60 + _now_brt.minute
+        if _now_brt.weekday() >= 5 or _mins < 9 * 60 or _mins >= 18 * 60 + 30:
+            return jsonify({
+                "ok": False, "result": None,
+                "error": f"⏰ Fora do horário de pregão (09:00–18:30, seg–sex) — {_sym_key} não opera agora.",
+            })
 
     # Cooldown no servidor — evita re-entrada mesmo se o JS resetar o debounce
     if _autotrade_in_cooldown(_sym_key):
@@ -901,38 +922,46 @@ def api_autotrade_execute():
             _veredito_ia = ai_result.get("veredito", "")
             if _veredito_ia in ("BLOQUEAR", "AGUARDAR"):
                 _close_reason = "BLOQUEADO_IA" if _veredito_ia == "BLOQUEAR" else "AGUARDADO_IA"
-                # Registra no histórico para rastreabilidade
-                try:
-                    from services.trade_log import save_auto_trade, close_auto_trade
-                    blocked_id = save_auto_trade(
-                        tv_symbol    = tv_symbol,
-                        interval     = interval,
-                        acao         = acao,
-                        entry_price  = entrada,
-                        volume       = volume,
-                        sl_initial   = sl,
-                        tp1_initial  = tp1,
-                        score        = score,
-                        ai_validated = True,
-                        ai_confidence= ai_result.get("confianca"),
-                        ai_veredito  = _veredito_ia,
-                        ai_motivo    = ai_result.get("motivo", "")[:200],
-                    )
-                    close_auto_trade(
-                        trade_id     = blocked_id,
-                        exit_price   = entrada or 0,
-                        close_reason = _close_reason,
-                        pnl_pts      = 0,
-                        pnl_brl      = 0.0,
-                    )
-                except Exception as _e:
-                    logger.warning("Falha ao registrar bloqueio IA: %s", _e)
-                # Notifica Telegram
-                try:
-                    from services.telegram_notifier import notify_ia_blocked
-                    notify_ia_blocked(tv_symbol, acao, score, ai_result.get("motivo", ""))
-                except Exception:
-                    pass
+                # Dedup: só grava/notifica se o bloqueio MUDOU (nova assinatura) ou
+                # se passou o cooldown. Evita loop de gravação/spam com feed parado.
+                import time as _tt
+                _sig = f"{_veredito_ia}:{acao}:{score}"
+                _prev = _ia_block_dedup.get(_sym_key)
+                _fresh = not (_prev and _prev[0] == _sig and (_tt.time() - _prev[1]) < _IA_BLOCK_COOLDOWN)
+                if _fresh:
+                    _ia_block_dedup[_sym_key] = (_sig, _tt.time())
+                    # Registra no histórico para rastreabilidade
+                    try:
+                        from services.trade_log import save_auto_trade, close_auto_trade
+                        blocked_id = save_auto_trade(
+                            tv_symbol    = tv_symbol,
+                            interval     = interval,
+                            acao         = acao,
+                            entry_price  = entrada,
+                            volume       = volume,
+                            sl_initial   = sl,
+                            tp1_initial  = tp1,
+                            score        = score,
+                            ai_validated = True,
+                            ai_confidence= ai_result.get("confianca"),
+                            ai_veredito  = _veredito_ia,
+                            ai_motivo    = ai_result.get("motivo", "")[:200],
+                        )
+                        close_auto_trade(
+                            trade_id     = blocked_id,
+                            exit_price   = entrada or 0,
+                            close_reason = _close_reason,
+                            pnl_pts      = 0,
+                            pnl_brl      = 0.0,
+                        )
+                    except Exception as _e:
+                        logger.warning("Falha ao registrar bloqueio IA: %s", _e)
+                    # Notifica Telegram (só no bloqueio novo)
+                    try:
+                        from services.telegram_notifier import notify_ia_blocked
+                        notify_ia_blocked(tv_symbol, acao, score, ai_result.get("motivo", ""))
+                    except Exception:
+                        pass
                 _msg_prefix = "IA bloqueou" if _veredito_ia == "BLOQUEAR" else "IA pediu aguardar"
                 return jsonify({
                     "ok":    False,
