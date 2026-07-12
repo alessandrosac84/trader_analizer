@@ -81,6 +81,15 @@ app.register_blueprint(risk_bp)
 from blueprints.newui_bp import newui_bp
 app.register_blueprint(newui_bp)
 
+# ── MONITOR CRYPTO (módulo novo, MT5 24h) — aditivo, isolado ────────────────
+# Não altera nenhum módulo existente. Endpoints /api/crypto/* próprios.
+try:
+    from blueprints.crypto_bp import crypto_bp
+    app.register_blueprint(crypto_bp)
+except Exception as _cbp_err:
+    import logging as _lg
+    _lg.getLogger(__name__).warning("crypto_bp não registrado: %s", _cbp_err)
+
 # ── Inicialização única no primeiro request ────────────────────────────────
 _app_initialized = False
 

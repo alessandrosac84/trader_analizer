@@ -178,6 +178,7 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:rgba(240,185,53,.09)}
     <div class="sysline" id="sysline">CONECTANDO...</div>
     <div class="spacer"></div>
     <div class="pill"><span class="dot" id="dotMkt"></span> <span id="mktStatus">B3</span></div>
+    <button class="pill" id="sndBtn" onclick="sndToggle()" title="Ligar/desligar sons de trade" style="cursor:pointer;background:none;border:1px solid var(--line);color:var(--cyan);font-size:14px">🔊</button>
     <div class="pill"><span class="hex">▲</span> P&amp;L HOJE <b id="pnlHoje" class="mut">—</b></div>
     <div class="pill mono" id="clock">--:--:--</div>
   </div>
@@ -185,6 +186,8 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:rgba(240,185,53,.09)}
     <div class="nav active" data-s="dash" title="Dashboard"><i>◉</i> <span class="nlabel">Dashboard</span></div>
     <div class="nav" data-s="report" title="Relatório"><i>≣</i> <span class="nlabel">Relatório</span></div>
     <div class="nav" data-s="monitor" title="Monitor MT5"><i>▚</i> <span class="nlabel">Monitor MT5</span></div>
+    <div class="nav" data-s="crypto" title="Monitor Crypto"><i>₿</i> <span class="nlabel">Monitor Crypto</span></div>
+    <div class="nav" data-s="cryptoreport" title="Relatório Crypto"><i>◱</i> <span class="nlabel">Relatório Crypto</span></div>
     <div class="nav" data-s="scalp" title="Scalper"><i>⚡</i> <span class="nlabel">Scalper</span></div>
     <div class="nav" data-s="market" title="Market Center"><i>▤</i> <span class="nlabel">Market Center</span></div>
     <div class="nav" data-s="intel" title="Inteligência"><i>❖</i> <span class="nlabel">Inteligência</span></div>
@@ -293,6 +296,74 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:rgba(240,185,53,.09)}
       <table><thead><tr><th>DATA/HORA</th><th>ATIVO</th><th>AÇÃO</th><th>SCORE</th><th>ENTRADA</th><th>STOP</th><th>TP1</th><th>SAÍDA</th><th>MOTIVO</th><th>P&amp;L</th><th>IA</th></tr></thead>
         <tbody id="monHist"><tr><td colspan="11" class="mut">carregando…</td></tr></tbody></table>
     </div>
+  </section>
+
+  <!-- MONITOR CRYPTO (módulo novo, MT5 24h) -->
+  <section class="screen" id="crypto">
+    <div class="page-h"><h1>₿ MONITOR <span>CRYPTO</span></h1><div class="sub">// MT5 24h · /api/crypto/* · troque o .env p/ a conta crypto</div></div>
+    <div class="panel" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+      <span class="tag">ATIVO</span><div class="seg" id="cySyms"><span class="mut mini">carregando…</span></div>
+      <span class="tag">TF</span><div class="seg" id="cyTf">
+        <button class="segbtn" data-tf="1" onclick="cySetTF('1')">1m</button>
+        <button class="segbtn" data-tf="5" onclick="cySetTF('5')">5m</button>
+        <button class="segbtn on" data-tf="15" onclick="cySetTF('15')">15m</button>
+        <button class="segbtn" data-tf="60" onclick="cySetTF('60')">1h</button>
+        <button class="segbtn" data-tf="240" onclick="cySetTF('240')">4h</button>
+      </div>
+      <span class="tag">MÃO (lote)</span>
+      <input id="cyLot" type="number" step="0.01" min="0.01" value="0.10" title="Tamanho da mão / lote por ordem"
+        style="width:76px;background:rgba(8,14,22,.7);border:1px solid var(--line);color:var(--cyan);border-radius:6px;padding:5px 7px;font-family:'Share Tech Mono';font-size:12px" onchange="cySetLot()">
+      <span class="mini mut" id="cyPip" style="white-space:nowrap"></span>
+      <div class="spacer" style="flex:1"></div>
+      <span class="chip" id="cyCcy" title="Moeda da conta MT5">—</span>
+      <button class="btn sm" id="cyTrBtn" onclick="cyToggleTrades()">TRADES: OFF</button>
+      <span class="chip" id="cyConn">—</span>
+    </div>
+    <div class="grid g2">
+      <div class="panel"><h3 id="cyTitle">—</h3><div class="chartwrap" id="cyChartBox" style="height:340px;position:relative"><div id="cwCrypto" style="position:absolute;inset:0"></div></div></div>
+      <div class="panel"><h3>Análise de oportunidade <span class="ln"></span></h3>
+        <div id="cySignal"><div class="mut mini">carregando…</div></div>
+        <div class="mini" id="cyReason" style="text-align:center;min-height:14px;color:var(--amber);margin-top:8px"></div>
+        <div class="panel" id="cyMM" style="margin-top:10px;padding:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <b class="mini" style="letter-spacing:1px">MACRO / MICRO <span class="mut">· momentum multi-TF (beta)</span></b>
+            <span class="chip mini" id="cyMMkind">—</span>
+          </div>
+          <div class="mrow"><span class="ml">MACRO (H1)</span><span class="mv"><b id="cyMMmaD" class="mut">—</b> · <span id="cyMMmaP" class="mut">—</span></span></div>
+          <div style="height:6px;background:var(--line);border-radius:4px;overflow:hidden;margin:2px 0 8px"><div id="cyMMmaBar" style="height:100%;width:0%;background:var(--cyan);transition:width .6s ease,background .6s ease"></div></div>
+          <div class="mrow"><span class="ml">MICRO (M5 · ao vivo)</span><span class="mv"><b id="cyMMmiD" class="mut">—</b> · <span id="cyMMmiP" class="mut">—</span></span></div>
+          <div style="height:6px;background:var(--line);border-radius:4px;overflow:hidden;margin:2px 0 6px"><div id="cyMMmiBar" style="height:100%;width:0%;background:var(--cyan);transition:width .35s ease,background .35s ease"></div></div>
+          <div class="mini" id="cyMMread" style="color:var(--cyan)">—</div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="btn buy sm" style="flex:1" onclick="cyManual('COMPRA')">▲ COMPRAR</button>
+          <button class="btn sell sm" style="flex:1" onclick="cyManual('VENDA')">▼ VENDER</button>
+          <button class="btn sm" onclick="cyClose()">✕ Fechar</button>
+        </div>
+      </div>
+    </div>
+    <div class="statbar" style="margin-top:16px">
+      <div><s>TRADES</s><b class="cy" id="cyT">—</b></div><div><s>WINS</s><b class="up" id="cyW">—</b></div>
+      <div><s>LOSSES</s><b class="down" id="cyL">—</b></div><div><s>BE</s><b class="gd" id="cyBE">—</b></div>
+      <div><s>RESULTADO</s><b id="cyRes">—</b></div>
+    </div>
+    <div class="panel" style="margin-top:16px"><h3>Trades do Monitor Crypto <span class="ln"></span></h3>
+      <table><thead><tr><th>HORA</th><th>ATIVO</th><th>DIR</th><th>ENTRADA</th><th>SAÍDA</th><th>PROFIT</th><th>RESULTADO</th></tr></thead>
+        <tbody id="cyHist"><tr><td colspan="7" class="mut">sem trades ainda</td></tr></tbody></table>
+    </div>
+  </section>
+
+  <!-- RELATÓRIO CRYPTO (independente da B3) -->
+  <section class="screen" id="cryptoreport">
+    <div class="page-h"><h1>◱ RELATÓRIO <span>CRYPTO</span></h1><div class="sub">// desempenho do Monitor Crypto por período · /api/crypto/report</div></div>
+    <div class="panel" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px">
+      <span class="tag">PERÍODO</span>
+      <div class="seg"><button class="segbtn on" id="crDay" onclick="setCryptoReport('day')">Dia</button><button class="segbtn" id="crWeek" onclick="setCryptoReport('week')">Semana</button><button class="segbtn" id="crMonth" onclick="setCryptoReport('month')">Mês</button></div>
+      <span class="tag" id="crRange"></span>
+      <div class="spacer" style="flex:1"></div>
+      <button class="btn sm" onclick="loadCryptoReport()">↻ Atualizar</button>
+    </div>
+    <div id="cryptoReportBox"><div class="mut">carregando…</div></div>
   </section>
 
   <!-- SCALPER -->
@@ -407,6 +478,20 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:rgba(240,185,53,.09)}
 // ===== helpers =====
 async function api(path){try{const r=await fetch(path,{cache:'no-store'});if(!r.ok)return null;return await r.json();}catch(e){return null;}}
 async function post(path,body){try{const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),cache:'no-store'});if(!r.ok)return null;return await r.json();}catch(e){return null;}}
+
+// ===== SONS DE TRADE (Web Audio — sintetizado, sem arquivos) =====
+const _snd={ctx:null,on:true};
+try{_snd.on=localStorage.getItem('snd_on')!=='0';}catch(e){}
+function _actx(){if(!_snd.ctx){try{_snd.ctx=new(window.AudioContext||window.webkitAudioContext)();}catch(e){}}if(_snd.ctx&&_snd.ctx.state==='suspended'){try{_snd.ctx.resume();}catch(e){}}return _snd.ctx;}
+function _tone(freq,start,dur,type,gain){const c=_snd.ctx;if(!c)return;const o=c.createOscillator(),g=c.createGain();o.type=type||'sine';const t=c.currentTime+start;o.frequency.setValueAtTime(freq,t);o.connect(g);g.connect(c.destination);g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(gain||0.18,t+0.012);g.gain.exponentialRampToValueAtTime(0.0001,t+dur);o.start(t);o.stop(t+dur+0.03);}
+function playEntry(){if(!_snd.on||!_actx())return;_tone(587,0,0.09,'triangle',0.16);_tone(880,0.08,0.13,'triangle',0.18);}   // blip de entrada
+function playGain(){if(!_snd.on||!_actx())return;[1047,1319,1568,2093].forEach((f,i)=>_tone(f,i*0.055,0.16,'square',0.11));_tone(2637,0.22,0.34,'sine',0.13);_tone(3136,0.27,0.30,'sine',0.09);}   // "cha-ching" caixa registradora
+function playLoss(){if(!_snd.on||!_actx())return;_tone(320,0,0.20,'sawtooth',0.14);_tone(226,0.18,0.34,'sawtooth',0.15);}   // grave descendente
+function playExit(profit){const p=+profit||0;if(p>0.0001)playGain();else if(p<-0.0001)playLoss();else if(_snd.on&&_actx())_tone(520,0,0.12,'triangle',0.12);}
+function sndToggle(){_snd.on=!_snd.on;try{localStorage.setItem('snd_on',_snd.on?'1':'0');}catch(e){}const b=document.getElementById('sndBtn');if(b)b.textContent=_snd.on?'🔊':'🔇';if(_snd.on)playEntry();}
+// desbloqueia o áudio no primeiro gesto (política de autoplay dos navegadores)
+['click','keydown','touchstart'].forEach(ev=>window.addEventListener(ev,_actx,{once:true}));
+window.addEventListener('DOMContentLoaded',()=>{const b=document.getElementById('sndBtn');if(b)b.textContent=_snd.on?'🔊':'🔇';});
 // ===== 3 contratos (por ativo, independente) =====
 const p3state={WIN:false,WDO:false};
 function set3Cbtn(side){const b=document.getElementById('p3'+side);if(!b)return;const on=p3state[side];b.textContent='3C: '+(on?'ON':'OFF');b.classList.toggle('on',on);}
@@ -518,6 +603,7 @@ const tradeOn={WIN:false,WDO:false};
 const _monMin={WIN:9,WDO:7};   // gate no cliente; o backend re-checa MIN_SCORE_BY_SYMBOL
 const _monLastMs={},_monInFlight={},_monBlockMs={};const _MON_DEBOUNCE=15*60*1000;const _MON_BLOCK_COOLDOWN=45*1000;
 let _monInit=false;
+let _monLastClosedId=null;   // som de saída: maior id de trade fechado já visto
 function setTrBtn(side){const b=document.getElementById('tr'+side);if(!b)return;b.textContent='TRADES: '+(tradeOn[side]?'ON':'OFF');b.classList.toggle('on',tradeOn[side]);}
 function _syncGate(side){try{post('/api/autotrade/symbol-gate',{token:side,enabled:!!tradeOn[side]});}catch(e){}}
 function loadTradesState(){try{const o=JSON.parse(localStorage.getItem('mon_trades')||'{}');tradeOn.WIN=!!o.WIN;tradeOn.WDO=!!o.WDO;}catch(e){}setTrBtn('WIN');setTrBtn('WDO');_syncGate('WIN');_syncGate('WDO');}
@@ -536,7 +622,7 @@ async function driveMonitorExecute(side,sym,sig){
   _monInFlight[sym]=true;_setReason(side,'⏳ enviando ordem '+sig.acao+'…');
   const r=await post('/api/autotrade/execute',{tv_symbol:sym,acao:sig.acao,score:sig.score,entrada:sig.entrada||null,stop:sig.stop||null,tp1:sig.tp1||null,volume:1,interval:monTF.v,signal:sig});
   _monInFlight[sym]=false;
-  if(r&&r.ok&&r.result){_monLastMs[sym]=Date.now();_monBlockMs[sym]=0;_setReason(side,'✅ ordem executada');}
+  if(r&&r.ok&&r.result){_monLastMs[sym]=Date.now();_monBlockMs[sym]=0;_setReason(side,'✅ ordem executada');playEntry();}
   else{_monBlockMs[sym]=Date.now();_setReason(side,'✕ '+String((r&&r.error)||'bloqueado').slice(0,60));}
 }
 async function loadMonitor(){
@@ -556,6 +642,17 @@ async function loadMonitor(){
       :exe+' executado(s) de '+ger+' sinal(is) · '+bloq+' bloqueado(s) pela IA.';
     setTxt('fNote',note);
     renderHist('monHist',at.items,true);
+    // som de saída: dispara quando um trade fechado NOVO aparece (init silencioso)
+    try{
+      const closed=(at.items||[]).filter(t=>t&&t.id!=null&&t.exit_price!=null);
+      const maxId=closed.reduce((m,t)=>Math.max(m,+t.id),0);
+      if(_monLastClosedId===null){_monLastClosedId=maxId;}
+      else if(maxId>_monLastClosedId){
+        const novos=closed.filter(t=>+t.id>_monLastClosedId).sort((a,b)=>a.id-b.id);
+        novos.forEach(t=>playExit(t.pnl_brl));
+        _monLastClosedId=maxId;
+      }
+    }catch(e){}
   }
   // panes carregam EM PARALELO (WIN lento não trava WDO e vice-versa)
   const panes=[...document.querySelectorAll('#monPanes .panel')].filter(p=>p.style.display!=='none');
@@ -1150,6 +1247,264 @@ async function loadMarket(){
 async function loadProfit(){const d=await api('/api/profit/status');const b=document.getElementById('profitBox');
   b.innerHTML=d?panelHTML('Status da ponte Profit',renderKV(d.data||d,3)):'<div class="mut">endpoint indisponível.</div>';}
 
+// ===== MONITOR CRYPTO (MT5 24h) — módulo novo, isolado =====
+let _cy={sym:'',tf:'15',inited:false};const _cyOn={};
+async function loadCrypto(){ if(!_cy.inited){_cy.inited=true;await cyInit();} await cyLoad(); cyLoadMM(); }
+async function cyInit(){
+  const d=await api('/api/crypto/symbols');const syms=(d&&d.symbols&&d.symbols.length)?d.symbols:['BTCUSD'];
+  _cy.syms=syms;if(!_cy.sym)_cy.sym=syms[0];
+  const box=document.getElementById('cySyms');
+  if(box)box.innerHTML=syms.map(s=>`<button class="segbtn ${s===_cy.sym?'on':''}" data-sym="${s}" onclick="cyPick('${s}')">${s}</button>`).join('');
+  const st=await api('/api/crypto/auto-state');if(st&&st.state)Object.assign(_cyOn,st.state);
+  const ac=await api('/api/crypto/account');_cy.ccy=(ac&&ac.account&&ac.account.currency)||'USD';_cy.usdbrl=(ac&&ac.usdbrl)||5.2;
+  const cc=document.getElementById('cyCcy');if(cc)cc.textContent=_cy.ccy+' · R$ '+(+_cy.usdbrl).toFixed(2)+'/US$';
+  const lt=await api('/api/crypto/lot');if(lt&&lt.lots)_cy.lots=lt.lots;
+  cySetTrBtn();cyApplyLot();await cyLoadSpec();
+}
+async function cyLoadSpec(){
+  const d=await api('/api/crypto/symbol-info?symbol='+encodeURIComponent(_cy.sym));
+  _cy.spec=_cy.spec||{};if(d&&d.spec)_cy.spec[_cy.sym]=d.spec;cyUpdatePip();
+}
+function _cyCur(){const m={USD:'$',EUR:'€',BRL:'R$',GBP:'£',JPY:'¥'};return m[_cy.ccy]||(_cy.ccy||'$');}
+function _cyMoney(usd){const u=+usd||0,brl=u*(_cy.usdbrl||5.2);return _cyCur()+' '+sign(u,2)+' · R$ '+sign(brl,2);}
+function cyUpdatePip(){
+  const el=document.getElementById('cyPip');if(!el)return;
+  const sp=(_cy.spec||{})[_cy.sym];const inp=document.getElementById('cyLot');const lot=parseFloat(inp&&inp.value)||0.1;
+  if(!sp||!sp.value_per_point){el.textContent='';return;}
+  const vpp=sp.value_per_point*lot,vppBrl=vpp*(_cy.usdbrl||5.2);
+  el.textContent='≈ '+_cyCur()+' '+vpp.toFixed(2)+'/ponto (R$ '+vppBrl.toFixed(2)+')';
+}
+function cyApplyLot(){const inp=document.getElementById('cyLot');if(inp&&_cy.lots&&_cy.lots[_cy.sym]!=null)inp.value=_cy.lots[_cy.sym];}
+function cySetLot(){const inp=document.getElementById('cyLot');if(!inp)return;const v=parseFloat(inp.value)||0.1;
+  _cy.lots=_cy.lots||{};_cy.lots[_cy.sym]=v;try{post('/api/crypto/lot',{symbol:_cy.sym,volume:v});}catch(e){}cyUpdatePip();setTxt('cyReason','mão de '+_cy.sym+' = '+v+' lote(s)');}
+function cyPick(s){_cy.sym=s;document.querySelectorAll('#cySyms .segbtn').forEach(b=>b.classList.toggle('on',b.dataset.sym===s));const c=charts['cwCrypto'];if(c)c.fitted=false;cySetTrBtn();cyApplyLot();cyLoadSpec();cyLoad();}
+function cySetTF(tf){_cy.tf=tf;document.querySelectorAll('#cyTf .segbtn').forEach(b=>b.classList.toggle('on',b.dataset.tf===tf));const c=charts['cwCrypto'];if(c)c.fitted=false;cyLoad();}
+function cySetTrBtn(){const on=!!_cyOn[_cy.sym];const b=document.getElementById('cyTrBtn');if(b){b.textContent='TRADES: '+(on?'ON':'OFF');b.classList.toggle('on',on);}}
+function cyToggleTrades(){_cyOn[_cy.sym]=!_cyOn[_cy.sym];cySetTrBtn();try{post('/api/crypto/auto-state',{symbol:_cy.sym,enabled:!!_cyOn[_cy.sym]});}catch(e){}}
+async function cyLoad(){
+  const sym=_cy.sym;if(!sym)return;setTxt('cyTitle',sym+' · '+_cy.tf+'m');
+  const d=await api('/api/crypto/mt5?symbol='+encodeURIComponent(sym)+'&interval='+_cy.tf);
+  const conn=document.getElementById('cyConn');
+  if(!d||!d.ok){
+    _cy.mtFail=(_cy.mtFail||0)+1;
+    // só alarma após 3 falhas SEGUIDAS — evita "sem resposta" por um tropeço transitório
+    if(_cy.mtFail>=3){if(conn){conn.className='chip r';conn.textContent='SEM DADOS';}setTxt('cyReason','⚠️ '+String((d&&d.error)||'sem resposta').slice(0,90));}
+  }
+  else{
+    _cy.mtFail=0;
+    if(conn){conn.className='chip g';conn.textContent='CONECTADO';}
+    cyRenderChart('cwCrypto',d.candles);
+    const pos=await api('/api/crypto/position?symbol='+encodeURIComponent(sym));const p=pos&&pos.position;
+    if(p&&p.type){
+      _cy.lastTicket=p.ticket;_cy.lastProfit=p.profit;_cy.noPos=0;
+      // MODO MANAGER: aplica breakeven/trailing e mostra a gestão da posição
+      const mg=await api('/api/crypto/manage?symbol='+encodeURIComponent(sym)+'&interval='+_cy.tf);
+      cyRenderManage(p,mg);
+      drawLines('cwCrypto',p.type,p.price_open,(mg&&mg.applied)||p.sl,p.tp);
+      if(_cyOn[sym]&&mg&&mg.close){await cyClose();}
+    } else if(_cy.lastTicket){
+      // Posição NÃO veio nesta leitura. Confirma o fechamento no servidor.
+      const cl=await registerCryptoClose(sym,_cy.lastProfit);
+      _cy.noPos=(_cy.noPos||0)+1;
+      // Sai do modo GESTÃO se: (a) fechamento REAL confirmado, OU (b) 3 leituras
+      // seguidas sem posição (~18s). O reconcile do servidor registra o fecho de
+      // qualquer forma — então não ficamos presos em gestão com a posição já fechada.
+      if((cl&&cl.closed)||_cy.noPos>=3){
+        _cy.lastTicket=null;_cy.pos=null;_cy.noPos=0;
+        drawLines('cwCrypto');   // LIMPA Entrada/Stop/TP1 do gráfico
+        cyRenderSignal(d.signal,d.last_ai);
+        if(d.signal&&d.signal.acao!=='NEUTRO')drawLines('cwCrypto',d.signal.acao,d.signal.entrada,d.signal.stop,d.signal.tp1);
+      }
+      // senão (transitório, <3 leituras): mantém o modo MANAGER
+    } else {
+      // sem posição e sem trade em aberto → painel de sinal + auto-check
+      _cy.pos=null;
+      cyRenderSignal(d.signal,d.last_ai);
+      if(d.signal&&d.signal.acao!=='NEUTRO')drawLines('cwCrypto',d.signal.acao,d.signal.entrada,d.signal.stop,d.signal.tp1);
+      else drawLines('cwCrypto');   // sem sinal → LIMPA as linhas
+      if(_cyOn[sym]){const r=await post('/api/crypto/auto-check',{symbol:sym,interval:_cy.tf});
+        if(r){if(r.action==='EXECUTED')playEntry();setTxt('cyReason',r.action==='EXECUTED'?'✅ ordem executada ('+sym+')':(r.action==='BLOCKED'?'🚫 '+(r.reason||''):(r.reason||'')));}}
+    }
+  }
+  const s=await api('/api/crypto/session');const ss=(s&&s.session)?s.session:s;
+  if(ss){setTxt('cyT',ss.trades??'—');setTxt('cyW',ss.wins??'—');setTxt('cyL',ss.losses??'—');setTxt('cyBE',ss.breakevens??'—');
+    const el=document.getElementById('cyRes');if(el){el.textContent=_cyMoney(ss.pnl||0);el.className=cls(ss.pnl||0);}}
+  cyHist();
+}
+function cyRenderChart(cid,candles){
+  const c=ensureChart(cid);
+  if(!c){if(active==='crypto')setTimeout(()=>cyRenderChart(cid,candles),500);return;}
+  c.candle.setData(candles||[]);if(candles&&candles.length)c.last=Object.assign({},candles[candles.length-1]);
+  if(!c.fitted&&candles&&candles.length){try{c.chart.timeScale().fitContent();}catch(e){}c.fitted=true;}
+  cyStartTicks(cid);
+}
+// tick ao vivo: atualiza o último candle ~2x/s com o preço atual (o mais real possível).
+// Quando o período vira, ROLA um candle novo na hora (alinhado à hora do servidor MT5).
+function cyStartTicks(cid){
+  if(tickTimers[cid])return;
+  let _busy=false;
+  tickTimers[cid]=setInterval(async()=>{
+    if(active!=='crypto'||_busy)return;
+    const c=charts[cid];if(!c||!c.last)return;
+    _busy=true;
+    try{
+      const d=await api('/api/crypto/tick?symbol='+encodeURIComponent(_cy.sym));
+      if(!d||!d.ok||!d.price)return;
+      const price=d.price;
+      const tfSec=(parseInt(_cy.tf,10)||15)*60;
+      // hora do servidor (mesma base do candle.time) → alinha o novo candle ao grid
+      const st=+d.time||0;
+      const bucket=st?Math.floor(st/tfSec)*tfSec:0;
+      if(bucket && bucket>c.last.time){
+        const nc={time:bucket,open:price,high:price,low:price,close:price};   // candle NOVO
+        c.last=nc;try{c.candle.update(nc);}catch(e){}
+      }else{
+        const u={time:c.last.time,open:c.last.open,high:Math.max(c.last.high,price),low:Math.min(c.last.low,price),close:price};
+        c.last=u;try{c.candle.update(u);}catch(e){}
+      }
+      // P&L e preço "Atual" da posição aberta AO VIVO (mesma frequência do candle)
+      if(_cy.pos&&_cy.pos.vpp){
+        const P=_cy.pos;
+        const delta=(P.type==='COMPRA')?(price-P.entry):(P.entry-price);
+        const usd=delta*P.vpp*(P.volume||0);
+        const pe=document.getElementById('cyMgPnl');
+        if(pe){pe.textContent=_cyMoney(usd);pe.className='mv '+cls(usd);}
+        const ce=document.getElementById('cyMgCur');
+        if(ce)ce.textContent=_cyFmt(price);
+      }
+      // MICRO ao vivo: momentum de curtíssimo prazo do próprio preço (buffer ~45s)
+      cyMicroLive(price);
+      const conn=document.getElementById('cyConn');if(conn&&conn.textContent!=='CONECTADO'){conn.className='chip g';conn.textContent='CONECTADO';}
+    }catch(e){}finally{_busy=false;}
+  },1500);
+}
+// pulso vivo do MICRO: usa a variação recente do preço (não custa MT5 extra — reusa o tick)
+function cyMicroLive(price){
+  const now=Date.now();
+  _cy.pxBuf=(_cy.pxBuf||[]).filter(x=>now-x.t<45000); _cy.pxBuf.push({t:now,price});
+  if(_cy.pxBuf.length<4)return;
+  const p0=_cy.pxBuf[0].price;
+  const chg=p0?((price-p0)/p0*100):0;                 // % nos últimos ~45s
+  const dir=chg>0.015?'ALTA':(chg<-0.015?'BAIXA':'NEUTRO');
+  const pct=Math.min(100,Math.round(Math.abs(chg)*350));
+  const ib=document.getElementById('cyMMmiBar');if(ib){ib.style.width=pct+'%';ib.style.background=_mmCol(dir);}
+  const miD=document.getElementById('cyMMmiD');if(miD){miD.textContent=dir;miD.className=_mmCls(dir);}
+  setTxt('cyMMmiP',pct+'%');
+}
+function _cyFmt(v){return v==null?'—':fmt(v,Math.abs(v)<100?2:(Math.abs(v)<5000?1:0));}
+// ===== MONITOR MACRO/MICRO =====
+let _cyMMlast='';
+function _mmCol(x){return x==='ALTA'?'#34e0a1':x==='BAIXA'?'#ff5b6e':'#7a8a99';}
+function _mmCls(x){return x==='ALTA'?'up':x==='BAIXA'?'down':'mut';}
+async function cyLoadMM(){
+  if(active!=='crypto')return;
+  const d=await api('/api/crypto/macromicro?symbol='+encodeURIComponent(_cy.sym));
+  if(!d||!d.ok)return;
+  const ma=d.macro||{};
+  // MACRO vem do cálculo estrutural (H1). MICRO fica por conta do pulso ao vivo (tick).
+  const maD=document.getElementById('cyMMmaD');if(maD){maD.textContent=ma.dir||'—';maD.className=_mmCls(ma.dir);}
+  setTxt('cyMMmaP',(ma.pct??0)+'%');
+  const mb=document.getElementById('cyMMmaBar');if(mb){mb.style.width=(ma.pct||0)+'%';mb.style.background=_mmCol(ma.dir);}
+  const kc=document.getElementById('cyMMkind');if(kc){kc.textContent=d.kind||'—';kc.className='chip mini '+(d.kind==='CONTINUACAO'?'g':(d.kind==='PULLBACK'?'gd':(d.kind==='REVERSAO'?'r':'')));}
+  setTxt('cyMMread',d.reading||'—');
+  // alerta sonoro só na TRANSIÇÃO para PULLBACK/REVERSÃO (não repete a cada poll)
+  const key=(d.kind||'')+'|'+(d.macro_dir||'')+'|'+(d.micro_dir||'');
+  if(key!==_cyMMlast){if(d.kind==='PULLBACK'||d.kind==='REVERSAO')playAlert();_cyMMlast=key;}
+}
+function playAlert(){if(!_snd.on||!_actx())return;_tone(880,0,0.10,'sine',0.14);_tone(660,0.12,0.14,'sine',0.14);_tone(990,0.28,0.16,'sine',0.12);}
+function cyRenderSignal(sig,ai){
+  const b=document.getElementById('cySignal');if(!b)return;sig=sig||{};
+  const a=sig.acao||'NEUTRO',ac=a==='COMPRA'?'up':a==='VENDA'?'down':'mut';
+  const row=(l,v,c)=>`<div class="mrow"><span class="ml">${l}</span><span class="mv ${c||''}">${v}</span></div>`;
+  let h=row('Sinal',`${a} · score ${(sig.score>=0?'+':'')}${sig.score??0} · ${sig.forca||'—'}`,ac);
+  h+=row('Entrada',_cyFmt(sig.entrada));
+  h+=row('Stop / TP1',_cyFmt(sig.stop)+' / '+_cyFmt(sig.tp1));
+  h+=row('RSI / ADX / 1h',`${sig.rsi??'—'} / ${sig.adx??'—'} / ${sig.htf_trend||'—'}`);
+  if(sig.confluences&&sig.confluences.length)h+='<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">'+sig.confluences.map(x=>`<span class="chip mini">${x}</span>`).join('')+'</div>';
+  if(ai&&ai.veredito){const vc=ai.veredito==='EXECUTAR'?'up':ai.veredito==='BLOQUEAR'?'down':'gd';
+    h+='<div class="panel" style="margin-top:10px"><b class="'+vc+'">🤖 IA: '+ai.veredito+(ai.confianca!=null?' ('+ai.confianca+'%)':'')+'</b><div class="mini mut" style="margin-top:4px">'+(ai.motivo||'')+'</div></div>';}
+  b.innerHTML=h;
+}
+function cyRenderManage(p,mg){
+  const b=document.getElementById('cySignal');if(!b)return;mg=mg||{};
+  const dir=p.type,dc=dir==='COMPRA'?'up':'down';
+  const row=(l,v,c)=>`<div class="mrow"><span class="ml">${l}</span><span class="mv ${c||''}">${v}</span></div>`;
+  const rec=mg.recommendation||'MANTER';
+  const rc=rec==='FECHAR'?'down':(rec==='BREAKEVEN'||rec==='TRAILING')?'up':rec==='REVISAR'?'gd':'cy';
+  let h='<div class="panel" style="margin-bottom:8px"><b class="'+dc+'">● GESTÃO · POSIÇÃO '+dir+'</b></div>';
+  h+=`<div class="mrow"><span class="ml">Entrada / Atual</span><span class="mv">${_cyFmt(p.price_open)} / <b id="cyMgCur">${_cyFmt(p.price_current)}</b></span></div>`;
+  h+=row('Stop / TP1',_cyFmt(mg.applied||p.sl)+' / '+_cyFmt(p.tp));
+  h+=`<div class="mrow"><span class="ml">P&L</span><span class="mv ${cls(p.profit)}" id="cyMgPnl">${_cyMoney(p.profit)}</span></div>`;
+  h+=row('Recomendação',rec,rc);
+  h+='<div class="panel" style="margin-top:8px"><div class="mini">'+(mg.reason||'')+'</div>'+(mg.applied?'<div class="mini up" style="margin-top:4px">stop ajustado → '+_cyFmt(mg.applied)+'</div>':'')+'</div>';
+  b.innerHTML=h;
+  // guarda o contexto da posição p/ atualizar P&L/preço AO VIVO no tick (valor por ponto)
+  const sp=(_cy.spec||{})[_cy.sym]||{};
+  _cy.pos={entry:+p.price_open,type:dir,volume:+p.volume||0,vpp:+sp.value_per_point||0,digits:+sp.digits||2};
+}
+async function cyManual(acao){
+  const sym=_cy.sym;const inp=document.getElementById('cyLot');const vol=parseFloat(inp&&inp.value)||0.1;
+  const d=await api('/api/crypto/mt5?symbol='+encodeURIComponent(sym)+'&interval='+_cy.tf);const sig=(d&&d.signal)||{};
+  const r=await post('/api/crypto/execute',{symbol:sym,acao:acao,volume:vol,sl:sig.stop,tp1:sig.tp1,score:sig.score});
+  if(r&&r.ok)playEntry();
+  setTxt('cyReason',r&&r.ok?'✅ ordem enviada':'✕ '+String((r&&r.error)||'falha').slice(0,70));cyLoad();
+}
+async function cyClose(){const r=await post('/api/crypto/close',{symbol:_cy.sym});setTxt('cyReason',r&&r.ok?'posição fechada':'✕ '+String((r&&r.error)||'nada a fechar').slice(0,70));cyLoad();}
+async function registerCryptoClose(sym,fallbackProfit){
+  // servidor autoritativo: só registra/soa se houver fechamento REAL (retorna {closed,profit})
+  try{
+    const r=await post('/api/crypto/register-close',{symbol:sym});
+    if(r&&r.closed&&!r.dedup)playExit(r.profit!=null?r.profit:fallbackProfit);
+    return r;
+  }catch(e){return null;}
+}
+async function cyHist(){
+  const tb=document.getElementById('cyHist');if(!tb)return;
+  const [d,pp]=await Promise.all([api('/api/crypto/trades'),api('/api/crypto/positions')]);
+  const open=(pp&&pp.items)||[];const it=(d&&d.items)||[];
+  let rows='';
+  open.forEach(p=>{rows+=`<tr style="background:rgba(53,224,240,.06)"><td class="cy">agora</td><td>${p.symbol||''}</td><td class="${p.type==='COMPRA'?'up':'down'}">${p.type||''}</td><td>${_cyFmt(p.price_open)}</td><td class="mut">— aberto —</td><td class="${(+p.profit||0)>=0?'up':'down'}">${sign(+p.profit||0,2)}</td><td class="cy">● ABERTO</td></tr>`;});
+  it.slice().reverse().slice(0,40).forEach(t=>{rows+=`<tr><td>${(t.datetime_brt||'').slice(11,19)}</td><td>${t.symbol||''}</td><td class="${t.direcao==='COMPRA'?'up':'down'}">${t.direcao||''}</td><td>${t.entry_price||'—'}</td><td>${t.exit_price||'—'}</td><td class="${(+t.profit||0)>=0?'up':'down'}">${t.profit!=null?sign(+t.profit,2):'—'}</td><td>${t.resultado||''}</td></tr>`;});
+  tb.innerHTML=rows||'<tr><td colspan="7" class="mut">sem trades ainda</td></tr>';
+}
+async function cyBgDrive(){for(const sym of Object.keys(_cyOn)){if(!_cyOn[sym])continue;try{await post('/api/crypto/auto-check',{symbol:sym,interval:_cy.tf});}catch(e){}}}
+setInterval(()=>{if(active!=='crypto'&&Object.values(_cyOn).some(v=>v))cyBgDrive();},12000);
+
+// ===== RELATÓRIO CRYPTO (dia/semana/mês) — só crypto, independente da B3 =====
+let _crPeriod='day';
+function setCryptoReport(p){_crPeriod=p;[['day','crDay'],['week','crWeek'],['month','crMonth']].forEach(([x,id])=>{const e=document.getElementById(id);if(e)e.classList.toggle('on',x===p);});loadCryptoReport();}
+async function loadCryptoReport(){
+  const b=document.getElementById('cryptoReportBox');if(!b)return;
+  const d=await api('/api/crypto/report?period='+_crPeriod);
+  if(!d||!d.ok){b.innerHTML='<div class="mut">sem dados no período</div>';return;}
+  const s=d.summary||{},tr=d.trades||[];const cur=(typeof _cyCur==='function'?_cyCur():'$');
+  const rr=document.getElementById('crRange');if(rr)rr.textContent=(d.date_from||'')+(d.date_to&&d.date_to!==d.date_from?' → '+d.date_to:'');
+  const pnl=s.pnl||0;
+  const kpi=(v,l,c,t)=>`<div class="panel"><div class="kpi"><div class="v ${c||''}">${v}</div><div class="l">${l}</div>${t?'<div class="trend">'+t+'</div>':''}</div></div>`;
+  let h='<div class="grid g4">'
+    +kpi(cur+' '+sign(pnl,2),'P&L do período',cls(pnl))
+    +kpi((s.win_rate!=null?s.win_rate+'%':'—'),'Win rate','up',(s.wins||0)+'W / '+(s.losses||0)+'L')
+    +kpi((s.profit_factor!=null?(+s.profit_factor).toFixed(2):'—'),'Profit factor',(s.profit_factor>=1?'up':'down'))
+    +kpi((s.total??0),'Trades','cy',(s.be?s.be+' BE':''))
+    +'</div>';
+  let card3='',card4='';
+  if(_crPeriod!=='day'&&s.best_day){
+    card3=kpi(cur+' '+fmt(s.best_day.pnl,0),'Melhor dia',cls(s.best_day.pnl),s.best_day.date);
+    card4=s.worst_day?kpi(cur+' '+fmt(s.worst_day.pnl,0),'Pior dia',cls(s.worst_day.pnl),s.worst_day.date):'';
+  } else {
+    let bt=null,wt=null;tr.forEach(t=>{const v=+t.profit||0;if(!bt||v>(+bt.profit||0))bt=t;if(!wt||v<(+wt.profit||0))wt=t;});
+    card3=bt?kpi(cur+' '+sign(+bt.profit||0,0),'Melhor trade',cls(+bt.profit),(bt.symbol||'')):'';
+    card4=wt?kpi(cur+' '+sign(+wt.profit||0,0),'Pior trade',cls(+wt.profit),(wt.symbol||'')):'';
+  }
+  h+='<div class="grid g4" style="margin-top:16px">'
+    +kpi((s.expectativa!=null?sign(s.expectativa,2):'—'),'Expectativa (por trade)')
+    +kpi((s.avg_score??'—'),'Score médio','gd')+card3+card4+'</div>';
+  const daily=(d.daily||[]);
+  if(daily.length)h+=panelHTML('Resultado por dia','<table><thead><tr><th>DIA</th><th>TRADES</th><th>WINS</th><th>LOSSES</th><th>P&L R$</th></tr></thead><tbody>'+daily.map(x=>`<tr><td>${x.date}</td><td>${x.trades}</td><td class="up">${x.wins}</td><td class="down">${x.losses}</td><td class="${cls(x.pnl)}">${sign(x.pnl,2)}</td></tr>`).join('')+'</tbody></table>');
+  h+=panelHTML('Trades do período',tr.length?'<table><thead><tr><th>DATA/HORA</th><th>ATIVO</th><th>DIR</th><th>SCORE</th><th>ENTRADA</th><th>SAÍDA</th><th>P&L R$</th><th>IA</th></tr></thead><tbody>'+tr.slice().reverse().slice(0,80).map(t=>`<tr><td>${(t.datetime_brt||'').slice(5,16)}</td><td>${t.symbol||''}</td><td class="${t.direcao==='COMPRA'?'up':'down'}">${t.direcao||''}</td><td>${t.score||''}</td><td>${t.entry_price||'—'}</td><td>${t.exit_price||'—'}</td><td class="${(+t.profit||0)>=0?'up':'down'}">${t.profit!=null?sign(+t.profit,2):'—'}</td><td class="mut">${t.ai_veredito||''}</td></tr>`).join('')+'</tbody></table>':'<div class="mut mini">nenhum trade no período</div>');
+  b.innerHTML=h;
+}
+
 function setTxt(id,v){const el=document.getElementById(id);if(el)el.textContent=v;}
 // split/foco
 let foco='WDO',viewMode='split';
@@ -1223,6 +1578,8 @@ async function refresh(){
     if(active==='dash')await loadDashboard();
     else if(active==='report')await loadReport();
     else if(active==='monitor')await loadMonitor();
+    else if(active==='crypto')await loadCrypto();
+    else if(active==='cryptoreport')await loadCryptoReport();
     else if(active==='scalp')await loadScalper();
     else if(active==='market')await loadMarket();
     else if(active==='intel')await loadIntel();
@@ -1234,6 +1591,8 @@ async function refresh(){
 refresh();
 // refresh pesado (candles/sinal/histórico) — o tempo real fica nos loops leves abaixo
 setInterval(()=>{if(active==='monitor'||active==='dash')refresh();},8000);
+setInterval(()=>{if(active==='crypto')cyLoad();},6000);   // atualiza a aba crypto (senão o gráfico congela)
+setInterval(()=>{if(active==='crypto')cyLoadMM();},5000); // medidores macro/micro
 // P&L / preço / distâncias AO VIVO no modo gestão (1,5s)
 setInterval(pollPnL,1500);
 // Scalper: order flow atualizado com frequência (2,5s) — preço/book/tape/agressão
