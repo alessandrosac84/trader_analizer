@@ -33,6 +33,9 @@ SCALPER_SYMBOLS = {
     # Bitcoin Futuro B3 (mini contrato, 0.01 BTC, horário B3)
     "BITN26": "BITN26",
     "BIT":    "BITN26",
+    # Bitcoin spot/CFD ICMarkets (24h) — novo ativo do scalper
+    "BTCUSD": "BTCUSD",
+    "BTC":    "BTCUSD",
     # Forex / Metais (24h)
     "XAUUSD": "XAUUSD",
     "EURUSD": "EURUSD",
@@ -52,6 +55,10 @@ TICK_SIZE_OVERRIDE = {
     # BITN26: cotado em BRL/BTC — variação mínima R$100 por BTC
     # Cada tick = 0.01 BTC × R$100 = R$1,00 por mini contrato
     "BITN26": 100.0,
+    # BTCUSD (ICMarkets): 1 "tick de scalper" = US$ 10 de movimento. Definir aqui
+    # (e NÃO usar o tick nativo de 0.01) faz o sizing de TP/SL e o ATR escalarem
+    # certo para um preço de ~US$64k — do contrário os alvos ficariam irrisórios.
+    "BTCUSD": 10.0,
     "XAUUSD": 0.01,
     "EURUSD": 0.00010,
     "USDBRL": 0.0010,
@@ -66,6 +73,8 @@ TICK_VALUE_BRL = {
     "WDOM26": 5.0,
     "WINM26": 1.0,
     "BITN26": 1.0,
+    # BTCUSD: 1 tick ($10) × 1.0 lote ≈ US$10 ≈ R$58 (só p/ exibição/sim de P&L)
+    "BTCUSD": 58.0,
     "XAUUSD": 1.0,
     "EURUSD": 1.0,
     "USDBRL": 1.0,
@@ -144,6 +153,27 @@ SYMBOL_CONFIG: dict[str, dict] = {
         # Volatility 60s BITN26 — limiares menores (BTC tem menos ticks)
         "min_range_60s":              2,    # 2 ticks = R$200 de range mínimo em 60s
         "expansion_range_60s":        6,    # 6 ticks → bônus
+    },
+
+    # ── Bitcoin CFD (BTCUSD ICMarkets) — 24h, líquido; tick de scalper = US$10 ──
+    # Book de CFD é mais raso que futuros de bolsa → limiares de book menores.
+    # Volatilidade em ticks de $10: 1m costuma ter 2-8 ticks de range.
+    "BTCUSD": {
+        "burst_ratio_strong":        2.5,
+        "burst_ratio_med":           1.7,
+        "burst_ratio_weak":          1.2,
+        "burst_min_ticks":           1,
+        "consistency_hard_block":    50,
+        "consistency_hb_aligned":    42,
+        "entry_hard_ticks":          3,     # 3 ticks = $30 já movido → tarde
+        "absorption_min_vol":        5,
+        "exhaustion_min_vol":        10,
+        "book_strong_pct":           20,
+        "book_weak_pct":             10,
+        "book_penalty_pct":          15,
+        "volatility_min_ticks":      1,
+        "min_range_60s":             2,     # 2 ticks ($20) mínimo em 60s
+        "expansion_range_60s":       6,     # 6 ticks ($60) → bônus de expansão
     },
 
     # ── Ouro / XAUUSD — liquidez média ────────────────────────────────────
@@ -284,6 +314,7 @@ _sim_mode   = False
 _SIM_DEFAULT_PRICES = {
     "WDON26": 5850.0,  "WDOM26": 5850.0,  "WINM26": 132000.0,
     "BITN26": 620000.0,  # BTC aprox. R$620.000 (BTC ~$107k × BRL ~5,80)
+    "BTCUSD": 64000.0,   # BTC/USD spot (ICMarkets)
     "XAUUSD": 3250.0,  "EURUSD": 1.0850,  "USDBRL": 5.75,
     "GOLD11": 385.0,   "BOVA11": 132.0,   "IVVB11": 320.0,
     "PETR4":  36.0,    "VALE3":  58.0,    "ITUB4":  35.0,

@@ -189,6 +189,7 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:rgba(240,185,53,.09)}
     <div class="nav" data-s="crypto" title="Monitor Crypto"><i>₿</i> <span class="nlabel">Monitor Crypto</span></div>
     <div class="nav" data-s="cryptoreport" title="Relatório Crypto"><i>◱</i> <span class="nlabel">Relatório Crypto</span></div>
     <div class="nav" data-s="scalp" title="Scalper"><i>⚡</i> <span class="nlabel">Scalper</span></div>
+    <div class="nav" data-s="cockpit" title="Cockpit B3"><i>◎</i> <span class="nlabel">Cockpit B3</span></div>
     <div class="nav" data-s="market" title="Market Center"><i>▤</i> <span class="nlabel">Market Center</span></div>
     <div class="nav" data-s="intel" title="Inteligência"><i>❖</i> <span class="nlabel">Inteligência</span></div>
     <div class="nav" data-s="risk" title="Risk Management"><i>⛨</i> <span class="nlabel">Risk Management</span></div>
@@ -285,6 +286,7 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:rgba(240,185,53,.09)}
       <div><s>TOTAL</s><b class="cy" id="mTotal">—</b></div><div><s>GAINS</s><b class="up" id="mGains">—</b></div>
       <div><s>STOPS</s><b class="down" id="mStops">—</b></div><div><s>WIN %</s><b class="gd" id="mWin">—</b></div>
       <div><s>P&amp;L R$</s><b id="mPnl">—</b></div><div><s>IA BLOQ.</s><b class="gd" id="mBlock">—</b></div>
+      <div><s>BE</s><b class="gd" id="mBE">—</b></div><div><s>ABERTOS</s><b class="cy" id="mOpen">—</b></div>
     </div>
     <div class="statbar" style="margin-top:10px" id="monFunnel" title="Funil de sinais de hoje: gerados → executados → bloqueados pela IA">
       <div><s>SINAIS GERADOS</s><b class="cy" id="fGer">—</b></div>
@@ -361,6 +363,7 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:rgba(240,185,53,.09)}
       <div class="seg"><button class="segbtn on" id="crDay" onclick="setCryptoReport('day')">Dia</button><button class="segbtn" id="crWeek" onclick="setCryptoReport('week')">Semana</button><button class="segbtn" id="crMonth" onclick="setCryptoReport('month')">Mês</button></div>
       <span class="tag" id="crRange"></span>
       <div class="spacer" style="flex:1"></div>
+      <button class="btn sm gold" onclick="cyRebuild()" title="Reconstrói o log do Crypto pelo histórico real do MT5 (ICMarkets). Não toca no B3.">🔧 Reconstruir do MT5</button>
       <button class="btn sm" onclick="loadCryptoReport()">↻ Atualizar</button>
     </div>
     <div id="cryptoReportBox"><div class="mut">carregando…</div></div>
@@ -453,6 +456,62 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:rgba(240,185,53,.09)}
     </div>
   </section>
 
+  <!-- COCKPIT B3 — leitura de fluxo de ordens AO VIVO p/ operar na mão (read-only) -->
+  <section class="screen" id="cockpit">
+    <div class="page-h"><h1>◎ COCKPIT <span>B3</span></h1><div class="sub">// fluxo de ordens ao vivo · leitura p/ operar na mão · /api/scalper/data</div></div>
+    <div class="panel mini mut" style="margin-bottom:12px">Ferramenta de <b>decisão</b>, não de execução: lê delta, agressão, book e absorção em tempo real. Você decide e opera manualmente. Sem robô — sem competir com HFT.</div>
+    <div id="ckGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="panel" data-ck="W">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <input id="ckWsymIn" value="WINQ26" style="width:100px;background:#0d1420;border:1px solid #223;color:#cfe;padding:4px 6px;border-radius:5px;font-family:'Share Tech Mono'">
+            <span class="chip" id="ckWb3">—</span>
+          </div>
+          <div class="mono" id="ckWpx" style="font-size:20px">—</div>
+        </div>
+        <div class="mut mini" id="ckWsess" style="margin-top:4px">—</div>
+        <div style="margin-top:12px"><div class="mut mini">DELTA ACUMULADO (sessão) — saldo comprador × vendedor</div>
+          <div class="mono" id="ckWdelta" style="font-size:34px;line-height:1.1">—</div>
+          <div class="mini" id="ckWbias">—</div></div>
+        <div style="margin-top:12px"><div class="mut mini">AGRESSÃO (10s) — quem está atacando agora</div>
+          <div style="display:flex;height:18px;border-radius:5px;overflow:hidden;background:#0d1420;margin-top:3px;font-size:11px;line-height:18px;text-align:center;color:#000;font-weight:700">
+            <div id="ckWaggrB" style="background:#1ecb6b;width:50%">50% C</div><div id="ckWaggrS" style="background:#e0503a;width:50%">50% V</div></div></div>
+        <div style="margin-top:10px"><div class="mut mini">BOOK — pressão bid × ask (10 níveis)</div>
+          <div style="display:flex;height:14px;border-radius:5px;overflow:hidden;background:#0d1420;margin-top:3px">
+            <div id="ckWbookB" style="background:#146c47;width:50%"></div><div id="ckWbookA" style="background:#7a2b20;width:50%"></div></div>
+          <div class="mini mut" id="ckWbookTxt" style="margin-top:2px">—</div></div>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap" id="ckWflags"></div>
+        <div class="panel" id="ckWread" style="margin-top:10px;font-size:13px">—</div>
+        <div class="mut mini" style="margin-top:8px">TAPE (últimos negócios)</div>
+        <div class="mono mini" id="ckWtape" style="max-height:120px;overflow:auto"></div>
+      </div>
+      <div class="panel" data-ck="D">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <input id="ckDsymIn" value="WDOQ26" style="width:100px;background:#0d1420;border:1px solid #223;color:#cfe;padding:4px 6px;border-radius:5px;font-family:'Share Tech Mono'">
+            <span class="chip" id="ckDb3">—</span>
+          </div>
+          <div class="mono" id="ckDpx" style="font-size:20px">—</div>
+        </div>
+        <div class="mut mini" id="ckDsess" style="margin-top:4px">—</div>
+        <div style="margin-top:12px"><div class="mut mini">DELTA ACUMULADO (sessão) — saldo comprador × vendedor</div>
+          <div class="mono" id="ckDdelta" style="font-size:34px;line-height:1.1">—</div>
+          <div class="mini" id="ckDbias">—</div></div>
+        <div style="margin-top:12px"><div class="mut mini">AGRESSÃO (10s) — quem está atacando agora</div>
+          <div style="display:flex;height:18px;border-radius:5px;overflow:hidden;background:#0d1420;margin-top:3px;font-size:11px;line-height:18px;text-align:center;color:#000;font-weight:700">
+            <div id="ckDaggrB" style="background:#1ecb6b;width:50%">50% C</div><div id="ckDaggrS" style="background:#e0503a;width:50%">50% V</div></div></div>
+        <div style="margin-top:10px"><div class="mut mini">BOOK — pressão bid × ask (10 níveis)</div>
+          <div style="display:flex;height:14px;border-radius:5px;overflow:hidden;background:#0d1420;margin-top:3px">
+            <div id="ckDbookB" style="background:#146c47;width:50%"></div><div id="ckDbookA" style="background:#7a2b20;width:50%"></div></div>
+          <div class="mini mut" id="ckDbookTxt" style="margin-top:2px">—</div></div>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap" id="ckDflags"></div>
+        <div class="panel" id="ckDread" style="margin-top:10px;font-size:13px">—</div>
+        <div class="mut mini" style="margin-top:8px">TAPE (últimos negócios)</div>
+        <div class="mono mini" id="ckDtape" style="max-height:120px;overflow:auto"></div>
+      </div>
+    </div>
+  </section>
+
   <!-- Modal global (fora das seções para abrir em qualquer tela: Monitor, Inteligência, Scalper) -->
   <div class="scmodal" id="scModal"><div class="scmodal-box">
     <div class="scmodal-head"><b id="scModalTitle">—</b><button class="btn sm" onclick="closeScModal()">✕ Fechar</button></div>
@@ -484,9 +543,31 @@ const _snd={ctx:null,on:true};
 try{_snd.on=localStorage.getItem('snd_on')!=='0';}catch(e){}
 function _actx(){if(!_snd.ctx){try{_snd.ctx=new(window.AudioContext||window.webkitAudioContext)();}catch(e){}}if(_snd.ctx&&_snd.ctx.state==='suspended'){try{_snd.ctx.resume();}catch(e){}}return _snd.ctx;}
 function _tone(freq,start,dur,type,gain){const c=_snd.ctx;if(!c)return;const o=c.createOscillator(),g=c.createGain();o.type=type||'sine';const t=c.currentTime+start;o.frequency.setValueAtTime(freq,t);o.connect(g);g.connect(c.destination);g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(gain||0.18,t+0.012);g.gain.exponentialRampToValueAtTime(0.0001,t+dur);o.start(t);o.stop(t+dur+0.03);}
-function playEntry(){if(!_snd.on||!_actx())return;_tone(587,0,0.09,'triangle',0.16);_tone(880,0.08,0.13,'triangle',0.18);}   // blip de entrada
-function playGain(){if(!_snd.on||!_actx())return;[1047,1319,1568,2093].forEach((f,i)=>_tone(f,i*0.055,0.16,'square',0.11));_tone(2637,0.22,0.34,'sine',0.13);_tone(3136,0.27,0.30,'sine',0.09);}   // "cha-ching" caixa registradora
-function playLoss(){if(!_snd.on||!_actx())return;_tone(320,0,0.20,'sawtooth',0.14);_tone(226,0.18,0.34,'sawtooth',0.15);}   // grave descendente
+// som de ABERTURA de trade = arquivo real (notificação do Profit/Nelógica).
+// Fallback pro blip sintético se o navegador bloquear ou o arquivo faltar.
+const _entrySnd=(()=>{try{const a=new Audio('/static/sounds/notify.wav');a.preload='auto';a.volume=0.9;return a;}catch(e){return null;}})();
+function _entryBlip(){if(_actx()){_tone(587,0,0.09,'triangle',0.16);_tone(880,0.08,0.13,'triangle',0.18);}}
+function playEntry(){
+  if(!_snd.on)return;
+  if(_entrySnd){try{_entrySnd.currentTime=0;const p=_entrySnd.play();if(p&&p.catch)p.catch(_entryBlip);return;}catch(e){}}
+  _entryBlip();
+}
+// som de trade FECHADO COM LUCRO (bateu TP) = arquivo real (caixa registradora).
+const _gainSnd=(()=>{try{const a=new Audio('/static/sounds/gain.mp3');a.preload='auto';a.volume=0.9;return a;}catch(e){return null;}})();
+function _gainSynth(){if(_actx()){[1047,1319,1568,2093].forEach((f,i)=>_tone(f,i*0.055,0.16,'square',0.11));_tone(2637,0.22,0.34,'sine',0.13);_tone(3136,0.27,0.30,'sine',0.09);}}
+function playGain(){
+  if(!_snd.on)return;
+  if(_gainSnd){try{_gainSnd.currentTime=0;const p=_gainSnd.play();if(p&&p.catch)p.catch(_gainSynth);return;}catch(e){}}
+  _gainSynth();
+}
+// som de trade FECHADO NO PREJUÍZO (bateu stop) = arquivo real (buzzer).
+const _lossSnd=(()=>{try{const a=new Audio('/static/sounds/loss.mp3');a.preload='auto';a.volume=0.9;return a;}catch(e){return null;}})();
+function _lossSynth(){if(_actx()){_tone(320,0,0.20,'sawtooth',0.14);_tone(226,0.18,0.34,'sawtooth',0.15);}}
+function playLoss(){
+  if(!_snd.on)return;
+  if(_lossSnd){try{_lossSnd.currentTime=0;const p=_lossSnd.play();if(p&&p.catch)p.catch(_lossSynth);return;}catch(e){}}
+  _lossSynth();
+}
 function playExit(profit){const p=+profit||0;if(p>0.0001)playGain();else if(p<-0.0001)playLoss();else if(_snd.on&&_actx())_tone(520,0,0.12,'triangle',0.12);}
 function sndToggle(){_snd.on=!_snd.on;try{localStorage.setItem('snd_on',_snd.on?'1':'0');}catch(e){}const b=document.getElementById('sndBtn');if(b)b.textContent=_snd.on?'🔊':'🔇';if(_snd.on)playEntry();}
 // desbloqueia o áudio no primeiro gesto (política de autoplay dos navegadores)
@@ -634,7 +715,7 @@ async function loadMonitor(){
     setTxt('mTotal',exe);setTxt('mGains',st.gains??st.wins??'—');setTxt('mStops',st.stops??st.losses??'—');
     const wr=st.win_rate_pct??st.win_rate;setTxt('mWin',(wr!=null?fmt(wr,0)+'%':'—'));
     const pnl=st.pnl_total_brl??st.pnl_brl;const el=document.getElementById('mPnl');if(el){el.textContent='R$ '+sign(pnl,2);el.className=cls(pnl);}
-    setTxt('mBlock',bloq);
+    setTxt('mBlock',bloq);_monBEOpen(at.items,exe,st);
     // Funil de sinais do dia: gerados → executados → bloqueados
     setTxt('fGer',ger);setTxt('fExec',exe);setTxt('fBloq',bloq);
     const note=ger===0?'Nenhum sinal atingiu o gatilho hoje — mercado sem setup válido (não é falha do motor).'
@@ -675,9 +756,37 @@ async function loadPane(pane){
   } else {
     renderSignal(side,d&&d.signal);mgCtx[side]={mode:'SCAN'};
     if(d&&d.signal&&d.signal.acao!=='NEUTRO')drawLines(cid,d.signal.acao,d.signal.entrada,d.signal.stop,d.signal.tp1);
+    else drawLines(cid);   // sem posição/sinal → LIMPA as linhas do trade fechado
     if(d&&d.ok)driveMonitorExecute(side,sym,d.signal);   // dispara SÓ se TRADES do ativo estiver ON
   }
 }
+// refresh RÁPIDO do B3: acelera a detecção de fechamento + atualiza números/linhas,
+// sem re-renderizar candles (o loadMonitor pesado segue a cada 8s).
+let _monQR=false;
+async function monQuick(){
+  if(active!=='monitor'||_monQR)return; _monQR=true;
+  try{
+    const at=await api('/api/autotrade/trades?limit=200');
+    if(at&&at.stats){const st=at.stats;
+      const ger=+(st.total||0),bloq=+(st.bloqueados_ia??st.ia_bloqueados??st.blocked??0),exe=Math.max(0,ger-bloq);
+      setTxt('mTotal',exe);setTxt('mGains',st.gains??st.wins??'—');setTxt('mStops',st.stops??st.losses??'—');
+      const wr=st.win_rate_pct??st.win_rate;setTxt('mWin',(wr!=null?fmt(wr,0)+'%':'—'));
+      const pnl=st.pnl_total_brl??st.pnl_brl;const el=document.getElementById('mPnl');if(el){el.textContent='R$ '+sign(pnl,2);el.className=cls(pnl);}
+      setTxt('mBlock',bloq);_monBEOpen(at.items,exe,st);renderHist('monHist',at.items,true);
+      try{const closed=(at.items||[]).filter(t=>t&&t.id!=null&&t.exit_price!=null);const maxId=closed.reduce((m,t)=>Math.max(m,+t.id),0);
+        if(_monLastClosedId===null)_monLastClosedId=maxId;
+        else if(maxId>_monLastClosedId){closed.filter(t=>+t.id>_monLastClosedId).sort((a,b)=>a.id-b.id).forEach(t=>playExit(t.pnl_brl));_monLastClosedId=maxId;}}catch(e){}
+    }
+    const panes=[...document.querySelectorAll('#monPanes .panel')].filter(p=>p.style.display!=='none');
+    await Promise.all(panes.map(async pane=>{
+      const sym=pane.dataset.sym,side=pane.id.replace('pane',''),cid='cw'+side,tf=monTF.v;
+      const mg=await api('/api/autotrade/manage?tv_symbol='+encodeURIComponent(sym)+'&interval='+tf);
+      if(mg&&mg.ok&&mg.mode==='MANAGE'){renderManage(side,mg,sym);const c=mgCtx[side]||{};drawLines(cid,c.side,c.entry,c.sl,c.tp);}
+      else{const c=mgCtx[side]||{};if(c.mode==='MANAGE'){drawLines(cid);mgCtx[side]={mode:'SCAN'};}}   // fechou → LIMPA linhas
+    }));
+  }catch(e){}finally{_monQR=false;}
+}
+setInterval(monQuick,4000);
 function recClass(r){r=(r||'').toUpperCase();if(/FECHAR|ENCERR|SAIR/.test(r))return 'red';if(/BREAKEVEN|TRAILING|MOVER|REVISAR/.test(r))return 'cyan';return 'green';}
 function renderManage(side,mg,sym){
   const badge=document.getElementById('badge'+side),box=document.getElementById('panel'+side);
@@ -733,6 +842,18 @@ async function pollPnL(){
   }
 }
 let _tradesById={};
+// Rótulos claros do motivo de fechamento (dá visibilidade a BE / reversão)
+const _CLOSE_LBL={TP1:{t:'🎯 TP1',c:'up'},TP2:{t:'🎯 TP2',c:'up'},STOP:{t:'🛑 STOP',c:'down'},
+  BREAKEVEN:{t:'⚖️ BREAKEVEN',c:'gd'},REVERSAO:{t:'⚡ REVERSÃO',c:'gd'},TRAILING:{t:'📐 TRAILING',c:'cy'},
+  MANUAL:{t:'✋ MANUAL',c:'mut'},FECHADO_MT5:{t:'🔄 MT5',c:'mut'},FECHADO_MT5_GAIN:{t:'🔄 MT5 (gain)',c:'up'},
+  FECHADO_MT5_STOP:{t:'🔄 MT5 (stop)',c:'down'},BLOQUEADO_IA:{t:'⛔ IA bloq.',c:'down'},AGUARDADO_IA:{t:'⏸ IA aguardou',c:'gd'}};
+function _closeCell(cr){if(!cr)return '<span class="mut">—</span>';const m=_CLOSE_LBL[cr];return m?`<span class="${m.c}">${m.t}</span>`:cr;}
+// Contadores de BE e ABERTOS do B3 (para a conta fechar: exec = gains+stops+BE+abertos)
+function _monBEOpen(items,exe,st){
+  const be=(items||[]).filter(t=>t&&t.closed_at&&t.pnl_brl!=null&&Math.abs(+t.pnl_brl)<0.01&&t.close_reason!=='BLOQUEADO_IA'&&t.close_reason!=='AGUARDADO_IA').length;
+  const g=+(st.gains??st.wins??0),s=+(st.stops??st.losses??0);
+  setTxt('mBE',be);setTxt('mOpen',Math.max(0,(+exe||0)-g-s-be));
+}
 function _isBlocked(t){return !!(t&&(['BLOQUEADO_IA','AGUARDADO_IA'].includes(t.close_reason)||['AGUARDAR','BLOQUEAR'].includes(t.ai_veredito)));}
 function renderHist(id,items,full){
   const tb=document.getElementById(id);if(!tb)return;
@@ -746,8 +867,8 @@ function renderHist(id,items,full){
     const clk=(t.ai_motivo||_isBlocked(t)||t.ai_veredito)&&t.id!=null;
     const iaCell=clk?`<span class="iaclk" title="Ver motivo da decisão da IA">${ia||'ver motivo'} 🔍</span>`:`<span class="mut">${ia}</span>`;
     const attrs=clk?` class="clk" onclick="tradeReason(${t.id})"`:'';
-    if(full)return `<tr${attrs}><td>${dt}</td><td>${t.tv_symbol||''}</td><td class="${ac}">${a}</td><td>${t.score??''}</td><td>${fmt(t.entry_price,2)}</td><td>${fmt(t.sl_initial,2)}</td><td>${fmt(t.tp1_initial,2)}</td><td>${t.exit_price?fmt(t.exit_price,2):'—'}</td><td>${t.close_reason||'—'}</td><td class="${pc}">${pnl!=null?sign(pnl,2):'—'}</td><td>${iaCell}</td></tr>`;
-    return `<tr${attrs}><td>${dt}</td><td>${t.tv_symbol||''}</td><td class="${ac}">${a}</td><td>${t.score??''}</td><td>${fmt(t.entry_price,2)}</td><td>${t.exit_price?fmt(t.exit_price,2):'—'}</td><td class="${pc}">${pnl!=null?sign(pnl,2):'—'}</td><td>${t.close_reason||'—'}</td><td>${iaCell}</td></tr>`;
+    if(full)return `<tr${attrs}><td>${dt}</td><td>${t.tv_symbol||''}</td><td class="${ac}">${a}</td><td>${t.score??''}</td><td>${fmt(t.entry_price,2)}</td><td>${fmt(t.sl_initial,2)}</td><td>${fmt(t.tp1_initial,2)}</td><td>${t.exit_price?fmt(t.exit_price,2):'—'}</td><td>${_closeCell(t.close_reason)}</td><td class="${pc}">${pnl!=null?sign(pnl,2):'—'}</td><td>${iaCell}</td></tr>`;
+    return `<tr${attrs}><td>${dt}</td><td>${t.tv_symbol||''}</td><td class="${ac}">${a}</td><td>${t.score??''}</td><td>${fmt(t.entry_price,2)}</td><td>${t.exit_price?fmt(t.exit_price,2):'—'}</td><td class="${pc}">${pnl!=null?sign(pnl,2):'—'}</td><td>${_closeCell(t.close_reason)}</td><td>${iaCell}</td></tr>`;
   }).join('');
 }
 const _VERD_LBL={AGUARDAR:{t:'⏸ AGUARDAR',c:'gd'},BLOQUEAR:{t:'⛔ BLOQUEAR',c:'down'},EXECUTAR:{t:'✅ EXECUTAR',c:'up'},RECUPERADO:{t:'♻ RECUPERADO',c:'mut'}};
@@ -1249,6 +1370,7 @@ async function loadProfit(){const d=await api('/api/profit/status');const b=docu
 
 // ===== MONITOR CRYPTO (MT5 24h) — módulo novo, isolado =====
 let _cy={sym:'',tf:'15',inited:false};const _cyOn={};
+let _cyLastClosedId=null;   // som de saída crypto: maior id de trade fechado já visto (init silencioso)
 async function loadCrypto(){ if(!_cy.inited){_cy.inited=true;await cyInit();} await cyLoad(); cyLoadMM(); }
 async function cyInit(){
   const d=await api('/api/crypto/symbols');const syms=(d&&d.symbols&&d.symbols.length)?d.symbols:['BTCUSD'];
@@ -1379,17 +1501,16 @@ function cyStartTicks(cid){
   },1500);
 }
 // pulso vivo do MICRO: usa a variação recente do preço (não custa MT5 extra — reusa o tick)
+// brilho ao vivo do MICRO: mantém a DIREÇÃO/força estrutural do M5 (do endpoint) e só
+// aplica uma pequena variação (±6%) conforme o preço se mexe — vivo E correto.
 function cyMicroLive(price){
+  const base=_cy.mmMicro; if(!base)return;
   const now=Date.now();
-  _cy.pxBuf=(_cy.pxBuf||[]).filter(x=>now-x.t<45000); _cy.pxBuf.push({t:now,price});
-  if(_cy.pxBuf.length<4)return;
-  const p0=_cy.pxBuf[0].price;
-  const chg=p0?((price-p0)/p0*100):0;                 // % nos últimos ~45s
-  const dir=chg>0.015?'ALTA':(chg<-0.015?'BAIXA':'NEUTRO');
-  const pct=Math.min(100,Math.round(Math.abs(chg)*350));
-  const ib=document.getElementById('cyMMmiBar');if(ib){ib.style.width=pct+'%';ib.style.background=_mmCol(dir);}
-  const miD=document.getElementById('cyMMmiD');if(miD){miD.textContent=dir;miD.className=_mmCls(dir);}
-  setTxt('cyMMmiP',pct+'%');
+  _cy.pxBuf=(_cy.pxBuf||[]).filter(x=>now-x.t<20000); _cy.pxBuf.push({t:now,price});
+  let shimmer=0;
+  if(_cy.pxBuf.length>=3){const p0=_cy.pxBuf[0].price;shimmer=Math.max(-6,Math.min(6,((price-p0)/p0*100)*300));}
+  const pct=Math.max(0,Math.min(100,Math.round((base.pct||0)+shimmer)));
+  const ib=document.getElementById('cyMMmiBar');if(ib){ib.style.width=pct+'%';ib.style.background=_mmCol(base.dir);}
 }
 function _cyFmt(v){return v==null?'—':fmt(v,Math.abs(v)<100?2:(Math.abs(v)<5000?1:0));}
 // ===== MONITOR MACRO/MICRO =====
@@ -1400,11 +1521,15 @@ async function cyLoadMM(){
   if(active!=='crypto')return;
   const d=await api('/api/crypto/macromicro?symbol='+encodeURIComponent(_cy.sym));
   if(!d||!d.ok)return;
-  const ma=d.macro||{};
-  // MACRO vem do cálculo estrutural (H1). MICRO fica por conta do pulso ao vivo (tick).
+  const ma=d.macro||{}, mi=d.micro||{};
+  // MACRO (H1) e MICRO (M5 estrutural) vêm do cálculo. O tick só dá um brilho ao vivo no micro.
   const maD=document.getElementById('cyMMmaD');if(maD){maD.textContent=ma.dir||'—';maD.className=_mmCls(ma.dir);}
   setTxt('cyMMmaP',(ma.pct??0)+'%');
   const mb=document.getElementById('cyMMmaBar');if(mb){mb.style.width=(ma.pct||0)+'%';mb.style.background=_mmCol(ma.dir);}
+  const miD=document.getElementById('cyMMmiD');if(miD){miD.textContent=mi.dir||'—';miD.className=_mmCls(mi.dir);}
+  setTxt('cyMMmiP',(mi.pct??0)+'%');
+  const ib=document.getElementById('cyMMmiBar');if(ib){ib.style.width=(mi.pct||0)+'%';ib.style.background=_mmCol(mi.dir);}
+  _cy.mmMicro={dir:mi.dir,pct:mi.pct||0};   // base p/ o brilho ao vivo do tick
   const kc=document.getElementById('cyMMkind');if(kc){kc.textContent=d.kind||'—';kc.className='chip mini '+(d.kind==='CONTINUACAO'?'g':(d.kind==='PULLBACK'?'gd':(d.kind==='REVERSAO'?'r':'')));}
   setTxt('cyMMread',d.reading||'—');
   // alerta sonoro só na TRANSIÇÃO para PULLBACK/REVERSÃO (não repete a cada poll)
@@ -1454,7 +1579,8 @@ async function registerCryptoClose(sym,fallbackProfit){
   // servidor autoritativo: só registra/soa se houver fechamento REAL (retorna {closed,profit})
   try{
     const r=await post('/api/crypto/register-close',{symbol:sym});
-    if(r&&r.closed&&!r.dedup)playExit(r.profit!=null?r.profit:fallbackProfit);
+    // NÃO toca som aqui: 'closed' só diz que não há posição AGORA (fecho pode ser antigo).
+    // O som de saída é disparado por cyHist(), só quando um trade NOVO entra na lista.
     return r;
   }catch(e){return null;}
 }
@@ -1462,17 +1588,34 @@ async function cyHist(){
   const tb=document.getElementById('cyHist');if(!tb)return;
   const [d,pp]=await Promise.all([api('/api/crypto/trades'),api('/api/crypto/positions')]);
   const open=(pp&&pp.items)||[];const it=(d&&d.items)||[];
+  // som de saída: só dispara p/ trade fechado NOVO (init silencioso), igual ao B3.
+  try{
+    const closedC=(it||[]).filter(t=>t&&t.id!=null&&t.exit_price!=null&&t.exit_price!=='');
+    const maxC=closedC.reduce((m,t)=>Math.max(m,+t.id),0);
+    if(_cyLastClosedId===null){_cyLastClosedId=maxC;}
+    else if(maxC>_cyLastClosedId){
+      closedC.filter(t=>+t.id>_cyLastClosedId).sort((a,b)=>a.id-b.id).forEach(t=>playExit(+t.profit));
+      _cyLastClosedId=maxC;
+    }
+  }catch(e){}
   let rows='';
   open.forEach(p=>{rows+=`<tr style="background:rgba(53,224,240,.06)"><td class="cy">agora</td><td>${p.symbol||''}</td><td class="${p.type==='COMPRA'?'up':'down'}">${p.type||''}</td><td>${_cyFmt(p.price_open)}</td><td class="mut">— aberto —</td><td class="${(+p.profit||0)>=0?'up':'down'}">${sign(+p.profit||0,2)}</td><td class="cy">● ABERTO</td></tr>`;});
   it.slice().reverse().slice(0,40).forEach(t=>{rows+=`<tr><td>${(t.datetime_brt||'').slice(11,19)}</td><td>${t.symbol||''}</td><td class="${t.direcao==='COMPRA'?'up':'down'}">${t.direcao||''}</td><td>${t.entry_price||'—'}</td><td>${t.exit_price||'—'}</td><td class="${(+t.profit||0)>=0?'up':'down'}">${t.profit!=null?sign(+t.profit,2):'—'}</td><td>${t.resultado||''}</td></tr>`;});
   tb.innerHTML=rows||'<tr><td colspan="7" class="mut">sem trades ainda</td></tr>';
 }
-async function cyBgDrive(){for(const sym of Object.keys(_cyOn)){if(!_cyOn[sym])continue;try{await post('/api/crypto/auto-check',{symbol:sym,interval:_cy.tf});}catch(e){}}}
+async function cyBgDrive(){for(const sym of Object.keys(_cyOn)){if(!_cyOn[sym])continue;try{const r=await post('/api/crypto/auto-check',{symbol:sym,interval:_cy.tf});if(r&&r.action==='EXECUTED')playEntry();}catch(e){}}}
 setInterval(()=>{if(active!=='crypto'&&Object.values(_cyOn).some(v=>v))cyBgDrive();},12000);
 
 // ===== RELATÓRIO CRYPTO (dia/semana/mês) — só crypto, independente da B3 =====
 let _crPeriod='day';
 function setCryptoReport(p){_crPeriod=p;[['day','crDay'],['week','crWeek'],['month','crMonth']].forEach(([x,id])=>{const e=document.getElementById(id);if(e)e.classList.toggle('on',x===p);});loadCryptoReport();}
+async function cyRebuild(){
+  if(!confirm('Reconstruir o histórico do Monitor Crypto pelo MT5 (ICMarkets)?\n\nO CSV atual é salvo em backup e regravado do zero pelo histórico real, casado por posição (sem fantasmas). NÃO afeta o Monitor MT5/B3.'))return;
+  const b=document.getElementById('cryptoReportBox');if(b)b.innerHTML='<div class="mut">reconstruindo do histórico do MT5…</div>';
+  const r=await post('/api/crypto/rebuild?hours=168',{});
+  if(r&&r.ok){alert('✅ Reconstruído: '+r.imported+' trade(s) reimportado(s) do histórico do MT5.');loadCryptoReport();}
+  else{alert('✕ Falha ao reconstruir: '+String((r&&r.error)||'sem resposta'));loadCryptoReport();}
+}
 async function loadCryptoReport(){
   const b=document.getElementById('cryptoReportBox');if(!b)return;
   const d=await api('/api/crypto/report?period='+_crPeriod);
@@ -1581,6 +1724,7 @@ async function refresh(){
     else if(active==='crypto')await loadCrypto();
     else if(active==='cryptoreport')await loadCryptoReport();
     else if(active==='scalp')await loadScalper();
+    else if(active==='cockpit')await loadCockpit();
     else if(active==='market')await loadMarket();
     else if(active==='intel')await loadIntel();
     else if(active==='risk')await loadRisk();
@@ -1593,6 +1737,18 @@ refresh();
 setInterval(()=>{if(active==='monitor'||active==='dash')refresh();},8000);
 setInterval(()=>{if(active==='crypto')cyLoad();},6000);   // atualiza a aba crypto (senão o gráfico congela)
 setInterval(()=>{if(active==='crypto')cyLoadMM();},5000); // medidores macro/micro
+setInterval(()=>{if(active==='crypto')cyQuickRefresh();},2500); // lista de trades + contadores QUASE em tempo real
+// refresh leve: só a lista de trades + contadores da sessão (dispara a reconciliação no servidor)
+let _cyQR=false;
+async function cyQuickRefresh(){
+  if(active!=='crypto'||_cyQR)return; _cyQR=true;
+  try{
+    const s=await api('/api/crypto/session');const ss=(s&&s.session)?s.session:s;
+    if(ss){setTxt('cyT',ss.trades??'—');setTxt('cyW',ss.wins??'—');setTxt('cyL',ss.losses??'—');setTxt('cyBE',ss.breakevens??'—');
+      const el=document.getElementById('cyRes');if(el){el.textContent=_cyMoney(ss.pnl||0);el.className=cls(ss.pnl||0);}}
+    await cyHist();
+  }catch(e){}finally{_cyQR=false;}
+}
 // P&L / preço / distâncias AO VIVO no modo gestão (1,5s)
 setInterval(pollPnL,1500);
 // Scalper: order flow atualizado com frequência (2,5s) — preço/book/tape/agressão
@@ -1603,6 +1759,49 @@ let _scalpAutoOn=false;
 async function pollScalpAuto(){const d=await api('/api/scalper/auto-state');_scalpAutoOn=!!(d&&d.enabled);}
 setInterval(pollScalpAuto,3000);pollScalpAuto();
 setInterval(()=>{if(active==='scalp'||_scalpAutoOn)loadScalper();},1000);
+// ── COCKPIT B3: leitura de fluxo AO VIVO (read-only, decisão manual) ──
+async function loadCockpit(){ await Promise.all([ckOne('W','ckWsymIn'), ckOne('D','ckDsymIn')]); }
+async function ckOne(k,inId){ const el=document.getElementById(inId); const sym=(el&&el.value||'').trim(); if(!sym)return;
+  const d=await api('/api/scalper/data?symbol='+encodeURIComponent(sym)+'&aggr_seconds=30'); ckRender(k,sym,d); }
+function ckSet(id,v){const e=document.getElementById(id);if(e)e.textContent=v;}
+function ckRender(k,sym,d){
+  const b3=document.getElementById('ck'+k+'b3');
+  if(!d||!d.ok){ if(b3){b3.textContent='SEM DADOS';b3.className='chip r';} ckSet('ck'+k+'read','⚠ '+((d&&d.error)||'sem dados — confira o contrato no Market Watch')); return; }
+  if(b3){const o=!!d.b3_open;b3.textContent=o?'B3 ABERTA':'B3 FECHADA';b3.className='chip '+(o?'g':'r');}
+  const px=d.price ?? d.last ?? (d.tick&&(d.tick.last||d.tick.bid)) ?? (d.vw&&d.vw.price);
+  ckSet('ck'+k+'px', px!=null?fmt(px,0):'—');
+  const sess=(d.macro&&d.macro.time)||{}; ckSet('ck'+k+'sess', sess.label||sess.session||'—');
+  const cum=d.cum||{}; const dl=cum.delta;
+  const de=document.getElementById('ck'+k+'delta'); if(de){de.textContent=dl!=null?sign(dl,0):'—'; de.className='mono '+cls(dl||0);}
+  ckSet('ck'+k+'bias', cum.bias||'NEUTRO');
+  const a10=(d.context&&d.context.aggr_10s)||d.aggr||{}; const bp=Math.round(a10.buy_pct??50);
+  const ab=document.getElementById('ck'+k+'aggrB'),as_=document.getElementById('ck'+k+'aggrS');
+  if(ab){ab.style.width=bp+'%';ab.textContent=bp+'% C';} if(as_){as_.style.width=(100-bp)+'%';as_.textContent=(100-bp)+'% V';}
+  let bv=0,av=0; if(d.book){(d.book.bids||[]).slice(0,10).forEach(b=>bv+=b.vol||0);(d.book.asks||[]).slice(0,10).forEach(a=>av+=a.vol||0);}
+  const tot=bv+av, bpct=tot>0?Math.round(bv/tot*100):50;
+  const bb=document.getElementById('ck'+k+'bookB'),ba=document.getElementById('ck'+k+'bookA');
+  if(bb)bb.style.width=bpct+'%'; if(ba)ba.style.width=(100-bpct)+'%';
+  ckSet('ck'+k+'bookTxt', tot>0?('bid '+bv+' × ask '+av+'  ('+(bpct>55?'compra':bpct<45?'venda':'neutro')+')'):'sem book');
+  const flags=[]; const vel=(d.context&&d.context.velocity)||{}; const spd=vel.trades_3s??vel.trades;
+  if(spd!=null)flags.push('<span class="chip">⏩ '+spd+' neg/3s</span>');
+  if(d.absorption_buy||(d.absorption&&d.absorption.buy))flags.push('<span class="chip g">absorção compra</span>');
+  if(d.absorption_sell||(d.absorption&&d.absorption.sell))flags.push('<span class="chip r">absorção venda</span>');
+  if(d.exhaustion_buy||(d.exhaustion&&d.exhaustion.buy))flags.push('<span class="chip r">exaustão compra</span>');
+  if(d.exhaustion_sell||(d.exhaustion&&d.exhaustion.sell))flags.push('<span class="chip g">exaustão venda</span>');
+  const fl=document.getElementById('ck'+k+'flags'); if(fl)fl.innerHTML=flags.join('');
+  ckSet('ck'+k+'read', ckLeitura(bp,bpct));
+  const tp=document.getElementById('ck'+k+'tape');
+  if(tp){const arr=(d.tape||[]).slice(-14).reverse();
+    tp.innerHTML=arr.map(x=>{const s=(x.side==='BUY');return '<div style="color:'+(s?'#1ecb6b':'#e0503a')+'">'+(s?'▲':'▼')+' '+fmt(x.last||x.price,0)+'  ×'+(x.vol||1)+'</div>';}).join('')||'<div class="mut">sem negócios</div>';}
+}
+function ckLeitura(aggrBuyPct,bookBuyPct){
+  const p=[];
+  if(aggrBuyPct>=62)p.push('Agressão COMPRADORA forte'); else if(aggrBuyPct<=38)p.push('Agressão VENDEDORA forte'); else p.push('Agressão equilibrada');
+  if(bookBuyPct>=58)p.push('book pra cima'); else if(bookBuyPct<=42)p.push('book pra baixo');
+  const conf=((aggrBuyPct>=58&&bookBuyPct>=55)||(aggrBuyPct<=42&&bookBuyPct<=45));
+  return (conf?'✅ ':'• ')+p.join(' · ')+(conf?' — CONFLUÊNCIA (fluxo + book alinhados)':'');
+}
+setInterval(()=>{if(active==='cockpit')loadCockpit();},1000);
 // ── Monitor: também dispara em background para os ativos com TRADES ON ──
 async function monitorBgDriver(){
   for(const [side,sym] of [['WIN','BMFBOVESPA:WIN1!'],['WDO','BMFBOVESPA:WDO1!']]){

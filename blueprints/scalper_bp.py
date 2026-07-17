@@ -253,7 +253,7 @@ _ASSERT = {
     "good_sessions": {"PRIME", "BOM"},   # só opera em sessão definida e boa
     "block_undefined_session": True,     # bloqueia sessão "?"/vazia
     # Teto de score por símbolo: acima disso = zona de exaustão (dados: ~0% acerto)
-    "score_ceiling": {"BITN26": 84, "_default": 88},
+    "score_ceiling": {"BITN26": 84, "BTCUSD": 88, "_default": 88},
 }
 _recent_exec_ts: list = []   # timestamps das últimas execuções (teto por minuto)
 
@@ -317,6 +317,25 @@ _SYMBOL_TRADE_CFG: dict[str, dict] = {
         "max_position_time_sec": 120,  # P3: 2 min (ticks chegam devagar)
         "time_stop_seconds":      30,  # P4: verificar em 30s
         "minimum_progress_r":    0.3,  # P4: 0.3R mínimo
+    },
+    # Bitcoin CFD (BTCUSD ICMarkets) — 24h, líquido. Entrada APERTADA de propósito
+    # (o histórico do scalper foi de overtrading): score alto, 4 confirmações
+    # consecutivas, cooldown longo e poucos trades/dia. tick de scalper = US$10,
+    # então tp 6 = US$60 e sl 3 = US$30 (2:1), com sizing por ATR ligado.
+    "BTCUSD": {
+        "score_min":       66,     # só a faixa alta (menos entradas, mais qualidade)
+        "threshold_pct":   66.0,   # agressão forte exigida
+        "confirm_n":        4,     # 4 confirmações consecutivas (mata o "machine-gun")
+        "cooldown_sec":   120,     # 2 min entre trades
+        "max_daily":       10,     # teto diário (24h, mas limitado)
+        "tp_ticks":         6,     # 6 × US$10 = US$60
+        "sl_ticks":         3,     # 3 × US$10 = US$30 → 2:1
+        "use_atr_sizing":  True,   # escala TP/SL pela volatilidade real do BTC
+        "use_vwap_filter": True,
+        "max_position_time_sec": 180,
+        "time_stop_seconds":      30,
+        "minimum_progress_r":    0.3,
+        "opening_block_minutes":  0,   # 24h, sem bloqueio de abertura
     },
     # Ouro — liquidez média, movimentos suaves
     "XAUUSD": {

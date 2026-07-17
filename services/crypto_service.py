@@ -19,12 +19,31 @@ logger = logging.getLogger(__name__)
 
 MAGIC_CRYPTO = 770077          # exclusivo do Monitor Crypto (separa do Monitor MT5)
 BOT_COMMENT  = "MonitorCrypto"
+# Magic do módulo Scalper — quando o Scalper opera BTCUSD na MESMA conta ICMarkets,
+# seus trades NÃO são do Monitor Crypto e devem ser ignorados aqui (isolamento).
+_SCALPER_MAGIC = 20260506
 
 try:
     import MetaTrader5 as mt5
     MT5_OK = True
 except Exception:
     MT5_OK = False
+
+# ── Serialização do acesso ao MT5 ────────────────────────────────────────────
+# A lib MetaTrader5 é um singleton por processo. Se duas threads chamam
+# initialize()/shutdown() ao mesmo tempo (ex.: o reconciliador de background e o
+# tick do frontend), uma quebra a conexão da outra. Este lock serializa TODO o
+# acesso — cada função ainda faz seu init+shutdown, mas uma de cada vez.
+import threading as _threading
+import functools as _functools
+_MT5_LOCK = _threading.Lock()
+
+def _serialized(fn):
+    @_functools.wraps(fn)
+    def _w(*a, **k):
+        with _MT5_LOCK:
+            return fn(*a, **k)
+    return _w
 
 
 def _init_kwargs() -> dict:
@@ -49,6 +68,7 @@ def _tf(minutes: int):
 
 # ── Dados ───────────────────────────────────────────────────────────────────
 
+@_serialized
 def get_candles(symbol: str, tf_minutes: int = 15, n: int = 200):
     """Retorna (list[dict candle], err). Candle: {time(epoch), open, high, low, close, volume}."""
     if not MT5_OK:
@@ -82,6 +102,7 @@ def get_candles(symbol: str, tf_minutes: int = 15, n: int = 200):
     return None, last
 
 
+@_serialized
 def symbol_spec(symbol: str) -> dict:
     """Especificações do símbolo p/ calcular o valor por ponto (na moeda da conta)."""
     if not MT5_OK:
@@ -108,6 +129,7 @@ def symbol_spec(symbol: str) -> dict:
         return {}
 
 
+@_serialized
 def usd_brl_rate() -> float:
     """Cotação USD/BRL do dia. Ordem: env CRYPTO_USDBRL → símbolo USDBRL do MT5 → 5.20."""
     env = os.getenv("CRYPTO_USDBRL")
@@ -137,6 +159,7 @@ def usd_brl_rate() -> float:
     return 5.20
 
 
+@_serialized
 def account_info() -> dict:
     """Moeda e saldo da conta atual do MT5 (para rotular o P&L corretamente)."""
     if not MT5_OK:
@@ -157,6 +180,7 @@ def account_info() -> dict:
         return {}
 
 
+@_serialized
 def last_deal_profit(symbol: str):
     """P&L realizado do último deal de SAÍDA do Monitor Crypto no símbolo (MT5 history)."""
     if not MT5_OK:
@@ -165,7 +189,10 @@ def last_deal_profit(symbol: str):
         from datetime import datetime, timedelta
         if not mt5.initialize(**_init_kwargs()):
             return None
-        to = datetime.now() + timedelta(minutes=5)
+        # +1 dia à frente: o servidor do broker fica horas ADIANTE do horário local,
+        # então um fechamento recente tem carimbo "no futuro" p/ nós. Sem essa folga,
+        # os deals mais novos caem fora da janela e não são capturados (bug do fuso).
+        to = datetime.now() + timedelta(days=1)
         frm = datetime.now() - timedelta(hours=12)
         deals = mt5.history_deals_get(frm, to) or []
         mt5.shutdown()
@@ -184,6 +211,7 @@ def last_deal_profit(symbol: str):
         return None
 
 
+@_serialized
 def last_out_deal(symbol: str):
     """Último deal de SAÍDA REAL (DEAL_ENTRY_OUT) do Monitor Crypto no símbolo.
     Retorna {ticket, profit, price, time} ou None se NÃO houver fechamento real."""
@@ -193,14 +221,19 @@ def last_out_deal(symbol: str):
         from datetime import datetime, timedelta
         if not mt5.initialize(**_init_kwargs()):
             return None
-        to = datetime.now() + timedelta(minutes=5)
+        # +1 dia à frente: o servidor do broker fica horas ADIANTE do horário local,
+        # então um fechamento recente tem carimbo "no futuro" p/ nós. Sem essa folga,
+        # os deals mais novos caem fora da janela e não são capturados (bug do fuso).
+        to = datetime.now() + timedelta(days=1)
         frm = datetime.now() - timedelta(hours=12)
         deals = mt5.history_deals_get(frm, to) or []
         mt5.shutdown()
+        # por SÍMBOLO, tolerando sufixo do broker (XAUUSD.i → XAUUSD)
+        _sb = symbol.upper().split(".")[0]
         outs = [d for d in deals
-                if getattr(d, "magic", 0) == MAGIC_CRYPTO
-                and getattr(d, "entry", None) == mt5.DEAL_ENTRY_OUT
-                and (d.symbol or "").upper() == symbol.upper()]
+                if getattr(d, "entry", None) == mt5.DEAL_ENTRY_OUT
+                and (d.symbol or "").upper().split(".")[0] == _sb
+                and getattr(d, "magic", 0) != _SCALPER_MAGIC]   # ignora trades do Scalper
         if not outs:
             return None
         outs.sort(key=lambda d: d.time)
@@ -214,6 +247,7 @@ def last_out_deal(symbol: str):
         return None
 
 
+@_serialized
 def recent_closed_trades(hours: int = 48):
     """Trades FECHADOS do Monitor Crypto direto do histórico MT5 (FONTE DA VERDADE).
 
@@ -226,13 +260,36 @@ def recent_closed_trades(hours: int = 48):
         from datetime import datetime, timedelta
         if not mt5.initialize(**_init_kwargs()):
             return []
-        to = datetime.now() + timedelta(minutes=5)
+        # +1 dia à frente: o servidor do broker fica horas ADIANTE do horário local,
+        # então um fechamento recente tem carimbo "no futuro" p/ nós. Sem essa folga,
+        # os deals mais novos caem fora da janela e não são capturados (bug do fuso).
+        to = datetime.now() + timedelta(days=1)
         frm = datetime.now() - timedelta(hours=hours)
         deals = mt5.history_deals_get(frm, to) or []
         mt5.shutdown()
+        # Captura por SÍMBOLO de crypto (não só pelo magic do robô): a conta ICMarkets é
+        # dedicada a crypto, então TODO trade nesses símbolos é do Monitor Crypto — assim
+        # registramos até trades abertos/gerenciados fora do magic. Fallback: se não houver
+        # símbolos configurados, cai no filtro por magic (comportamento antigo).
+        try:
+            from services.crypto_config import get_symbols
+            _syms = set(s.upper() for s in (get_symbols() or []))
+        except Exception:
+            _syms = set()
         by_pos = {}
         for d in deals:
-            if getattr(d, "magic", 0) != MAGIC_CRYPTO:
+            _dsym = (getattr(d, "symbol", "") or "").upper()
+            _dbase = _dsym.split(".")[0]          # XAUUSD.i → XAUUSD (sufixo de broker)
+            _dmag = getattr(d, "magic", 0)
+            # ISOLAMENTO: trade do módulo Scalper (magic próprio) nunca é do Monitor Crypto,
+            # mesmo que o símbolo (BTCUSD) esteja na lista. Ignora aqui.
+            if _dmag == _SCALPER_MAGIC:
+                continue
+            # Captura se: (a) é do ROBÔ (magic exclusivo) — pega qualquer símbolo, mesmo
+            # com sufixo do broker; OU (b) o símbolo bate com a lista crypto (cobre trades
+            # manuais no terminal, já que a conta ICMarkets é dedicada a crypto).
+            _sym_ok = bool(_syms) and (_dsym in _syms or _dbase in _syms)
+            if not (_dmag == MAGIC_CRYPTO or _sym_ok):
                 continue
             by_pos.setdefault(getattr(d, "position_id", 0), []).append(d)
         out = []
@@ -257,7 +314,7 @@ def recent_closed_trades(hours: int = 48):
                       + sum(float(getattr(d, "commission", 0) or 0) for d in ds))
             out.append({
                 "out_ticket": int(od.ticket), "position_id": int(pid),
-                "symbol": (od.symbol or "").upper(), "direcao": direcao,
+                "symbol": (od.symbol or "").upper().split(".")[0], "direcao": direcao,
                 "entry_price": entry_price, "exit_price": float(od.price),
                 "volume": volume, "profit": round(profit, 2), "close_epoch": int(od.time),
             })
@@ -270,6 +327,7 @@ def recent_closed_trades(hours: int = 48):
         return []
 
 
+@_serialized
 def get_tick(symbol: str):
     """Preço atual do símbolo. Padrão original init+shutdown (estável sob concorrência)."""
     if not MT5_OK:
@@ -291,6 +349,7 @@ def get_tick(symbol: str):
         return None
 
 
+@_serialized
 def get_positions(symbol: str = None):
     """Posições abertas do Monitor Crypto (filtra pelo MAGIC exclusivo)."""
     if not MT5_OK:
@@ -321,6 +380,7 @@ def get_positions(symbol: str = None):
 
 # ── Execução ────────────────────────────────────────────────────────────────
 
+@_serialized
 def execute(symbol: str, acao: str, volume: float, sl: float = None, tp: float = None):
     """Abre ordem a mercado. Retorna (result_dict, err)."""
     if not MT5_OK:
@@ -395,6 +455,7 @@ def execute(symbol: str, acao: str, volume: float, sl: float = None, tp: float =
         return None, str(exc)
 
 
+@_serialized
 def close_position(symbol: str):
     """Fecha a posição do Monitor Crypto no símbolo. Retorna (info, err)."""
     if not MT5_OK:
@@ -429,6 +490,7 @@ def close_position(symbol: str):
         return None, str(exc)
 
 
+@_serialized
 def modify_sl(symbol: str, new_sl: float):
     """Move o stop da posição do Monitor Crypto. Retorna (ok, err)."""
     if not MT5_OK:

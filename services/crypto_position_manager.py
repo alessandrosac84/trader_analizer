@@ -16,9 +16,14 @@ REVERSAL_SCORE = 8       # |score| do sinal oposto que dispara saída por revers
 TIME_STOP_CANDLES = 40   # candles aberto sem atingir TP1 → sugere revisar
 BREAKEVEN_RR = 1.0       # a partir de 1R de lucro, move o stop para a entrada
 TRAIL_ATR = 1.2          # trailing = preço ∓ TRAIL_ATR × ATR
+# Proteção de lucro (evita "zerar" no breakeven devolvendo tudo)
+GIVEBACK_PEAK_MIN_R = 0.6  # o lucro já precisou chegar a ≥0,6R p/ armar o guard
+GIVEBACK_KEEP       = 0.5  # se o lucro cair abaixo de 50% do pico → fecha (trava metade)
+MICRO_EXIT_MIN_R    = 0.5  # revERSão pelo MICRO só fecha com lucro ≥0,5R já garantido
 
 
-def manage(pos: dict, signal: dict, atr: float = 0.0, candles_open: int = 0) -> dict:
+def manage(pos: dict, signal: dict, atr: float = 0.0, candles_open: int = 0,
+           micro_dir: str = "NEUTRO", peak_favor: float = 0.0) -> dict:
     """
     pos    : {type:'COMPRA'|'VENDA', price_open, price_current, sl, tp, profit}
     signal : sinal atual (crypto_analysis.analyze) — usado p/ detectar reversão
@@ -62,6 +67,20 @@ def manage(pos: dict, signal: dict, atr: float = 0.0, candles_open: int = 0) -> 
         # 4) Stop por tempo (sem atingir TP1)
         if candles_open >= TIME_STOP_CANDLES and rec == "MANTER" and not hit_tp:
             rec, reason = "REVISAR", f"⏰ Aberto há {candles_open} candles sem TP1 — considerar fechar."
+
+        # 5) GUARD DE DEVOLUÇÃO (MFE): chegou a um bom lucro e está devolvendo → fecha
+        #    para travar metade do pico (antes de zerar no breakeven).
+        if (not close and risk > 0 and favor > 0
+                and peak_favor >= GIVEBACK_PEAK_MIN_R * risk
+                and favor <= GIVEBACK_KEEP * peak_favor):
+            devolveu = int((1 - favor / max(peak_favor, 1e-9)) * 100)
+            rec, reason, close = "FECHAR", f"🔒 Devolveu {devolveu}% do lucro máximo — fecha p/ travar (não zerar).", True
+
+        # 6) REVERSÃO PELO MICRO: em lucro e o MICRO (M5) virou CONTRA a posição → fecha cedo,
+        #    antes de o preço devolver tudo até o breakeven.
+        micro_against = (is_buy and micro_dir == "BAIXA") or (not is_buy and micro_dir == "ALTA")
+        if (not close and micro_against and risk > 0 and favor >= MICRO_EXIT_MIN_R * risk):
+            rec, reason, close = "FECHAR", f"⚡ MICRO virou contra ({micro_dir}) com lucro — fecha antes de devolver.", True
 
         return {"mode": "MANAGE", "recommendation": rec, "reason": reason,
                 "new_sl": new_sl, "close": close,

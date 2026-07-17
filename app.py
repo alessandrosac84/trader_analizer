@@ -4,6 +4,24 @@ import re
 from pathlib import Path
 from uuid import uuid4
 
+# ── PERFIL MT5: rodar B3 e Crypto em PROCESSOS SEPARADOS ─────────────────────
+# A lib MetaTrader5 do Python é UMA conexão por processo. Para rodar os dois
+# terminais ao mesmo tempo (XP/B3 e ICMarkets/crypto), sobem-se DUAS instâncias
+# do app. MT5_PROFILE=crypto sobrescreve MT5_* com MT5_CRYPTO_* no boot → todo
+# este processo fala com o terminal/conta de crypto. Perfil "b3" (padrão) usa
+# MT5_* (XP), exatamente como hoje. Assim uma instância não troca a conta da outra.
+try:
+    from dotenv import load_dotenv as _load_env
+    _load_env()
+except Exception:
+    pass
+MT5_PROFILE = os.getenv("MT5_PROFILE", "b3").strip().lower()
+if MT5_PROFILE == "crypto":
+    for _k in ("LOGIN", "PASSWORD", "SERVER", "PATH"):
+        _v = os.getenv("MT5_CRYPTO_" + _k)
+        if _v:
+            os.environ["MT5_" + _k] = _v
+
 from flask import (
     Flask,
     jsonify,
@@ -136,7 +154,11 @@ def _register_abertura_trade(sym: str):
 # ── Confirmação de fechamento — evita fechar por leitura instável do MT5 ──
 # Exige N leituras consecutivas sem posição antes de registrar o fechamento.
 _no_position_count   = {}   # tv_symbol -> int
-_NO_POSITION_CONFIRM = 5    # leituras consecutivas sem posição para confirmar fechamento
+_NO_POSITION_CONFIRM = 3    # leituras consecutivas sem posição p/ confirmar fechamento
+                            # (3 = rápido em XP/B3 estável; falso fechamento se auto-recupera)
+# Última recomendação do gerenciador por ativo — só para ROTULAR o fechamento
+# (BREAKEVEN / REVERSÃO) com o motivo certo. NÃO altera nenhuma decisão.
+_last_manage_rec = {}       # tv_symbol -> {"rec", "reason", "ts"}
                             # (aumentado de 3→5: MT5 pode levar 1-2 ciclos para registrar nova posição)
                             # 3 = ~9s com ticker rápido (XP/B3 estável) — era 8 só pra MetaQuotes instável
 
@@ -153,6 +175,21 @@ def _startup_once():
         logger.info("DB inicializado com sucesso.")
     except Exception as e:
         logger.warning("Erro ao inicializar DB: %s", e)
+    # Instância CRYPTO: NÃO sobe os agendadores de B3/Scalper (eles usariam a conta
+    # de crypto e produziriam dados errados / bateriam no terminal errado).
+    if MT5_PROFILE == "crypto":
+        logger.info("Perfil MT5=CRYPTO — agendadores de B3/Scalper desativados nesta instância.")
+        try:
+            from services.crypto_telegram import start_daily_summary_scheduler
+            start_daily_summary_scheduler()   # resumo diário de crypto via Telegram
+        except Exception as e:
+            logger.warning("Crypto daily summary scheduler não iniciou: %s", e)
+        try:
+            from blueprints.crypto_bp import start_bg_reconciler
+            start_bg_reconciler()   # registra fechamentos mesmo com a aba em 2º plano
+        except Exception as e:
+            logger.warning("Crypto bg reconciler não iniciou: %s", e)
+        return
     try:
         from services.telegram_notifier import start_periodic_summary
         start_periodic_summary("BMFBOVESPA:WIN1!")
@@ -185,6 +222,21 @@ def _startup_once():
         _start_dr()
     except Exception as e:
         logger.warning("Daily Report Scheduler nao iniciou (nao bloqueante): %s", e)
+    try:
+        # Corrige no boot os trades do B3 que fecharam sem P&L capturado (histórico MT5).
+        from services.trade_log import backfill_missing_pnl
+        _bf = backfill_missing_pnl()
+        if _bf:
+            logger.info("Backfill P&L no boot: %d trade(s) corrigidos.", _bf)
+    except Exception as e:
+        logger.warning("Backfill P&L no boot nao rodou (nao bloqueante): %s", e)
+    try:
+        # Watcher de fechamento em background: registra o fecho + P&L mesmo com a aba
+        # do navegador em 2º plano/fechada (só captura resultado, não decide nada).
+        from services.b3_close_watcher import start_watcher as _start_b3w
+        _start_b3w()
+    except Exception as e:
+        logger.warning("B3 close watcher nao iniciou (nao bloqueante): %s", e)
 
 
 def allowed_file(filename: str) -> bool:
@@ -1288,6 +1340,17 @@ def api_autotrade_manage():
         else:
             tol = float(entry) * 0.005 if entry else 0.5
 
+        # ── Rótulo por CONTEXTO do gerenciador (só visibilidade) ──────────────
+        # Se o gerenciador acabou de recomendar FECHAR por reversão de sinal, o
+        # fechamento é REVERSÃO (mesmo que a saída caia perto da entrada/BE).
+        import time as _t
+        _mr = _last_manage_rec.get(sym_up) or _last_manage_rec.get(tv_symbol)
+        if _mr and _mr.get("rec") == "FECHAR" and (_t.time() - _mr.get("ts", 0)) < 150:
+            return "REVERSAO"
+        # Breakeven: saída ~ entrada (o stop foi movido pra entrada e o preço voltou).
+        # Vem ANTES do STOP porque, no BE, a saída ≈ entrada ≈ SL — senão viraria "STOP".
+        if entry and abs(exit_price - float(entry)) <= tol:
+            return "BREAKEVEN"
         if sl  and abs(exit_price - float(sl))  <= tol:
             return "STOP"
         if tp1 and abs(exit_price - float(tp1)) <= tol:
@@ -1351,6 +1414,43 @@ def api_autotrade_manage():
             logger.warning("Erro ao buscar exit price: %s", ex)
         return None
 
+    def _get_realized_from_history(open_log):
+        """P&L REALIZADO e preço de saída REAIS, direto do histórico do MT5 (autoritativo).
+        Só CAPTURA o resultado do trade — não altera nenhuma decisão. Retorna
+        (exit_price, pnl_brl) ou None se não conseguir. pnl_brl vem do próprio MT5
+        (moeda da conta = R$), então é o valor exato do fechamento."""
+        try:
+            import MetaTrader5 as mt5
+            from datetime import datetime, timedelta
+            tk = open_log.get("mt5_ticket")
+            if not tk:
+                return None
+            if not mt5.initialize():
+                return None
+            deals = mt5.history_deals_get(position=int(tk))
+            if not deals:
+                to = datetime.now() + timedelta(minutes=5)
+                frm = datetime.now() - timedelta(hours=24)
+                deals = [d for d in (mt5.history_deals_get(frm, to) or [])
+                         if getattr(d, "position_id", 0) == int(tk)]
+            mt5.shutdown()
+            outs = [d for d in (deals or []) if getattr(d, "entry", None) == mt5.DEAL_ENTRY_OUT]
+            if not outs:
+                return None
+            outs.sort(key=lambda d: d.time)
+            profit = sum(float(d.profit) + float(getattr(d, "swap", 0) or 0)
+                         + float(getattr(d, "commission", 0) or 0) for d in outs)
+            price = float(getattr(outs[-1], "price", 0) or 0)
+            return (price or None), round(profit, 2)
+        except Exception as ex:
+            logger.warning("Erro ao buscar P&L realizado do histórico: %s", ex)
+            try:
+                import MetaTrader5 as mt5
+                mt5.shutdown()
+            except Exception:
+                pass
+            return None
+
     if not positions:
         # ── Confirmação de fechamento ────────────────────────────────────────
         # MT5 às vezes retorna vazio por instabilidade de rede/consulta.
@@ -1380,9 +1480,18 @@ def api_autotrade_manage():
         closed_trade = None
         if open_log:
             try:
-                exit_price   = _get_exit_price(tv_symbol)
-                close_reason = _detect_close_reason(exit_price, open_log)
-                pnl_pts, pnl_brl = _calc_pnl(exit_price, open_log)
+                # 1º: P&L REALIZADO do histórico do MT5 (exato, autoritativo).
+                #     2º (fallback): estimativa pelo preço atual (comportamento antigo).
+                real = _get_realized_from_history(open_log)
+                if real and real[0]:
+                    exit_price   = real[0]
+                    close_reason = _detect_close_reason(exit_price, open_log)
+                    pnl_pts, _   = _calc_pnl(exit_price, open_log)   # pontos pela diferença
+                    pnl_brl      = real[1]                            # R$ REAL do fechamento
+                else:
+                    exit_price   = _get_exit_price(tv_symbol)
+                    close_reason = _detect_close_reason(exit_price, open_log)
+                    pnl_pts, pnl_brl = _calc_pnl(exit_price, open_log)
 
                 close_auto_trade(
                     trade_id     = open_log["id"],
@@ -1399,6 +1508,13 @@ def api_autotrade_manage():
                     "pnl_brl":      pnl_brl,
                 }
                 logger.info("Trade fechado: id=%d motivo=%s pnl=%s", open_log["id"], close_reason, pnl_pts)
+                # Atualiza o CSV durável (logs/monitor_trades.csv) a CADA fechamento →
+                # fonte sempre ao vivo, imune a lag do DB/WAL/sincronização de pasta.
+                try:
+                    from services.daily_report import _export_records
+                    _export_records()
+                except Exception:
+                    pass
                 # Notifica Telegram
                 try:
                     from services.telegram_notifier import notify_trade_closed
@@ -1457,6 +1573,19 @@ def api_autotrade_manage():
         )
     except Exception as _ana_exc:
         logger.warning("Manage: erro ao analisar posição %s: %s", tv_symbol, _ana_exc)
+
+    # Guarda a última recomendação do gerenciador (só p/ ROTULAR o fechamento depois
+    # como REVERSÃO/BREAKEVEN — não dispara nem altera nenhuma decisão).
+    try:
+        if analysis and analysis.get("recommendation"):
+            import time as _t
+            _last_manage_rec[tv_symbol] = {
+                "rec": analysis.get("recommendation"),
+                "reason": analysis.get("reason"),
+                "ts": _t.time(),
+            }
+    except Exception:
+        pass
 
     # Recupera o log do trade aberto para contexto
     from services.trade_log import save_auto_trade

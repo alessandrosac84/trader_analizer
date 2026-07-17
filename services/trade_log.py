@@ -148,6 +148,68 @@ def close_auto_trade(
     return True
 
 
+def backfill_missing_pnl(max_rows: int = 30) -> int:
+    """Preenche o P&L de trades JÁ FECHADOS que ficaram SEM resultado capturado
+    (exit_price 0/nulo ou pnl_brl nulo), buscando o realizado no histórico do MT5.
+
+    ⚠️ Só corrige a CAPTURA do resultado (exit_price/pnl) — NÃO altera closed_at,
+    close_reason, nem qualquer decisão de trade. Roda na instância do B3 (XP)."""
+    try:
+        import MetaTrader5 as mt5
+    except Exception:
+        return 0
+    with _conn() as conn:
+        rows = conn.execute("""
+            SELECT id, mt5_ticket, entry_price, acao, tv_symbol
+            FROM auto_trades
+            WHERE closed_at IS NOT NULL
+              AND mt5_ticket IS NOT NULL
+              AND (pnl_brl IS NULL OR exit_price IS NULL OR exit_price = 0)
+            ORDER BY id DESC LIMIT ?
+        """, (max_rows,)).fetchall()
+        rows = [dict(r) for r in rows]
+    if not rows:
+        return 0
+    if not mt5.initialize():
+        return 0
+    fixed = 0
+    try:
+        for r in rows:
+            tk = r.get("mt5_ticket")
+            if not tk:
+                continue
+            try:
+                deals = mt5.history_deals_get(position=int(tk)) or []
+            except Exception:
+                deals = []
+            outs = [d for d in deals if getattr(d, "entry", None) == mt5.DEAL_ENTRY_OUT]
+            if not outs:
+                continue
+            outs.sort(key=lambda d: d.time)
+            profit = sum(float(d.profit) + float(getattr(d, "swap", 0) or 0)
+                         + float(getattr(d, "commission", 0) or 0) for d in outs)
+            price = float(getattr(outs[-1], "price", 0) or 0)
+            if not price:
+                continue
+            entry = r.get("entry_price"); acao = r.get("acao")
+            pts = None
+            if entry:
+                diff = (price - float(entry)) if acao == "COMPRA" else (float(entry) - price)
+                sym = (r.get("tv_symbol") or "").upper()
+                pts = round(diff) if ("WIN" in sym or "WDO" in sym) else None
+            with _conn() as conn:
+                conn.execute(
+                    "UPDATE auto_trades SET exit_price=?, pnl_pts=?, pnl_brl=? WHERE id=?",
+                    (price, pts, round(profit, 2), r["id"]))
+            fixed += 1
+    finally:
+        try: mt5.shutdown()
+        except Exception: pass
+    if fixed:
+        logger.info("Backfill P&L do B3: %d trade(s) corrigidos do histórico MT5.", fixed)
+    return fixed
+
+
 def get_open_auto_trade(tv_symbol: str) -> "dict | None":
     """
     Retorna o trade automatico aberto mais recente para o simbolo.

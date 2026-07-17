@@ -29,8 +29,19 @@ _COLS = ["id", "datetime_brt", "symbol", "direcao", "entry_price", "sl", "tp1",
 
 COOLDOWN_SEC = 300   # 5 min entre trades por ativo (anti-overtrading)
 
+# Auto-trade que já sobe LIGADO (default vem do .env CRYPTO_AUTO_ON="XAUUSD,ETHUSD").
+# Sem isso o estado é só em memória e volta p/ desligado a cada restart. O painel
+# continua podendo ligar/desligar qualquer ativo em runtime.
+import os as _os
+_AUTO_ON_DEFAULT = {s.strip().upper() for s in _os.getenv("CRYPTO_AUTO_ON", "").split(",") if s.strip()}
+
 # Estado em memória (por processo)
 _auto = {}       # symbol -> {"enabled": bool, "last_ts": float}
+# Pré-semeia os símbolos do CRYPTO_AUTO_ON JÁ como enabled=True, para que o GET
+# /auto-state devolva o estado logo no boot (o painel lê isso ao carregar e liga o
+# botão + o loop). Sem isso o _auto ficaria vazio e a tela subiria tudo OFF.
+for _s in _AUTO_ON_DEFAULT:
+    _auto[_s] = {"enabled": True, "last_ts": 0.0, "volume": None}
 _pending = {}    # symbol -> dados da entrada (para registrar no fechamento)
 _session = {"trades": 0, "wins": 0, "losses": 0, "breakevens": 0, "pnl": 0.0,
             "gerados": 0, "executados": 0, "bloqueados": 0}
@@ -78,8 +89,10 @@ def _mark_deal_logged(ticket):
 _last_reconcile = 0.0   # throttle da reconciliação (só na tela Crypto)
 
 # Cache do monitor MACRO/MICRO (recalc no máx. a cada _MM_TTL s → não pesa o MT5).
-_MM_TTL = 12
+_MM_TTL = 5
 _mm_cache = {}   # symbol -> {"ts", "data", "prev_micro"}
+_usdbrl_cache = {"v": 5.2}   # cotação USD/BRL (atualizada no /api/crypto/account)
+_pos_peak = {}   # ticket -> lucro máximo (MFE) da posição, p/ o guard de devolução
 
 # Trava de execução por ativo — impede ordens simultâneas (corrida do auto-check)
 import threading as _threading
@@ -97,7 +110,8 @@ def _is_weekend():
 
 
 def _autost(sym):
-    return _auto.setdefault(sym.upper(), {"enabled": False, "last_ts": 0.0, "volume": None})
+    su = sym.upper()
+    return _auto.setdefault(su, {"enabled": su in _AUTO_ON_DEFAULT, "last_ts": 0.0, "volume": None})
 
 
 # ── CSV log ──────────────────────────────────────────────────────────────────
@@ -127,12 +141,17 @@ def _log_entry(symbol, direcao, result, score, ai=None):
 
 def _log_exit(symbol, exit_price, profit, reason, entry=None):
     os.makedirs(_LOGDIR, exist_ok=True)
-    # usa a entrada pendente (bot) OU a fornecida (reconciliação do histórico) OU um esqueleto
-    p = _pending.pop(symbol.upper(), None) or entry or {
-        "id": _next_id(), "datetime_brt": _now().strftime("%Y-%m-%d %H:%M:%S"),
-        "symbol": symbol.upper(), "direcao": "?", "entry_price": "", "sl": "",
-        "tp1": "", "volume": "", "score": "",
-    }
+    # PRIORIDADE para a entrada FORNECIDA (reconciliação = casada por position_id do MT5,
+    # autoritativa). Só usa a _pending quando não veio entrada explícita — assim NUNCA
+    # mistura a entrada de uma posição AINDA ABERTA com o fechamento de OUTRA posição.
+    if entry is not None:
+        p = dict(entry)
+    else:
+        p = _pending.pop(symbol.upper(), None) or {
+            "id": _next_id(), "datetime_brt": _now().strftime("%Y-%m-%d %H:%M:%S"),
+            "symbol": symbol.upper(), "direcao": "?", "entry_price": "", "sl": "",
+            "tp1": "", "volume": "", "score": "",
+        }
     res = "WIN" if profit > 0.01 else ("LOSS" if profit < -0.01 else "BE")
     p.update({"exit_price": exit_price, "profit": round(profit, 2),
               "exit_reason": reason, "resultado": res})
@@ -148,9 +167,32 @@ def _log_exit(symbol, exit_price, profit, reason, entry=None):
     if res == "WIN": _session["wins"] += 1
     elif res == "LOSS": _session["losses"] += 1
     else: _session["breakevens"] += 1
+    # Telegram: avisa o fechamento (USD + BRL). Não bloqueia nem quebra o log se falhar.
+    try:
+        from services.crypto_telegram import notify_exit
+        notify_exit(p.get("symbol", symbol), p.get("direcao"), p.get("entry_price"),
+                    exit_price, profit, reason, usdbrl=_usdbrl_cache.get("v", 5.2))
+    except Exception:
+        pass
+
+
+_reconcile_lock = _threading.Lock()
 
 
 def _reconcile_closes():
+    """Serializa a reconciliação: só UMA por vez. A thread de fundo (5s), o polling
+    do painel (_maybe_reconcile) e o register-close podem disparar juntos — sem essa
+    trava, dois rodavam ao mesmo tempo e gravavam o MESMO fechamento 2x (duplicata).
+    Se outra já está rodando, sai na hora (o próximo ciclo pega o que faltar)."""
+    if not _reconcile_lock.acquire(blocking=False):
+        return 0
+    try:
+        return _reconcile_closes_inner()
+    finally:
+        _reconcile_lock.release()
+
+
+def _reconcile_closes_inner():
     """Backstop AUTORITATIVO: varre o histórico MT5 e registra QUALQUER fechamento
     (SL/TP no broker) que ainda não esteja no CSV — mesmo que o navegador tenha
     perdido o evento (recarregou a página, estava em outra tela, etc.).
@@ -196,8 +238,11 @@ def _reconcile_closes():
         for r in existing:
             if r.get("_claimed"):
                 continue
+            # tolerância absorve diferença de comissão/swap entre o registro do cliente
+            # e o cálculo do histórico (evita duplicar o MESMO fechamento).
+            _tol = max(0.10, 0.02 * abs(t["profit"]))
             if ((r.get("symbol", "") or "").upper() == t["symbol"]
-                    and abs(_f(r.get("profit")) - t["profit"]) < 0.05):
+                    and abs(_f(r.get("profit")) - t["profit"]) < _tol):
                 matched = r
                 break
         if matched is not None:
@@ -215,6 +260,7 @@ def _reconcile_closes():
         _log_exit(t["symbol"], t.get("exit_price", 0), t["profit"], reason, entry=entry)
         _mark_deal_logged(tk)
         logged += 1
+        logger.info("crypto reconcile: registrou %s %+.2f (deal %s)", t["symbol"], t["profit"], tk)
     return logged
 
 
@@ -230,7 +276,12 @@ def api_symbols():
 def api_account():
     """Moeda/saldo da conta MT5 + cotação USD/BRL do dia."""
     from services.crypto_service import account_info, usd_brl_rate
-    return jsonify({"ok": True, "account": account_info(), "usdbrl": usd_brl_rate()})
+    rate = usd_brl_rate()
+    try:
+        _usdbrl_cache["v"] = float(rate) or 5.2
+    except Exception:
+        pass
+    return jsonify({"ok": True, "account": account_info(), "usdbrl": rate})
 
 
 @crypto_bp.route("/api/crypto/symbol-info")
@@ -324,7 +375,20 @@ def api_manage():
     p = pos[0]
     candles, _e = get_candles(symbol, TF_MINUTES.get(interval, 15))
     sig = analyze(candles, cfg_for(symbol)) if candles else {}
-    m = manage(p, sig, float(sig.get("atr") or 0.0))
+    # rastreia o PICO de lucro (MFE) desta posição para o guard de devolução
+    is_buy = p.get("type") == "COMPRA"
+    entry = float(p.get("price_open") or 0); cur = float(p.get("price_current") or entry)
+    favor = (cur - entry) if is_buy else (entry - cur)
+    tk = p.get("ticket")
+    peak = max(_pos_peak.get(tk, 0.0), favor); _pos_peak[tk] = peak
+    if len(_pos_peak) > 20:   # limpa tickets antigos (mantém só o atual)
+        _pos_peak.clear(); _pos_peak[tk] = peak
+    # direção do MICRO (M5) para a reversão antecipada
+    try:
+        micro_dir = (_mm_compute(symbol).get("micro") or {}).get("dir", "NEUTRO")
+    except Exception:
+        micro_dir = "NEUTRO"
+    m = manage(p, sig, float(sig.get("atr") or 0.0), micro_dir=micro_dir, peak_favor=peak)
     applied = None
     if do_apply and m.get("new_sl") is not None:
         ok, _err = modify_sl(symbol, m["new_sl"])
@@ -347,8 +411,8 @@ def _mm_compute(symbol):
     from services.crypto_macro_micro import tf_momentum, read
     h1, _e1 = get_candles(symbol, 60, 200)   # MACRO = H1
     m5, _e2 = get_candles(symbol, 5, 200)    # MICRO = M5
-    macro = tf_momentum(h1 or [], window=24, ema_f=9, ema_s=21)
-    micro = tf_momentum(m5 or [], window=6, ema_f=5, ema_s=13)
+    macro = tf_momentum(h1 or [], window=16, ema_f=9, ema_s=21)   # ~16h de contexto
+    micro = tf_momentum(m5 or [], window=8, ema_f=5, ema_s=13)    # ~40min (pega a virada recente)
     r = read(macro, micro)
 
     prev = (c or {}).get("prev_micro")
@@ -381,6 +445,30 @@ def _mm_compute(symbol):
             "tp1": round(tp, 5) if tp else None}
     _mm_cache[symbol] = {"ts": now, "data": data, "prev_micro": micro["dir"]}
     return data
+
+
+def _macro_h1_dir(symbol):
+    """Direção do MACRO (H1) por EMA50×EMA200 — MESMA definição validada no backtest.
+    Retorna 'alta' / 'baixa' / 'lateral', ou None se não der pra determinar (erro de
+    infra → NÃO bloqueia, para não travar tudo por uma falha transitória de leitura)."""
+    try:
+        from services.crypto_service import get_candles
+        from services.crypto_config import MACRO_TF
+        h1, err = get_candles(symbol, MACRO_TF, 260)
+        if err or not h1 or len(h1) < 205:
+            return None
+        import pandas as pd
+        c = pd.Series([float(x["close"]) for x in h1])
+        e50 = c.ewm(span=50, adjust=False).mean().iloc[-1]
+        e200 = c.ewm(span=200, adjust=False).mean().iloc[-1]
+        if e50 > e200:
+            return "alta"
+        if e50 < e200:
+            return "baixa"
+        return "lateral"
+    except Exception as exc:
+        logger.warning("crypto macro_h1 %s: %s", symbol, exc)
+        return None
 
 
 @crypto_bp.route("/api/crypto/macromicro")
@@ -423,6 +511,12 @@ def api_execute():
     if result and not err:
         _autost(symbol)["last_ts"] = time.time()
         _log_entry(symbol, acao, result, score)
+        try:
+            from services.crypto_telegram import notify_entry
+            notify_entry(symbol, acao, result.get("price"), result.get("sl"),
+                         result.get("tp"), volume, "manual")
+        except Exception:
+            pass
         return jsonify({"ok": True, "result": result})
     return jsonify({"ok": False, "error": err})
 
@@ -519,6 +613,28 @@ def api_auto_check():
                                 "motivo": ai["motivo"], "acao": sig["acao"],
                                 "score": sig.get("score"), "ts": time.time()}
 
+        # ── FILTRO MACRO (backtest 05-07/2026) ───────────────────────────────
+        # Nunca opera CONTRA a tendência do H1 (EMA50×EMA200). No caminho do SCORE
+        # também exige ADX(M15) ≥ corte calibrado do ativo. Foi o que virou o crypto
+        # de negativo p/ neutro/positivo (ex.: XAU -0.075R → +0.131R). Impulso e
+        # pullback só passam pela trava de macro (têm confirmação própria de momentum).
+        _macro = _macro_h1_dir(symbol)
+        _acao = sig["acao"]
+        _macro_ok = (_macro is None
+                     or (_acao == "COMPRA" and _macro == "alta")
+                     or (_acao == "VENDA" and _macro == "baixa"))
+        if not _macro_ok:
+            _session["bloqueados"] += 1
+            return jsonify({"ok": True, "action": "BLOCKED",
+                            "reason": f"macro H1 '{_macro}' contra {_acao} — filtro anti-lateral"})
+        if source == "score":
+            _adxv = abs(float(sig.get("adx", 0) or 0))
+            _adxcut = float(cfg.get("macro_adx", 25))
+            if _adxv < _adxcut:
+                _session["bloqueados"] += 1
+                return jsonify({"ok": True, "action": "BLOCKED",
+                                "reason": f"ADX {_adxv:.0f} < corte {_adxcut:.0f} ({symbol}) — filtro anti-lateral"})
+
         # 2ª CHECAGEM de posição logo antes de abrir (dupla confirmação): evita abrir
         # em cima de uma posição que surgiu durante o cálculo e reduz o falso-vazio
         # do get_positions. Precisa de DUAS leituras vazias para abrir.
@@ -533,6 +649,12 @@ def api_auto_check():
         if result and not exerr:
             _session["executados"] += 1
             _log_entry(symbol, sig["acao"], result, sig.get("score"), ai)
+            try:
+                from services.crypto_telegram import notify_entry
+                notify_entry(symbol, sig["acao"], result.get("price"), sig.get("stop"),
+                             sig.get("tp1"), vol, source, (ai or {}).get("motivo"))
+            except Exception:
+                pass
             return jsonify({"ok": True, "action": "EXECUTED", "acao": sig["acao"],
                             "source": source, "result": result, "ai": ai})
         st["last_ts"] = 0.0   # execução falhou → libera o cooldown
@@ -581,35 +703,63 @@ def api_register_close():
     symbol = (b.get("symbol", "") or "").upper()
     if not symbol:
         return jsonify({"ok": True, "closed": False})
+    # Registra QUALQUER fechamento real via RECONCILIAÇÃO (casada por position_id do
+    # MT5): cada posição fechada vira uma linha com a SUA PRÓPRIA entrada/saída/lucro.
+    # Nunca mistura a entrada de uma posição AINDA ABERTA com o fechamento de outra.
     try:
-        from services.crypto_service import last_out_deal
-        deal = last_out_deal(symbol)
+        _reconcile_closes()
     except Exception as exc:
-        logger.warning("crypto register-close last_out_deal: %s", exc)
-        return jsonify({"ok": True, "closed": False, "reason": "history indisponível"})
-    if not deal:
-        # posição ainda aberta / nenhum fechamento real → não registra
-        return jsonify({"ok": True, "closed": False, "reason": "sem deal de saída real"})
-    if deal["ticket"] in _logged_deals:
-        return jsonify({"ok": True, "closed": True, "dedup": True})
-    profit = deal["profit"]
-    reason = "TP" if profit > 0.01 else ("SL" if profit < -0.01 else "BE")
-    _log_exit(symbol, deal.get("price", 0), profit, reason)
-    _mark_deal_logged(deal["ticket"])   # persiste p/ a reconciliação não duplicar
-    return jsonify({"ok": True, "closed": True, "profit": profit})
+        logger.warning("crypto register-close reconcile: %s", exc)
+    # Confirma se a posição realmente sumiu (só p/ o cliente trocar de modo).
+    from services.crypto_service import get_positions, last_out_deal
+    pos, perr = get_positions(symbol)
+    if perr:
+        return jsonify({"ok": True, "closed": False, "reason": "checagem indisponível"})
+    closed = not pos
+    profit = None
+    if closed:
+        try:
+            d = last_out_deal(symbol)     # só p/ o som de saída no cliente
+            profit = d["profit"] if d else None
+        except Exception:
+            profit = None
+    return jsonify({"ok": True, "closed": closed, "profit": profit})
 
 
 def _maybe_reconcile():
-    """Roda a reconciliação no máx. 1x a cada 20s. Chamado só por endpoints da tela
-    Crypto (session/report) → NÃO adiciona carga ao MT5 durante o pregão da B3."""
+    """Roda a reconciliação no máx. 1x a cada 3s (instância crypto é dedicada à ICMarkets,
+    então pode ser rápido → lista de trades quase em tempo real)."""
     global _last_reconcile
-    if time.time() - _last_reconcile < 10:
+    if time.time() - _last_reconcile < 3:
         return
     _last_reconcile = time.time()
     try:
         _reconcile_closes()
     except Exception as exc:
         logger.warning("crypto reconcile: %s", exc)
+
+
+_bg_reconciler_started = {"on": False}
+
+def start_bg_reconciler():
+    """Reconciliação em BACKGROUND (thread própria), independente do navegador —
+    registra os fechamentos mesmo com a aba do crypto em segundo plano/fechada.
+    Só deve rodar na instância CRYPTO (dedicada à ICMarkets)."""
+    if _bg_reconciler_started["on"]:
+        return
+    _bg_reconciler_started["on"] = True
+    import threading
+
+    def _loop():
+        while True:
+            try:
+                _reconcile_closes()
+            except Exception as exc:
+                logger.warning("crypto bg reconcile: %s", exc)
+            time.sleep(5)
+
+    threading.Thread(target=_loop, name="crypto-bg-reconcile", daemon=True).start()
+    logger.info("Crypto: reconciliador em background ativo (5s).")
 
 
 @crypto_bp.route("/api/crypto/session")
@@ -691,6 +841,72 @@ def _daily(rows):
         if p > 0: g["wins"] += 1
         elif p < 0: g["losses"] += 1
     return [by[k] for k in sorted(by)]
+
+
+def _rebuild_from_history(hours: int = 120) -> int:
+    """Reconstrói o log do Monitor Crypto do ZERO a partir do histórico REAL da conta
+    de CRYPTO (ICMarkets), casado por position_id — sem fantasmas nem duplicatas.
+    ⚠️ Só mexe no crypto_trades.csv/sidecar. NÃO toca em NADA do Monitor MT5 (B3):
+    conta/terminal/magic/arquivos são outros."""
+    from services.crypto_service import recent_closed_trades
+    trades = recent_closed_trades(hours)
+    os.makedirs(_LOGDIR, exist_ok=True)
+    # backup do CSV atual
+    try:
+        if os.path.exists(_CSV):
+            import shutil
+            shutil.copy2(_CSV, os.path.join(
+                _LOGDIR, "crypto_trades_backup_rebuild_%s.csv" % _now().strftime("%Y%m%d_%H%M%S")))
+    except Exception:
+        pass
+    # zera CSV (só cabeçalho) + dedup persistido
+    with open(_CSV, "w", newline="", encoding="utf-8") as f:
+        csv.DictWriter(f, fieldnames=_COLS).writeheader()
+    _logged_deals.clear()
+    try:
+        if os.path.exists(_DEALS_FILE):
+            os.remove(_DEALS_FILE)
+    except Exception:
+        pass
+    # zera contadores de sessão (serão recompostos pela releitura do CSV)
+    for k in ("trades", "wins", "losses", "breakevens"):
+        _session[k] = 0
+    _session["pnl"] = 0.0
+    _pending.clear()
+    # reimporta cada posição fechada (na ordem de fechamento), casada por posição
+    n = 0
+    for t in trades:
+        cdt = datetime.fromtimestamp(t["close_epoch"], _BRT)
+        entry = {
+            "id": _next_id(), "datetime_brt": cdt.strftime("%Y-%m-%d %H:%M:%S"),
+            "symbol": t["symbol"], "direcao": t.get("direcao", "?"),
+            "entry_price": t.get("entry_price") if t.get("entry_price") is not None else "",
+            "sl": "", "tp1": "", "volume": t.get("volume"), "score": "",
+        }
+        reason = "TP" if t["profit"] > 0.01 else ("SL" if t["profit"] < -0.01 else "BE")
+        _log_exit(t["symbol"], t.get("exit_price", 0), t["profit"], reason, entry=entry)
+        _mark_deal_logged(t["out_ticket"])
+        n += 1
+    logger.info("crypto rebuild: %d posição(ões) reimportada(s) do histórico MT5.", n)
+    return n
+
+
+@crypto_bp.route("/api/crypto/rebuild", methods=["POST"])
+def api_rebuild():
+    """Reconstrói o histórico do Monitor Crypto pelo MT5 (ICMarkets). Não toca no B3."""
+    try:
+        hours = int(request.args.get("hours", 120))
+    except Exception:
+        hours = 120
+    # Segura a MESMA trava da reconciliação: o rebuild zera e reescreve o CSV, então
+    # não pode rodar junto com um _reconcile_closes (senão volta a duplicar).
+    with _reconcile_lock:
+        try:
+            n = _rebuild_from_history(hours)
+            return jsonify({"ok": True, "imported": n})
+        except Exception as exc:
+            logger.warning("crypto rebuild erro: %s", exc)
+            return jsonify({"ok": False, "error": str(exc)})
 
 
 @crypto_bp.route("/api/crypto/report")

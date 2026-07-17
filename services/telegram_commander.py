@@ -157,6 +157,9 @@ _BTN_CMD = {
     "📜 Scalper log":       "/sc_log",
     "🟢 Scalper ON":        "/sc_on",
     "🔴 Scalper OFF":       "/sc_off",
+    "🪙 Crypto hoje":       "/cy_status",
+    "🪙 Crypto semana":     "/cy_semana",
+    "🪙 Crypto mês":        "/cy_mes",
     "⌨️ Menu":              "/menu",
 }
 
@@ -168,6 +171,7 @@ _KEYBOARD_ROWS = [
     ["🛑 Parar bot", "✅ Ativar bot"],
     ["⚡ Scalper status", "📜 Scalper log"],
     ["🟢 Scalper ON", "🔴 Scalper OFF"],
+    ["🪙 Crypto hoje", "🪙 Crypto semana", "🪙 Crypto mês"],
 ]
 
 
@@ -209,6 +213,15 @@ def _handle_command(token: str, chat_id: str, allowed_chat_id: str, text: str) -
             handle_sc_command(token, chat_id, text)
         except Exception as _sc_exc:
             logger.warning("Scalper command dispatch error: %s", _sc_exc)
+        return
+
+    # ── Despacha comandos do Crypto (/cy*) — lê o CSV do crypto (hoje/semana/mês) ─
+    if cmd.startswith("/cy") or cmd == "/crypto":
+        try:
+            from services.crypto_telegram import handle_cy_command
+            handle_cy_command(token, chat_id, text)
+        except Exception as _cy_exc:
+            logger.warning("Crypto command dispatch error: %s", _cy_exc)
         return
 
     if cmd in ("/stop", "/desativar", "/pausar"):
