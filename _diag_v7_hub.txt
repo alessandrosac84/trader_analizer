@@ -1,0 +1,52 @@
+﻿HTTP=200
+{
+  "engines": [
+    {
+      "acao": "NEUTRO",
+      "enabled": false,
+      "id": "v7",
+      "label": "V7 \u00b7 GAP_FADE + ORB",
+      "last_msg": "",
+      "magic": 20260714,
+      "position": null,
+      "setup": "\u2014",
+      "status": "monitorando (auto OFF)"
+    },
+    {
+      "acao": "\u2014",
+      "enabled": true,
+      "id": "nr7",
+      "label": "WinGo \u00b7 NR7_BREAK",
+      "last_msg": "trades hoje: 0",
+      "magic": 20260723,
+      "position": null,
+      "setup": "NR7_BREAK",
+      "status": "ativo"
+    },
+    {
+      "acao": "\u2014",
+      "enabled": true,
+      "id": "inside",
+      "label": "WinGo \u00b7 INSIDE_BAR_BRK",
+      "last_msg": "trades hoje: 0",
+      "magic": 20260724,
+      "position": null,
+      "setup": "INSIDE_BAR_BRK",
+      "status": "ativo"
+    },
+    {
+      "acao": "\u2014",
+      "enabled": true,
+      "id": "eod",
+      "label": "WIN_EOD_REV",
+      "last_msg": "trades hoje: 0",
+      "magic": 20260722,
+      "position": null,
+      "setup": "WIN_EOD_REV",
+      "status": "ativo"
+    }
+  ],
+  "ok": true,
+  "trades": []
+}
+

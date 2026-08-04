@@ -1,0 +1,865 @@
+{
+  "version": 1,
+  "description": "Discovery feature-condition GOs aprovados (crypto harness 26/07/2026) — thresholds IS congelados",
+  "harness": "backtest_discovery_candidates_go.py",
+  "rule": "SL 1xATR TP 2xATR · quintis IS-only (70%) · sem abaixar barra GO",
+  "dedupe_note": "XAU longs com condicoes distintas — 10 paths mantidos",
+  "paths": [
+    {
+      "name": "XAUUSD_L_35",
+      "path": "XAUUSD_L_35",
+      "symbol": "XAUUSD",
+      "tf": 15,
+      "side": "COMPRA",
+      "conds": [
+        {
+          "feat": "bar_of_day",
+          "bucket": "q5"
+        },
+        {
+          "feat": "ema200_slope",
+          "bucket": "q5"
+        },
+        {
+          "feat": "dist_day_hi",
+          "bucket": "q2"
+        }
+      ],
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "comment": "[XAUUSD_L_35 M15 GO disc] feature-cond SL1 TP2",
+      "source_json": "edge_discovery/out/candidatos_v2_crypto_20260726_2104.json",
+      "harness_log": "logs/followup_discovery_then_b3_20260726_2155.txt",
+      "metrics": {
+        "net": 0.496,
+        "pf": 1.98,
+        "cons": 77,
+        "oos_net": 0.478,
+        "n": 155,
+        "score": 95.5
+      },
+      "thresholds_is": {
+        "bar_of_day": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            18.0,
+            36.0,
+            54.0,
+            73.0
+          ],
+          "lo": 73.0,
+          "hi": null,
+          "q_idx": 4
+        },
+        "ema200_slope": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            -0.00018659238969856586,
+            8.255319993251948e-06,
+            0.00017492486624075314,
+            0.00037334327180534266
+          ],
+          "lo": 0.00037334327180534266,
+          "hi": null,
+          "q_idx": 4
+        },
+        "dist_day_hi": {
+          "kind": "q",
+          "bucket": "q2",
+          "qs": [
+            0.7269839377565288,
+            1.5607980124964231,
+            2.7158901164523668,
+            4.544544627933733
+          ],
+          "lo": 0.7269839377565288,
+          "hi": 1.5607980124964231,
+          "q_idx": 1
+        }
+      },
+      "thresholds_meta": {
+        "oos_frac": 0.3,
+        "n_bars": 50000,
+        "cut": 35000,
+        "fit_from": "mt5_live",
+        "index_start": "2024-06-13 03:00:00",
+        "index_end": "2025-12-04 03:30:00"
+      },
+      "enabled": true
+    },
+    {
+      "name": "XAUUSD_L_07",
+      "path": "XAUUSD_L_07",
+      "symbol": "XAUUSD",
+      "tf": 15,
+      "side": "COMPRA",
+      "conds": [
+        {
+          "feat": "vol_day_cum_rel",
+          "bucket": "q5"
+        },
+        {
+          "feat": "hour",
+          "bucket": "q5"
+        },
+        {
+          "feat": "ema200_dist",
+          "bucket": "q5"
+        },
+        {
+          "feat": "day_range_pos",
+          "bucket": "q5"
+        }
+      ],
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "comment": "[XAUUSD_L_07 M15 GO disc] feature-cond SL1 TP2",
+      "source_json": "edge_discovery/out/candidatos_v2_crypto_20260726_2104.json",
+      "harness_log": "logs/followup_discovery_then_b3_20260726_2155.txt",
+      "metrics": {
+        "net": 0.449,
+        "pf": 1.85,
+        "cons": 78,
+        "oos_net": 0.641,
+        "n": 136,
+        "score": 96.3
+      },
+      "thresholds_is": {
+        "vol_day_cum_rel": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            13.981620654321233,
+            30.339029271309293,
+            49.07467646510829,
+            74.39835030385385
+          ],
+          "lo": 74.39835030385385,
+          "hi": null,
+          "q_idx": 4
+        },
+        "hour": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            5.0,
+            10.0,
+            14.0,
+            19.0
+          ],
+          "lo": 19.0,
+          "hi": null,
+          "q_idx": 4
+        },
+        "ema200_dist": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            -2.7422697369181117,
+            0.13110871342490713,
+            2.9149006782191145,
+            6.067884435733985
+          ],
+          "lo": 6.067884435733985,
+          "hi": null,
+          "q_idx": 4
+        },
+        "day_range_pos": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            0.24573297650905276,
+            0.4846213243378038,
+            0.7010313885313798,
+            0.8689190894291227
+          ],
+          "lo": 0.8689190894291227,
+          "hi": null,
+          "q_idx": 4
+        }
+      },
+      "thresholds_meta": {
+        "oos_frac": 0.3,
+        "n_bars": 50000,
+        "cut": 35000,
+        "fit_from": "mt5_live",
+        "index_start": "2024-06-13 03:00:00",
+        "index_end": "2025-12-04 03:30:00"
+      },
+      "enabled": true
+    },
+    {
+      "name": "XAUUSD_L_14",
+      "path": "XAUUSD_L_14",
+      "symbol": "XAUUSD",
+      "tf": 15,
+      "side": "COMPRA",
+      "conds": [
+        {
+          "feat": "hour",
+          "bucket": "q5"
+        },
+        {
+          "feat": "day_range_pos",
+          "bucket": "q5"
+        },
+        {
+          "feat": "h4_rsi",
+          "bucket": "q5"
+        }
+      ],
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "comment": "[XAUUSD_L_14 M15 GO disc] feature-cond SL1 TP2",
+      "source_json": "edge_discovery/out/candidatos_v2_crypto_20260726_2104.json",
+      "harness_log": "logs/followup_discovery_then_b3_20260726_2155.txt",
+      "metrics": {
+        "net": 0.421,
+        "pf": 1.79,
+        "cons": 81,
+        "oos_net": 0.395,
+        "n": 104,
+        "score": 96.0
+      },
+      "thresholds_is": {
+        "hour": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            5.0,
+            10.0,
+            14.0,
+            19.0
+          ],
+          "lo": 19.0,
+          "hi": null,
+          "q_idx": 4
+        },
+        "day_range_pos": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            0.24573297650905276,
+            0.4846213243378038,
+            0.7010313885313798,
+            0.8689190894291227
+          ],
+          "lo": 0.8689190894291227,
+          "hi": null,
+          "q_idx": 4
+        },
+        "h4_rsi": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            43.304622241338066,
+            51.07487863684258,
+            58.8375006619262,
+            66.95995004916116
+          ],
+          "lo": 66.95995004916116,
+          "hi": null,
+          "q_idx": 4
+        }
+      },
+      "thresholds_meta": {
+        "oos_frac": 0.3,
+        "n_bars": 50000,
+        "cut": 35000,
+        "fit_from": "mt5_live",
+        "index_start": "2024-06-13 03:00:00",
+        "index_end": "2025-12-04 03:30:00"
+      },
+      "enabled": true
+    },
+    {
+      "name": "XAUUSD_L_31",
+      "path": "XAUUSD_L_31",
+      "symbol": "XAUUSD",
+      "tf": 15,
+      "side": "COMPRA",
+      "conds": [
+        {
+          "feat": "vol_day_cum_rel",
+          "bucket": "q5"
+        },
+        {
+          "feat": "ema200_slope",
+          "bucket": "q5"
+        },
+        {
+          "feat": "dist_day_hi",
+          "bucket": "q2"
+        }
+      ],
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "comment": "[XAUUSD_L_31 M15 GO disc] feature-cond SL1 TP2",
+      "source_json": "edge_discovery/out/candidatos_v2_crypto_20260726_2104.json",
+      "harness_log": "logs/followup_discovery_then_b3_20260726_2155.txt",
+      "metrics": {
+        "net": 0.385,
+        "pf": 1.7,
+        "cons": 68,
+        "oos_net": 0.477,
+        "n": 170,
+        "score": 95.6
+      },
+      "thresholds_is": {
+        "vol_day_cum_rel": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            13.981620654321233,
+            30.339029271309293,
+            49.07467646510829,
+            74.39835030385385
+          ],
+          "lo": 74.39835030385385,
+          "hi": null,
+          "q_idx": 4
+        },
+        "ema200_slope": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            -0.00018659238969856586,
+            8.255319993251948e-06,
+            0.00017492486624075314,
+            0.00037334327180534266
+          ],
+          "lo": 0.00037334327180534266,
+          "hi": null,
+          "q_idx": 4
+        },
+        "dist_day_hi": {
+          "kind": "q",
+          "bucket": "q2",
+          "qs": [
+            0.7269839377565288,
+            1.5607980124964231,
+            2.7158901164523668,
+            4.544544627933733
+          ],
+          "lo": 0.7269839377565288,
+          "hi": 1.5607980124964231,
+          "q_idx": 1
+        }
+      },
+      "thresholds_meta": {
+        "oos_frac": 0.3,
+        "n_bars": 50000,
+        "cut": 35000,
+        "fit_from": "mt5_live",
+        "index_start": "2024-06-13 03:00:00",
+        "index_end": "2025-12-04 03:30:00"
+      },
+      "enabled": true
+    },
+    {
+      "name": "XAUUSD_L_04",
+      "path": "XAUUSD_L_04",
+      "symbol": "XAUUSD",
+      "tf": 15,
+      "side": "COMPRA",
+      "conds": [
+        {
+          "feat": "hour",
+          "bucket": "q5"
+        },
+        {
+          "feat": "ema200_slope",
+          "bucket": "q5"
+        },
+        {
+          "feat": "day_range_pos",
+          "bucket": "q5"
+        }
+      ],
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "comment": "[XAUUSD_L_04 M15 GO disc] feature-cond SL1 TP2",
+      "source_json": "edge_discovery/out/candidatos_v2_crypto_20260726_2104.json",
+      "harness_log": "logs/followup_discovery_then_b3_20260726_2155.txt",
+      "metrics": {
+        "net": 0.34,
+        "pf": 1.61,
+        "cons": 73,
+        "oos_net": 0.278,
+        "n": 168,
+        "score": 96.4
+      },
+      "thresholds_is": {
+        "hour": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            5.0,
+            10.0,
+            14.0,
+            19.0
+          ],
+          "lo": 19.0,
+          "hi": null,
+          "q_idx": 4
+        },
+        "ema200_slope": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            -0.00018659238969856586,
+            8.255319993251948e-06,
+            0.00017492486624075314,
+            0.00037334327180534266
+          ],
+          "lo": 0.00037334327180534266,
+          "hi": null,
+          "q_idx": 4
+        },
+        "day_range_pos": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            0.24573297650905276,
+            0.4846213243378038,
+            0.7010313885313798,
+            0.8689190894291227
+          ],
+          "lo": 0.8689190894291227,
+          "hi": null,
+          "q_idx": 4
+        }
+      },
+      "thresholds_meta": {
+        "oos_frac": 0.3,
+        "n_bars": 50000,
+        "cut": 35000,
+        "fit_from": "mt5_live",
+        "index_start": "2024-06-13 03:00:00",
+        "index_end": "2025-12-04 03:30:00"
+      },
+      "enabled": true
+    },
+    {
+      "name": "XAUUSD_L_02",
+      "path": "XAUUSD_L_02",
+      "symbol": "XAUUSD",
+      "tf": 15,
+      "side": "COMPRA",
+      "conds": [
+        {
+          "feat": "hour",
+          "bucket": "q5"
+        },
+        {
+          "feat": "ema200_dist",
+          "bucket": "q5"
+        },
+        {
+          "feat": "day_range_pos",
+          "bucket": "q5"
+        }
+      ],
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "comment": "[XAUUSD_L_02 M15 GO disc] feature-cond SL1 TP2",
+      "source_json": "edge_discovery/out/candidatos_v2_crypto_20260726_2104.json",
+      "harness_log": "logs/followup_discovery_then_b3_20260726_2155.txt",
+      "metrics": {
+        "net": 0.332,
+        "pf": 1.58,
+        "cons": 68,
+        "oos_net": 0.26,
+        "n": 154,
+        "score": 96.5
+      },
+      "thresholds_is": {
+        "hour": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            5.0,
+            10.0,
+            14.0,
+            19.0
+          ],
+          "lo": 19.0,
+          "hi": null,
+          "q_idx": 4
+        },
+        "ema200_dist": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            -2.7422697369181117,
+            0.13110871342490713,
+            2.9149006782191145,
+            6.067884435733985
+          ],
+          "lo": 6.067884435733985,
+          "hi": null,
+          "q_idx": 4
+        },
+        "day_range_pos": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            0.24573297650905276,
+            0.4846213243378038,
+            0.7010313885313798,
+            0.8689190894291227
+          ],
+          "lo": 0.8689190894291227,
+          "hi": null,
+          "q_idx": 4
+        }
+      },
+      "thresholds_meta": {
+        "oos_frac": 0.3,
+        "n_bars": 50000,
+        "cut": 35000,
+        "fit_from": "mt5_live",
+        "index_start": "2024-06-13 03:00:00",
+        "index_end": "2025-12-04 03:30:00"
+      },
+      "enabled": true
+    },
+    {
+      "name": "XAUUSD_S_40",
+      "path": "XAUUSD_S_40",
+      "symbol": "XAUUSD",
+      "tf": 15,
+      "side": "VENDA",
+      "conds": [
+        {
+          "feat": "h4_rsi",
+          "bucket": "q2"
+        },
+        {
+          "feat": "vol_pctl",
+          "bucket": "q1"
+        },
+        {
+          "feat": "squeeze",
+          "bucket": "1"
+        }
+      ],
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "comment": "[XAUUSD_S_40 M15 GO disc] feature-cond SL1 TP2",
+      "source_json": "edge_discovery/out/candidatos_v2_crypto_20260726_2104.json",
+      "harness_log": "logs/followup_discovery_then_b3_20260726_2155.txt",
+      "metrics": {
+        "net": 0.232,
+        "pf": 1.38,
+        "cons": 73,
+        "oos_net": 0.399,
+        "n": 132,
+        "score": 95.2
+      },
+      "thresholds_is": {
+        "h4_rsi": {
+          "kind": "q",
+          "bucket": "q2",
+          "qs": [
+            43.304622241338066,
+            51.07487863684258,
+            58.8375006619262,
+            66.95995004916116
+          ],
+          "lo": 43.304622241338066,
+          "hi": 51.07487863684258,
+          "q_idx": 1
+        },
+        "vol_pctl": {
+          "kind": "q",
+          "bucket": "q1",
+          "qs": [
+            0.2,
+            0.4,
+            0.606,
+            0.806
+          ],
+          "lo": null,
+          "hi": 0.2,
+          "q_idx": 0
+        },
+        "squeeze": {
+          "kind": "bin",
+          "eq": 1.0
+        }
+      },
+      "thresholds_meta": {
+        "oos_frac": 0.3,
+        "n_bars": 50000,
+        "cut": 35000,
+        "fit_from": "mt5_live",
+        "index_start": "2024-06-13 03:00:00",
+        "index_end": "2025-12-04 03:30:00"
+      },
+      "enabled": true
+    },
+    {
+      "name": "ETHUSD_S_36",
+      "path": "ETHUSD_S_36",
+      "symbol": "ETHUSD",
+      "tf": 60,
+      "side": "VENDA",
+      "conds": [
+        {
+          "feat": "h4_rsi",
+          "bucket": "q1"
+        },
+        {
+          "feat": "day_range_pos",
+          "bucket": "q1"
+        },
+        {
+          "feat": "gap_pct",
+          "bucket": "q1"
+        }
+      ],
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "comment": "[ETHUSD_S_36 M60 GO disc] feature-cond SL1 TP2 · live cap SL≤12 TP≤20",
+      "source_json": "edge_discovery/out/candidatos_v2_crypto_20260726_2104.json",
+      "harness_log": "logs/followup_discovery_then_b3_20260726_2155.txt",
+      "metrics": {
+        "net": 0.188,
+        "pf": 1.3,
+        "cons": 56,
+        "oos_net": 0.131,
+        "n": 243,
+        "score": 95.4
+      },
+      "thresholds_is": {
+        "h4_rsi": {
+          "kind": "q",
+          "bucket": "q1",
+          "qs": [
+            40.38207663288872,
+            47.469070112940145,
+            54.52784299217235,
+            62.15994042154885
+          ],
+          "lo": null,
+          "hi": 40.38207663288872,
+          "q_idx": 0
+        },
+        "day_range_pos": {
+          "kind": "q",
+          "bucket": "q1",
+          "qs": [
+            0.25598004860144224,
+            0.44567636033899827,
+            0.6421714929984765,
+            0.8151085027954657
+          ],
+          "lo": null,
+          "hi": 0.25598004860144224,
+          "q_idx": 0
+        },
+        "gap_pct": {
+          "kind": "q",
+          "bucket": "q1",
+          "qs": [
+            -0.4001665534395522,
+            -0.059556545948306776,
+            0.15071972068773618,
+            0.5752697069276619
+          ],
+          "lo": null,
+          "hi": -0.4001665534395522,
+          "q_idx": 0
+        }
+      },
+      "thresholds_meta": {
+        "oos_frac": 0.3,
+        "n_bars": 50000,
+        "cut": 35000,
+        "fit_from": "mt5_live",
+        "index_start": "2020-09-07 18:00:00",
+        "index_end": "2024-11-07 10:00:00"
+      },
+      "enabled": true
+    },
+    {
+      "name": "BTCUSD_L_30",
+      "path": "BTCUSD_L_30",
+      "symbol": "BTCUSD",
+      "tf": 15,
+      "side": "COMPRA",
+      "conds": [
+        {
+          "feat": "bb_width",
+          "bucket": "q1"
+        },
+        {
+          "feat": "h1_rsi",
+          "bucket": "q4"
+        },
+        {
+          "feat": "bb_width_pctl",
+          "bucket": "q1"
+        },
+        {
+          "feat": "vol_day_cum_rel",
+          "bucket": "q2"
+        }
+      ],
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "comment": "[BTCUSD_L_30 M15 GO disc] feature-cond SL1 TP2",
+      "source_json": "edge_discovery/out/candidatos_v2_crypto_20260726_2104.json",
+      "harness_log": "logs/followup_discovery_then_b3_20260726_2155.txt",
+      "metrics": {
+        "net": 0.183,
+        "pf": 1.29,
+        "cons": 61,
+        "oos_net": 0.149,
+        "n": 126,
+        "score": 95.6
+      },
+      "thresholds_is": {
+        "bb_width": {
+          "kind": "q",
+          "bucket": "q1",
+          "qs": [
+            0.005779414773742601,
+            0.008585354550568679,
+            0.011998581558371201,
+            0.018765787683821325
+          ],
+          "lo": null,
+          "hi": 0.005779414773742601,
+          "q_idx": 0
+        },
+        "h1_rsi": {
+          "kind": "q",
+          "bucket": "q4",
+          "qs": [
+            40.55172364958808,
+            47.18659269082296,
+            53.004698942725256,
+            60.12770242125502
+          ],
+          "lo": 53.004698942725256,
+          "hi": 60.12770242125502,
+          "q_idx": 3
+        },
+        "bb_width_pctl": {
+          "kind": "q",
+          "bucket": "q1",
+          "qs": [
+            0.18,
+            0.402,
+            0.602,
+            0.808
+          ],
+          "lo": null,
+          "hi": 0.18,
+          "q_idx": 0
+        },
+        "vol_day_cum_rel": {
+          "kind": "q",
+          "bucket": "q2",
+          "qs": [
+            15.261121034277448,
+            32.157505421930864,
+            50.561282041728546,
+            75.16311327701861
+          ],
+          "lo": 15.261121034277448,
+          "hi": 32.157505421930864,
+          "q_idx": 1
+        }
+      },
+      "thresholds_meta": {
+        "oos_frac": 0.3,
+        "n_bars": 50000,
+        "cut": 35000,
+        "fit_from": "mt5_live",
+        "index_start": "2025-02-17 01:00:00",
+        "index_end": "2026-02-18 22:45:00"
+      },
+      "enabled": true
+    },
+    {
+      "name": "BTCUSD_L_33",
+      "path": "BTCUSD_L_33",
+      "symbol": "BTCUSD",
+      "tf": 15,
+      "side": "COMPRA",
+      "conds": [
+        {
+          "feat": "squeeze",
+          "bucket": "1"
+        },
+        {
+          "feat": "vol_pctl",
+          "bucket": "q1"
+        },
+        {
+          "feat": "ema200_dist",
+          "bucket": "q4"
+        }
+      ],
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "comment": "[BTCUSD_L_33 M15 GO disc] feature-cond SL1 TP2",
+      "source_json": "edge_discovery/out/candidatos_v2_crypto_20260726_2104.json",
+      "harness_log": "logs/followup_discovery_then_b3_20260726_2155.txt",
+      "metrics": {
+        "net": 0.175,
+        "pf": 1.28,
+        "cons": 71,
+        "oos_net": 0.159,
+        "n": 174,
+        "score": 95.5
+      },
+      "thresholds_is": {
+        "squeeze": {
+          "kind": "bin",
+          "eq": 1.0
+        },
+        "vol_pctl": {
+          "kind": "q",
+          "bucket": "q1",
+          "qs": [
+            0.172,
+            0.396,
+            0.611,
+            0.816
+          ],
+          "lo": null,
+          "hi": 0.172,
+          "q_idx": 0
+        },
+        "ema200_dist": {
+          "kind": "q",
+          "bucket": "q4",
+          "qs": [
+            -3.664171633459721,
+            -1.2869995924152786,
+            1.024193892318684,
+            3.9834824617636384
+          ],
+          "lo": 1.024193892318684,
+          "hi": 3.9834824617636384,
+          "q_idx": 3
+        }
+      },
+      "thresholds_meta": {
+        "oos_frac": 0.3,
+        "n_bars": 50000,
+        "cut": 35000,
+        "fit_from": "mt5_live",
+        "index_start": "2025-02-17 01:00:00",
+        "index_end": "2026-02-18 22:45:00"
+      },
+      "enabled": true
+    }
+  ]
+}

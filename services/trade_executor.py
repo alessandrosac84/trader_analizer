@@ -38,7 +38,7 @@ B3_CLOSE       = dt_time(17, 30)
 # Mapeamento TV_SYMBOL -> MT5_SYMBOL para order_send
 _TV_TO_MT5_TRADE = {
     "BMFBOVESPA:WIN1!": os.getenv("WIN_MT5_SYMBOL", "WINQ26"),
-    "BMFBOVESPA:WDO1!": os.getenv("WDO_MT5_SYMBOL", "WDOQ26"),
+    "BMFBOVESPA:WDO1!": os.getenv("WDO_MT5_SYMBOL", "WDOU26"),
     "BMFBOVESPA:PETR4": "PETR4",
     "BMFBOVESPA:RADL3": "RADL3",
     "FX:EURUSD":        "EURUSD",
@@ -115,7 +115,7 @@ def get_open_positions(tv_symbol: str = None) -> "tuple[list, str | None]":
                     if p.magic == MAGIC_NUMBER and p.symbol.upper().startswith(prefix)
                 ]
 
-        mt5.shutdown()
+        # NÃO chama mt5.shutdown() — V7/WinGo/hub compartilham o terminal no mesmo processo.
         return ours, None
     except Exception as exc:
         logger.warning("get_open_positions erro: %s", exc)
@@ -190,12 +190,10 @@ def execute_trade(
 
         # Garante símbolo visível no Market Watch
         if not mt5.symbol_select(mt5_symbol, True):
-            mt5.shutdown()
             return None, f"Não foi possível selecionar '{mt5_symbol}' no Market Watch."
 
         tick = mt5.symbol_info_tick(mt5_symbol)
         if tick is None:
-            mt5.shutdown()
             return None, f"Preço não disponível para '{mt5_symbol}'."
 
         order_type = mt5.ORDER_TYPE_BUY if acao == "COMPRA" else mt5.ORDER_TYPE_SELL
@@ -275,7 +273,7 @@ def execute_trade(
         )
 
         result = mt5.order_send(request)
-        mt5.shutdown()
+        # Mantém o terminal aberto — hub V7/WinGo/manage compartilham o processo.
 
         if result is None:
             return None, "order_send retornou None."
@@ -295,10 +293,6 @@ def execute_trade(
 
     except Exception as exc:
         logger.exception("execute_trade erro: %s", exc)
-        try:
-            import MetaTrader5 as mt5; mt5.shutdown()
-        except Exception:
-            pass
         return None, str(exc)
 
 

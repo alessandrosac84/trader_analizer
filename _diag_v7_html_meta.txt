@@ -1,0 +1,4 @@
+﻿HTTP=200
+HAS_Gerenciamento=True
+HAS_carregando=True
+LEN=31327

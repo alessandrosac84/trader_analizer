@@ -160,6 +160,10 @@ _BTN_CMD = {
     "🪙 Crypto hoje":       "/cy_status",
     "🪙 Crypto semana":     "/cy_semana",
     "🪙 Crypto mês":        "/cy_mes",
+    "⚡ V7 status":         "/v7",
+    "⚡ V7 hoje":           "/v7 hoje",
+    "🟢 V7 ON":             "/v7 on",
+    "🔴 V7 OFF":            "/v7 off",
     "⌨️ Menu":              "/menu",
 }
 
@@ -172,6 +176,7 @@ _KEYBOARD_ROWS = [
     ["⚡ Scalper status", "📜 Scalper log"],
     ["🟢 Scalper ON", "🔴 Scalper OFF"],
     ["🪙 Crypto hoje", "🪙 Crypto semana", "🪙 Crypto mês"],
+    ["⚡ V7 status", "⚡ V7 hoje", "🟢 V7 ON", "🔴 V7 OFF"],
 ]
 
 
@@ -187,7 +192,25 @@ def _menu_markup() -> dict:
 
 def _resolve_button(text: str) -> "str | None":
     """Traduz o rótulo de um botão para o comando correspondente."""
-    return _BTN_CMD.get((text or "").strip())
+    t = (text or "").strip()
+    hit = _BTN_CMD.get(t)
+    if hit:
+        return hit
+    # Fallback: Telegram às vezes altera emoji — casa pelo texto sem símbolos
+    low = t.lower()
+    aliases = (
+        ("crypto hoje", "/cy_status"),
+        ("crypto semana", "/cy_semana"),
+        ("crypto mês", "/cy_mes"),
+        ("crypto mes", "/cy_mes"),
+        ("cy_status", "/cy_status"),
+        ("cy_semana", "/cy_semana"),
+        ("cy_mes", "/cy_mes"),
+    )
+    for needle, cmd in aliases:
+        if needle in low:
+            return cmd
+    return None
 
 
 # ── Processamento de comandos ──────────────────────────────────────────────
@@ -215,13 +238,26 @@ def _handle_command(token: str, chat_id: str, allowed_chat_id: str, text: str) -
             logger.warning("Scalper command dispatch error: %s", _sc_exc)
         return
 
-    # ── Despacha comandos do Crypto (/cy*) — lê o CSV do crypto (hoje/semana/mês) ─
+    # ── Despacha comandos do Crypto (/cy*) — reload do módulo p/ pegar fixes sem reiniciar
     if cmd.startswith("/cy") or cmd == "/crypto":
         try:
-            from services.crypto_telegram import handle_cy_command
-            handle_cy_command(token, chat_id, text)
+            import importlib
+            import services.crypto_telegram as _cy_mod
+            importlib.reload(_cy_mod)
+            _cy_mod.handle_cy_command(token, chat_id, text)
         except Exception as _cy_exc:
             logger.warning("Crypto command dispatch error: %s", _cy_exc)
+            _reply(token, chat_id, f"🪙 Crypto erro: {_cy_exc}")
+        return
+
+    # ── Despacha comandos do Monitor V7 (/v7*) — status, resultado, ligar/desligar ─
+    if cmd.startswith("/v7"):
+        try:
+            from services.v7_telegram import handle_v7_command
+            handle_v7_command(token, chat_id, text)
+        except Exception as _v7_exc:
+            logger.warning("V7 command dispatch error: %s", _v7_exc)
+            _reply(token, chat_id, f"Erro no comando V7: {_v7_exc}")
         return
 
     if cmd in ("/stop", "/desativar", "/pausar"):
@@ -270,112 +306,27 @@ def _handle_command(token: str, chat_id: str, allowed_chat_id: str, text: str) -
             _reply(token, chat_id, f"❌ Erro ao gerar resumo da semana: {exc}")
 
     elif cmd == "/status":
-        enabled = is_autotrade_enabled()
-        status_icon = "✅ ATIVO" if enabled else "🛑 PAUSADO"
         try:
-            from services.trade_log import auto_trades_stats
-            stats = auto_trades_stats(today_only=True)
-            total    = stats.get("total", 0)
-            wins     = stats.get("wins", 0)
-            losses   = stats.get("losses", 0)
-            bloq     = stats.get("bloqueados_ia", 0)
-            win_rate = stats.get("win_rate_pct", 0)
-            pnl_pts  = stats.get("pnl_total_pts", 0)
-            pnl_brl  = stats.get("pnl_total_brl", 0.0)
-            pnl_icon = "📈" if pnl_pts >= 0 else "📉"
-            stats_txt = (
-                f"\n━━━━━━━━━━━━━━━━━━\n"
-                f"🔢 Trades hoje: {total}\n"
-                f"✅ Gains: {wins}   ❌ Stops: {losses}\n"
-                f"🎯 Win Rate: {win_rate}%\n"
-                + (f"🚫 IA bloqueou: {bloq}\n" if bloq else "")
-                + f"{pnl_icon} P&L: {'+' if pnl_pts >= 0 else ''}{pnl_pts} pts | R${pnl_brl:+.2f}"
-            )
-        except Exception:
-            stats_txt = "\n(Erro ao carregar estatísticas)"
-
-        _reply(token, chat_id,
-            f"📊 <b>STATUS DO BOT</b>\n"
-            f"━━━━━━━━━━━━━━━━━━\n"
-            f"🤖 Auto-Trade: <b>{status_icon}</b>"
-            + stats_txt
-        )
+            import importlib
+            import services.telegram_hub_view as _hub
+            importlib.reload(_hub)
+            _reply(token, chat_id, _hub.format_status_message(is_autotrade_enabled()))
+        except Exception as exc:
+            logger.warning("status hub: %s", exc)
+            # fallback legado
+            enabled = is_autotrade_enabled()
+            status_icon = "✅ ATIVO" if enabled else "🛑 PAUSADO"
+            _reply(token, chat_id,
+                   f"📊 <b>STATUS DO BOT</b>\n"
+                   f"🤖 Auto-Trade Monitor: <b>{status_icon}</b>\n"
+                   f"⚠️ Hub completo falhou: {exc}")
 
     elif cmd in ("/trade", "/posicao", "/pos"):
-        # Mostra situação de todos os trades abertos (multi-símbolo)
         try:
-            from services.trade_log import get_open_auto_trade
-            from services.trade_executor import get_open_positions
-            import datetime
-
-            blocos = []
-            for sym in _MONITORED_SYMBOLS:
-                log       = get_open_auto_trade(sym)
-                positions, _ = get_open_positions(sym)
-                if not log and not positions:
-                    continue
-
-                label = _sym_label(sym)
-
-                # Tempo em aberto
-                tempo_txt = "—"
-                if log and log.get("opened_at"):
-                    try:
-                        opened  = datetime.datetime.fromisoformat(log["opened_at"])
-                        minutos = int((datetime.datetime.now() - opened).total_seconds() / 60)
-                        tempo_txt = f"{minutos // 60}h {minutos % 60}min" if minutos >= 60 else f"{minutos} min"
-                    except Exception:
-                        pass
-
-                # P&L em tempo real via MT5
-                pnl_pts_rt = "—"
-                pnl_brl_rt = "—"
-                price_atual = "—"
-                pnl_icon   = "📊"
-                if positions:
-                    pos    = positions[0]
-                    profit = pos.get("profit")
-                    price_atual = pos.get("price_current") or "—"
-                    try:
-                        price_atual = int(price_atual) if price_atual != "—" else "—"
-                    except Exception:
-                        pass
-                    if profit is not None:
-                        pnl_brl_rt = f"R${profit:+.2f}"
-                        volume     = pos.get("volume", 1)
-                        pnl_pts_rt = _calc_pts(sym, profit, volume)
-                        pnl_icon   = "📈" if profit >= 0 else "📉"
-
-                acao      = (log or {}).get("acao") or (positions[0].get("type_desc", "—") if positions else "—")
-                entrada   = (log or {}).get("entry_price")
-                sl        = (log or {}).get("sl_initial")
-                tp1       = (log or {}).get("tp1_initial")
-                acao_icon = "📈" if acao == "COMPRA" else "📉"
-
-                pts_str = f" | {pnl_pts_rt}" if pnl_pts_rt != "—" else ""
-                blocos.append(
-                    f"{acao_icon} <b>[{label}] TRADE EM ANDAMENTO</b>\n"
-                    f"━━━━━━━━━━━━━━━━━━\n"
-                    f"🔀 <b>Direção:</b> {acao}\n"
-                    f"💰 <b>Entrada:</b> {int(entrada) if entrada else '—'}\n"
-                    f"📍 <b>Preço atual:</b> {price_atual}\n"
-                    f"🛑 <b>Stop:</b> {int(sl) if sl else '—'}   "
-                    f"🎯 <b>TP1:</b> {int(tp1) if tp1 else '—'}\n"
-                    f"⏱ <b>Tempo aberto:</b> {tempo_txt}\n"
-                    f"━━━━━━━━━━━━━━━━━━\n"
-                    f"{pnl_icon} <b>P&L atual:</b> {pnl_brl_rt}{pts_str}"
-                )
-
-            if not blocos:
-                _reply(token, chat_id, "📭 <b>Nenhum trade aberto no momento.</b>")
-            else:
-                msg = "\n\n".join(blocos)
-                if len(blocos) > 1:
-                    msg += "\n\nUse /fechar WIN | /fechar WDO | /fechar PETR4 para fechar individualmente."
-                else:
-                    msg += "\n\nUse /fechar para encerrar este trade."
-                _reply(token, chat_id, msg)
-
+            import importlib
+            import services.telegram_hub_view as _hub
+            importlib.reload(_hub)
+            _reply(token, chat_id, _hub.format_open_trades_message())
         except Exception as exc:
             logger.warning("Erro ao buscar trade: %s", exc)
             _reply(token, chat_id, f"❌ Erro ao buscar trade: {exc}")
@@ -645,27 +596,27 @@ def _handle_command(token: str, chat_id: str, allowed_chat_id: str, text: str) -
         _reply(token, chat_id,
             "🤖 <b>Comandos disponíveis:</b>\n\n"
             "⌨️ <b>Dica:</b> use os botões abaixo da caixa de texto (/menu).\n\n"
-            "📊 <b>Informação</b>\n"
-            "/status — Bot ativo/pausado + P&L do dia\n"
-            "/trade — Todos os trades abertos (WIN + WDO + PETR4)\n"
-            "/relatorio — Relatório do dia (Monitor + Scalper)\n"
+            "📊 <b>Informação (TODOS os motores)</b>\n"
+            "/status — Monitor + Scalper + Hub B3 + Crypto (hoje)\n"
+            "/trade — Posições abertas em TODOS os motores\n"
+            "/relatorio — Relatório do dia consolidado\n"
             "/relatorio_semana — Resumo da semana\n\n"
-            "⚙️ <b>Controle do bot</b>\n"
+            "⚙️ <b>Controle Monitor MT5</b>\n"
             "/stop — Pausa novos trades\n"
             "/ativar — Reativa o auto-trade\n"
             "/pausar_hoje — Pausa hoje, reativa amanhã às 08:50\n"
             "/meta 500 — Para automaticamente ao ganhar R$500\n\n"
-            "🔧 <b>Gestão de posição (multi-ativo)</b>\n"
-            "/fechar — Fecha TODAS as posições abertas\n"
-            "/fechar WIN — Fecha só o WIN\n"
-            "/fechar WDO — Fecha só o WDO\n"
-            "/fechar PETR4 — Fecha só o PETR4\n"
-            "/be WIN — Move stop para breakeven no WIN\n"
-            "/be WDO — Move stop para breakeven no WDO\n"
-            "/be PETR4 — Move stop para breakeven no PETR4\n\n"
+            "🔧 <b>Gestão Monitor MT5</b>\n"
+            "/fechar — Fecha posições do Monitor MT5\n"
+            "/fechar WIN|WDO|PETR4 — Fecha um ativo\n"
+            "/be WIN|WDO|PETR4 — Breakeven\n\n"
             "⚡ <b>Scalper</b>\n"
             "/sc_status /sc_log /sc_on /sc_off /sc_fechar /sc_be\n\n"
-            "/menu — Mostra os botões · /help — Esta mensagem",
+            "🏗 <b>Hub B3 / V7 / WinGo</b>\n"
+            "/v7 — status · /v7 hoje|semana|mes · /v7 on|off\n\n"
+            "🪙 <b>Crypto</b>\n"
+            "/cy_status /cy_semana /cy_mes\n\n"
+            "/menu — Botões · /help — Esta mensagem",
             reply_markup=_menu_markup(),
         )
 
@@ -733,6 +684,7 @@ def _setup_bot_ui(token: str, chat_id: str) -> None:
         {"command": "ativar",           "description": "✅ Reativa o auto-trade"},
         {"command": "sc_status",        "description": "⚡ Status do Scalper"},
         {"command": "sc_log",           "description": "📜 Log do Scalper"},
+        {"command": "v7",               "description": "⚡ Status do Monitor V7 (WIN)"},
         {"command": "help",             "description": "❓ Ajuda"},
     ]
     try:

@@ -23,14 +23,18 @@ COLUMNS = [
     # Entrada
     "direcao", "entry_price", "tp_price", "sl_price", "volume",
     "auto",
-    # Score e contexto no momento da entrada
-    "score", "score_delta", "score_acel", "score_vwap",
-    "score_book", "score_vel", "score_tape", "score_horario", "score_absorcao",
+    # ── v7: breakdown REAL do _calc_multi_score (reaplicado após migração)
+    # BUG corrigido: as colunas antigas liam chaves inexistentes no breakdown
+    # ("delta_30s", "aceleracao"...) — todas as linhas gravavam 0.
+    "score",
+    "score_burst", "score_consistency", "score_book", "score_entryq",
+    "score_absorcao", "score_cumdelta", "score_vwap", "score_exaustao",
+    "score_expansao", "score_flow30", "score_horario",
     # Macro
     "vwap_price", "vwap_context", "atr_1m",
     "cum_delta", "cum_delta_bias",
     "session", "flow_signal",
-    "book_imbalance_pct",
+    "book_imbalance_pct", "spread_ticks",
     # Fluxo
     "aggr_5s_dir", "aggr_30s_dir", "velocity_3s",
     # Saída
@@ -42,8 +46,21 @@ COLUMNS = [
 
 
 def _ensure_file():
-    """Cria o diretório e arquivo CSV com cabeçalho se não existir."""
+    """Cria o diretório e arquivo CSV com cabeçalho se não existir.
+    v7: se o arquivo tem cabeçalho antigo, rotaciona para *_legacy_<data>.csv
+    (evita linhas desalinhadas com o cabeçalho)."""
     os.makedirs(LOG_DIR, exist_ok=True)
+    if os.path.exists(LOG_FILE):
+        try:
+            with open(LOG_FILE, "r", encoding="utf-8") as f:
+                header = (f.readline() or "").strip().split(",")
+            if header and header != COLUMNS:
+                stamp  = datetime.now().strftime("%Y%m%d_%H%M%S")
+                legacy = LOG_FILE.replace(".csv", f"_legacy_{stamp}.csv")
+                os.rename(LOG_FILE, legacy)
+                logger.warning("trade_logger: cabeçalho antigo — rotacionado p/ %s", legacy)
+        except Exception as exc:
+            logger.warning("trade_logger: falha checando cabeçalho: %s", exc)
     if not os.path.exists(LOG_FILE):
         with open(LOG_FILE, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=COLUMNS)
@@ -106,16 +123,19 @@ def log_entry(
             "sl_price":          round(sl_price, 4),
             "volume":            volume,
             "auto":              1 if auto else 0,
-            # Score
+            # Score — v7: chaves REAIS do breakdown de _calc_multi_score
             "score":             round(score_d.get("score", 0), 1),
-            "score_delta":       round(breakdown.get("delta_30s", 0), 1),
-            "score_acel":        round(breakdown.get("aceleracao", 0), 1),
-            "score_vwap":        round(breakdown.get("vwap", 0), 1),
-            "score_book":        round(breakdown.get("book", 0), 1),
-            "score_vel":         round(breakdown.get("velocidade", 0), 1),
-            "score_tape":        round(breakdown.get("tape_trend", 0), 1),
-            "score_horario":     round(breakdown.get("horario", 0), 1),
-            "score_absorcao":    round(breakdown.get("absorcao", 0), 1),
+            "score_burst":       round(breakdown.get("burst_vel", 0), 1),
+            "score_consistency": round(breakdown.get("tick_consistency", 0), 1),
+            "score_book":        round(breakdown.get("book_pressure", 0), 1),
+            "score_entryq":      round(breakdown.get("entry_quality", 0), 1),
+            "score_absorcao":    round(breakdown.get("absorcao_bonus", 0), 1),
+            "score_cumdelta":    round(breakdown.get("cum_delta_pen", 0), 1),
+            "score_vwap":        round(breakdown.get("vwap_trend_bonus", 0), 1),
+            "score_exaustao":    round(breakdown.get("exaustao_pen", 0), 1),
+            "score_expansao":    round(breakdown.get("expansion_bonus", 0), 1),
+            "score_flow30":      round(breakdown.get("flow30_align", 0), 1),
+            "score_horario":     round(breakdown.get("horario_pen", 0), 1),
             # Macro
             "vwap_price":        vwap_d.get("vwap", ""),
             "vwap_context":      vwap_d.get("context", "NEUTRO"),
@@ -125,6 +145,7 @@ def log_entry(
             "session":           time_d.get("session", ""),
             "flow_signal":       flow_d.get("signal", "NEUTRO"),
             "book_imbalance_pct": book_d.get("imbalance_pct", 0),
+            "spread_ticks":      (context.get("spread_ticks") if context else "") or "",
             # Fluxo
             "aggr_5s_dir":       round((a5_d.get(aggr_key) or 50), 1),
             "aggr_30s_dir":      "",   # preenchido no contexto do auto-check

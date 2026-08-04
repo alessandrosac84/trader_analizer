@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Setups ativos por ativo · Jarvis Trader</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#05070d; --panel:rgba(14,22,34,.85); --line:rgba(53,224,240,.18);
+  --cyan:#35e0f0; --green:#34e0a1; --gold:#f0b429; --muted:#5d7a8a; --text:#dbe9f0;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:'Rajdhani',system-ui,sans-serif;background:var(--bg);color:var(--text);
+  padding:24px 20px 48px;letter-spacing:.3px;
+  background-image:radial-gradient(rgba(53,224,240,.05) 1px,transparent 1px);
+  background-size:26px 26px;
+}
+.mono{font-family:'Share Tech Mono',monospace}
+h1{font-size:28px;font-weight:700;letter-spacing:1px}
+h1 span{color:var(--cyan)}
+.sub{color:var(--muted);font-family:'Share Tech Mono';font-size:12px;margin-top:6px}
+.stats{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0}
+.stat{
+  min-width:110px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;
+  background:var(--panel);text-align:center;
+}
+.stat .v{font-family:'Share Tech Mono';font-size:22px;color:var(--cyan)}
+.stat .l{font-size:11px;color:var(--muted);letter-spacing:1px;margin-top:2px}
+.callout{
+  border:1px solid rgba(53,224,240,.28);background:rgba(53,224,240,.06);
+  border-radius:10px;padding:12px 14px;margin:14px 0 18px;font-size:14px;line-height:1.45;
+}
+.callout b{color:var(--cyan)}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:18px}
+.filters label{font-family:'Share Tech Mono';font-size:12px;color:var(--muted)}
+.btn{
+  font-family:'Share Tech Mono';font-size:12px;padding:6px 12px;border-radius:6px;
+  border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer;
+}
+.btn.on{color:var(--cyan);border-color:rgba(53,224,240,.55);background:rgba(53,224,240,.1)}
+.card{
+  background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:14px 16px;margin-bottom:16px;
+}
+.card h2{
+  font-family:'Share Tech Mono';font-size:13px;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--cyan);display:flex;align-items:center;gap:10px;margin-bottom:6px;
+}
+.pill{
+  margin-left:auto;font-size:11px;padding:2px 8px;border-radius:999px;
+  border:1px solid rgba(52,224,161,.4);color:var(--green);
+}
+.blurb{color:var(--muted);font-size:13px;margin-bottom:12px}
+.table-wrap{overflow:auto}
+table{width:100%;border-collapse:collapse;font-size:13px;min-width:980px}
+th{
+  text-align:left;font-family:'Share Tech Mono';font-size:10px;color:var(--muted);
+  letter-spacing:1px;font-weight:500;padding:8px 8px;border-bottom:1px solid var(--line);
+  white-space:nowrap;
+}
+td{padding:10px 8px;border-bottom:1px solid rgba(53,224,240,.07);vertical-align:top}
+td.name{font-family:'Share Tech Mono';color:var(--gold);white-space:nowrap}
+td.num{font-family:'Share Tech Mono';text-align:right;white-space:nowrap}
+td.entry{color:#b7c9d4;max-width:360px;line-height:1.35}
+td.hours{font-family:'Share Tech Mono';font-size:12px;color:var(--cyan);white-space:nowrap}
+.note{display:block;color:var(--muted);font-size:11px;margin-top:4px}
+.foot{color:var(--muted);font-family:'Share Tech Mono';font-size:11px;margin-top:8px;line-height:1.5}
+a.back{color:var(--cyan);font-family:'Share Tech Mono';font-size:12px;text-decoration:none}
+@media(max-width:720px){body{padding:16px 12px 40px}h1{font-size:22px}}
+</style>
+</head>
+<body>
+  <a class="back" href="/newdashboard">← HUD principal</a>
+  <h1 style="margin-top:10px">Setups <span>ativos</span> por ativo</h1>
+  <div class="sub">// Monitor Índices B3 + Monitor Crypto · inventário GO ao vivo · 24/07/2026</div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="callout">
+    <div><b>Consistência %</b> = % de períodos (bimestres) positivos nos testes — nossa métrica de assertividade do GO (não é win rate por trade).</div>
+    <div style="margin-top:6px"><b>Freq. dia / sem / mês</b> = estimativa isolada (setup sozinho). B3: n ÷ (7,1a × 252). Crypto: n ÷ (2,0a × 365). Ao vivo fica menor: 1 slot por ativo + overlap.</div>
+  </div>
+
+  <div class="filters">
+    <label>FILTRAR</label>
+    <button class="btn on" data-f="ALL" onclick="filterTo('ALL')">Todos</button>
+    <button class="btn" data-f="WIN" onclick="filterTo('WIN')">WIN</button>
+    <button class="btn" data-f="WDO" onclick="filterTo('WDO')">WDO</button>
+    <button class="btn" data-f="XAU" onclick="filterTo('XAU')">XAU</button>
+    <button class="btn" data-f="ETH" onclick="filterTo('ETH')">ETH</button>
+    <button class="btn" data-f="BTC" onclick="filterTo('BTC')">BTC</button>
+    <button class="btn" data-f="EUR" onclick="filterTo('EUR')">EUR</button>
+    <button class="btn" data-f="GBP" onclick="filterTo('GBP')">GBP</button>
+  </div>
+
+  <div id="sections"></div>
+
+  <p class="foot">
+    Inventário GO ao vivo: Índices B3 (WIN/WDO) + Crypto (XAU/ETH/BTC/EUR/GBP).
+    Monitor MT5 clássico fica fora desta lista. Ações B3: 14 🟢 GO (v3 mega) em /acoes · magics 20260810+.
+    LONDON_HANDOFF legado OFF · SCORE/IMPULSO OFF. Horários B3 = pregão; crypto LH/INS = servidor IC Markets.<br>
+    Arquivo: <span class="mono">docs/setups_ativos.html</span>
+  </p>
+
+<script>
+const META = {
+  WIN: { title: "WIN (Mini Índice)", blurb: "Monitor Índices B3 · WinGo + mega + v19 + 5 discovery feature-GOs" },
+  WDO: { title: "WDO (Mini Dólar)", blurb: "Monitor Índices B3 · GOs v6–v7 + mega + v19 OUT/IMP/ENG/GAP + 3 disc" },
+  XAU: { title: "XAUUSD (Ouro)", blurb: "Monitor Crypto · mega + 7 discovery feature-GOs · 1 posição por vez" },
+  ETH: { title: "ETHUSD", blurb: "OF + insides + IMP 24h (v13/v14) + INS/HL MT + ETHUSD_S_36 disc (score OFF)" },
+  BTC: { title: "BTCUSD", blurb: "GOs insides/NR/PDH + v14 24h/noite/FDS + BTCUSD_L_30/L_33 disc (score OFF)" },
+  EUR: { title: "EURUSD", blurb: "EUR_LH + EUR_PDH_H4 + EUR_IMP_CONT_24H_MT (yellow)" },
+  GBP: { title: "GBPUSD", blurb: "GBP_INS_AM_V13 + GBP_INS_1017_V13 (GO v9/v11)" },
+};
+
+const SETUPS = [
+  {asset:"WIN",name:"GAP_FADE (V7)",entry:"Fade do gap de abertura: entra contra o gap quando o preço tenta preenchê-lo na 1ª meia hora.",hours:"09:15 (janela curta de abertura)",cons:65,netR:0.172,pf:1.38,n:null,day:"~",week:"vários / sem.",month:"abertura",note:"Parte do motor V7.4.1 · conjunto GAP+ORB cons 65% · +0,182 R · PF 1,44"},
+  {asset:"WIN",name:"ORB (V7)",entry:"Rompimento do Opening Range (1ª hora 09:00–10:00). Entra na direção do rompimento com gestão parcial.",hours:"10:00–10:45",cons:65,netR:0.189,pf:1.48,n:null,day:"~",week:"vários / sem.",month:"abertura",note:"Mesmo motor V7 · 2 contratos base p/ parcial"},
+  {asset:"WIN",name:"NR7_BREAK",entry:"Barra mais estreita das últimas 7 + volume ≥1,3× média → rompe high/low da barra anterior.",hours:"10:00–15:00",cons:59,netR:0.262,pf:1.52,n:183,day:"0.10",week:"0.5",month:"2.1"},
+  {asset:"WIN",name:"NR7_TREND_H4",entry:"Igual NR7_BREAK, só a favor do bias H4 (close H4 vs EMA50).",hours:"10:00–15:00",cons:67,netR:0.374,pf:1.81,n:102,day:"0.06",week:"0.3",month:"1.2"},
+  {asset:"WIN",name:"NR7_H4_MT",entry:"NR7 + bias H4, só segunda a quinta.",hours:"10:00–15:00 · seg–qui",cons:67,netR:0.325,pf:1.69,n:87,day:"0.05",week:"0.2",month:"1.0"},
+  {asset:"WIN",name:"NR5_H4",entry:"Igual NR7, mas range mais estreito das últimas 5 barras + bias H4.",hours:"10:00–14:30",cons:56,netR:0.245,pf:1.48,n:182,day:"0.10",week:"0.5",month:"2.1"},
+  {asset:"WIN",name:"NR5_H4_MT",entry:"NR5 + H4, só seg–qui.",hours:"10:00–14:30 · seg–qui",cons:57,netR:0.225,pf:1.44,n:150,day:"0.08",week:"0.4",month:"1.8"},
+  {asset:"WIN",name:"INSIDE_BAR_BRK",entry:"Barra inside (high≤high ant. e low≥low ant.) + rompe a inside com volume ≥1,2×.",hours:"10:00–14:00",cons:68,netR:0.159,pf:1.29,n:325,day:"0.18",week:"0.9",month:"3.8"},
+  {asset:"WIN",name:"INSIDE_H4",entry:"Inside + volume ≥1,2× + só a favor do H4.",hours:"10:00–14:00",cons:64,netR:0.308,pf:1.64,n:178,day:"0.10",week:"0.5",month:"2.1"},
+  {asset:"WIN",name:"INSIDE_V13_H4",entry:"Inside + vol ≥1,3× + H4.",hours:"10:00–14:00",cons:61,netR:0.263,pf:1.53,n:155,day:"0.09",week:"0.4",month:"1.8"},
+  {asset:"WIN",name:"INSIDE_VOL15_H4",entry:"Inside + vol ≥1,5× + H4.",hours:"10:00–14:00",cons:59,netR:0.242,pf:1.48,n:120,day:"0.07",week:"0.3",month:"1.4"},
+  {asset:"WIN",name:"INSIDE_V18_H4",entry:"Inside + vol ≥1,8× + H4 (mais seletivo).",hours:"10:00–14:00",cons:59,netR:0.267,pf:1.53,n:78,day:"0.04",week:"0.2",month:"0.9"},
+  {asset:"WIN",name:"INSIDE_1015_H4",entry:"Inside + vol ≥1,2× + H4, janela mais longa.",hours:"10:00–15:00",cons:67,netR:0.272,pf:1.55,n:221,day:"0.12",week:"0.6",month:"2.6"},
+  {asset:"WIN",name:"INSIDE_AM",entry:"Inside bar break só de manhã (sem filtro H4 extra).",hours:"10:00–12:00",cons:62,netR:0.146,pf:1.26,n:297,day:"0.17",week:"0.8",month:"3.5"},
+  {asset:"WIN",name:"HL_H4",entry:"3 higher-lows (compra) ou lower-highs (venda) + rompimento + bias H4.",hours:"10:30–14:00",cons:57,netR:0.221,pf:1.56,n:139,day:"0.08",week:"0.4",month:"1.6"},
+  {asset:"WIN",name:"WIN_PDH_1115",entry:"Rompimento PDH/PDL do dia anterior + vol ≥1,2× + bias H4 · SL barra ant. · RR 1,5.",hours:"11:00–15:00",cons:59,netR:0.326,pf:1.84,n:139,day:"0.08",week:"0.4",month:"1.6",note:"GO mega-sweep B3 · OOS +0,56 R · magic 20260740"},
+  {asset:"WIN",name:"WIN_IMP_CONT",entry:"Continuação após barra de impulso (range ≥2×ATR + vol) a favor do H4 · TP 2R. Path único (_20); variante 24H era duplicata no pregão.",hours:"09:00–18:00 (live ≥10h)",cons:65,netR:0.164,pf:1.48,n:227,day:"0.13",week:"0.6",month:"2.7",note:"GO mega-sweep B3 · OOS +0,25 R · magic 20260741"},
+  {asset:"WIN",name:"WIN_PDH_H4",entry:"Rompimento PDH/PDL + vol ≥1,2× + H4 · janela 10–16h.",hours:"10:00–16:00",cons:58,netR:0.122,pf:1.27,n:372,day:"0.21",week:"1.1",month:"4.4",note:"GO mega-sweep B3 · OOS +0,36 R · magic 20260743"},
+  {asset:"WIN",name:"WIN_NR5_1115",entry:"NR5 + vol ≥1,3× + bias H4 · janela 11–15h (refino v19).",hours:"11:00–15:00",cons:63,netR:0.428,pf:2.14,n:87,day:"0.05",week:"0.2",month:"1.0",note:"GO v19 mega · OOS +0,22 R · magic 20260746 · melhor net WIN v19"},
+  {asset:"WIN",name:"WIN_NR4_1115",entry:"NR4 + vol ≥1,3× + H4 · 11–15h — NR4 ainda não live no WIN.",hours:"11:00–15:00",cons:66,netR:0.372,pf:1.98,n:112,day:"0.06",week:"0.3",month:"1.3",note:"GO v19 mega · OOS +0,17 R · magic 20260747"},
+  {asset:"WIN",name:"WIN_INS_PM",entry:"Inside bar + vol ≥1,3× + H4 só à tarde.",hours:"13:00–16:00",cons:59,netR:0.340,pf:1.79,n:69,day:"0.04",week:"0.2",month:"0.8",note:"GO v19 mega · OOS +0,23 R · magic 20260749"},
+  {asset:"WIN",name:"WIN_VOLSPIKE_AM",entry:"Volspike ≥2× + range ≥1,5 ATR + continuação H4 de manhã.",hours:"10:00–12:30",cons:67,netR:0.273,pf:1.81,n:102,day:"0.06",week:"0.3",month:"1.2",note:"GO v19 mega · OOS +0,32 R · magic 20260759"},
+  {asset:"WIN",name:"WIN_IB_BRK_V15",entry:"Rompimento do Initial Balance 09–10 + vol ≥1,5× + H4.",hours:"10:00–13:00",cons:80,netR:0.159,pf:1.41,n:472,day:"0.27",week:"1.3",month:"5.5",note:"GO v19 mega · OOS +0,18 R · magic 20260762 · cons 80%"},
+  {asset:"WIN",name:"WIN_HL_MID",entry:"1 higher-low / lower-high + rompe + vol ≥1,3× + H4 · janela mid.",hours:"11:00–14:00",cons:69,netR:0.286,pf:1.83,n:131,day:"0.07",week:"0.4",month:"1.6",note:"GO v19 mega · OOS +0,10 R · magic 20260763"},
+  {asset:"WIN",name:"WIND_S_01",entry:"Feature-cond discovery: ema200_slope=q3 & ema200_dist=q3 & gap_pct=q5 · SL1 TP2 ATR.",hours:"pregão (M15)",cons:58,netR:0.152,pf:1.25,n:236,day:"~",week:"~",month:"~",note:"GO disc B3 · OOS +0,24 R · magic 20260750"},
+  {asset:"WIN",name:"WIND_S_08",entry:"h1_rsi=q2 & ema200_slope=q2 & vol_day_cum_rel=q3 · SL1 TP2.",hours:"pregão (M15)",cons:61,netR:0.390,pf:1.75,n:null,day:"~",week:"~",month:"~",note:"GO disc B3 · OOS +0,17 R · magic 20260751"},
+  {asset:"WIN",name:"WIND_L_11",entry:"hour=q5 & ema200_slope=q1 & vol_rel50=q1 · SL1 TP2.",hours:"pregão (M15)",cons:65,netR:0.207,pf:1.40,n:null,day:"~",week:"~",month:"~",note:"GO disc B3 · OOS +0,18 R · magic 20260752"},
+  {asset:"WIN",name:"WIND_S_12",entry:"h4_rsi=q3 & ema200_dist=q3 & gap_pct=q5 · SL1 TP2.",hours:"pregão (M15)",cons:68,netR:0.308,pf:1.55,n:null,day:"~",week:"~",month:"~",note:"GO disc B3 · OOS +0,17 R · magic 20260753"},
+  {asset:"WIN",name:"WIND_S_33",entry:"ema200_slope=q3 & h4_rsi=q3 & gap_pct=q5 · SL1 TP2.",hours:"pregão (M15)",cons:60,netR:0.198,pf:1.33,n:null,day:"~",week:"~",month:"~",note:"GO disc B3 · OOS +0,17 R · magic 20260754"},
+  {asset:"WIN",name:"WIN_EOD_REV",entry:"Fim de pregão: hora no quintil superior + volume seco + preço esticado abaixo da EMA50 → COMPRA (reversão para o close). SL 1×ATR · TP 2×ATR. Zeragem 18:12.",hours:"15:45–18:12 (avalia ~16h+)",cons:72,netR:0.285,pf:1.57,n:null,day:"até 3",week:"~",month:"~",note:"5 anos M15 · edge discovery · máx. 3 trades/dia"},
+
+  {asset:"WDO",name:"WDO_NR7_1014_H4",entry:"NR7 (barra mais estreita das 7) + vol ≥1,3× + bias H4, janela 10–14h.",hours:"10:00–14:00",cons:55,netR:0.132,pf:1.28,n:83,day:"0.05",week:"0.2",month:"1.0",note:"GO v7 · magic 20260738"},
+  {asset:"WDO",name:"WDO_PDH_H4",entry:"Rompimento do máximo/mínimo do dia anterior (PDH/PDL) com vol ≥1,2× + bias H4.",hours:"11:00–15:00",cons:57,netR:0.209,pf:1.38,n:99,day:"0.06",week:"0.3",month:"1.2",note:"GO v7 · magic 20260739 · melhor net WDO"},
+  {asset:"WDO",name:"WDO_HL_1014",entry:"1 higher-low (compra) ou lower-high (venda) + rompe + vol ≥1,3× + bias H4.",hours:"10:00–14:00",cons:68,netR:0.132,pf:1.28,n:490,day:"0.28",week:"1.4",month:"5.8",note:"GO mega-sweep B3 · OOS +0,21 R · magic 20260742"},
+  {asset:"WDO",name:"WDO_OUT_1015_MT",entry:"Outside bar (engolfo) + vol ≥1,3× + bias H4 · 10–15h · só seg–qui.",hours:"10:00–15:00 · seg–qui",cons:61,netR:0.347,pf:1.84,n:82,day:"0.05",week:"0.2",month:"1.0",note:"GO yellow refine · OOS +0,28 R · magic 20260744"},
+  {asset:"WDO",name:"WDO_OUT_GAP_DAY",entry:"Outside + gap ATR ≥0,25 a favor do trade + H4 · pregão completo.",hours:"10:00–16:30",cons:66,netR:0.414,pf:2.10,n:65,day:"0.04",week:"0.2",month:"0.8",note:"GO v19 mega · OOS +0,83 R · magic 20260745 · melhor net WDO v19"},
+  {asset:"WDO",name:"WDO_OUT_POWER",entry:"Outside + vol ≥1,3× + H4 só no power hour da tarde.",hours:"14:30–16:30",cons:62,netR:0.343,pf:1.83,n:74,day:"0.04",week:"0.2",month:"0.9",note:"GO v19 mega · OOS +0,49 R · magic 20260748"},
+  {asset:"WDO",name:"WDO_IMP_1014_MT",entry:"Continuação após impulso (range ≥1,8×ATR + vol) + H4 · 10–14 · seg–qui.",hours:"10:00–14:00 · seg–qui",cons:62,netR:0.247,pf:1.95,n:73,day:"0.04",week:"0.2",month:"0.9",note:"GO v19 mega · OOS +0,12 R · magic 20260758 · preenche célula IMP WDO"},
+  {asset:"WDO",name:"WDO_ENG_1014",entry:"Engolfo clássico + vol ≥1,3× + bias H4.",hours:"10:00–14:00",cons:63,netR:0.206,pf:1.45,n:172,day:"0.10",week:"0.5",month:"2.0",note:"GO v19 mega · OOS +0,35 R · magic 20260760"},
+  {asset:"WDO",name:"WDO_GAPC_A60",entry:"Continuação a favor do gap ≥0,60 ATR com rompimento + H4.",hours:"10:00–12:00",cons:57,netR:0.212,pf:1.53,n:192,day:"0.11",week:"0.5",month:"2.2",note:"GO v19 mega · OOS +0,21 R · magic 20260761"},
+  {asset:"WDO",name:"WDOD_S_18",entry:"vwap_slope=q3 & vol_day_cum_rel=q5 & gap_pct=q5 · SL1 TP2.",hours:"pregão (M15)",cons:56,netR:0.190,pf:1.32,n:null,day:"~",week:"~",month:"~",note:"GO disc B3 · OOS +0,26 R · magic 20260755"},
+  {asset:"WDO",name:"WDOD_S_25",entry:"vwap_slope=q3 & month=q2 & sess_ny=1 & gap_pct=q5 · SL1 TP2.",hours:"pregão (M15)",cons:56,netR:0.372,pf:1.71,n:null,day:"~",week:"~",month:"~",note:"GO disc B3 · OOS +0,65 R · magic 20260756"},
+  {asset:"WDO",name:"WDOD_S_34",entry:"month=q2 & bar_of_day=q5 & gap_pct=q5 · SL1 TP2.",hours:"pregão (M15)",cons:59,netR:0.238,pf:1.41,n:null,day:"~",week:"~",month:"~",note:"GO disc B3 · OOS +0,65 R · magic 20260757"},
+  {asset:"WDO",name:"WDO_NR5_H4",entry:"Barra mais estreita das 5 + rompe com volume ≥1,3× + bias H4.",hours:"10:00–14:30",cons:56,netR:0.136,pf:1.27,n:190,day:"0.11",week:"0.5",month:"2.2",note:"GO v6 · magic 20260736"},
+  {asset:"WDO",name:"WDO_NR4_H4",entry:"NR4 (compressão de 4 barras) + vol ≥1,3× + H4 — mais frequente que NR5.",hours:"10:00–14:00",cons:58,netR:0.188,pf:1.39,n:245,day:"0.14",week:"0.7",month:"2.9",note:"GO v7 · magic 20260737"},
+
+  {asset:"XAU",name:"ORDER_FLOW",entry:"Delta de fluxo + rompe VAH/VAL (área de valor VWAP) a favor do delta, com volume 1,5×. Avaliado em M5.",hours:"24h (sem janela fixa)",cons:67,netR:0.179,pf:1.31,n:null,day:"~",week:"~",month:"~",note:"OOS segurou · TF próprio M5"},
+  {asset:"XAU",name:"LH_047_D18",entry:"Rompimento do range asiático estreito (≤0,47 ATR) na abertura Londres + delta ≥0,18. TP 1,75× Asia. Máx. 1/dia.",hours:"09:00–11:00 (servidor IC) · Asia 01–09",cons:68,netR:0.185,pf:1.45,n:113,day:"0.15",week:"1.1",month:"4.6",note:"Cap 1 trade/dia"},
+  {asset:"XAU",name:"LH_049_D19",entry:"Handoff Londres com asia ≤0,49 ATR e delta ≥0,19. 1/dia.",hours:"09:00–11:00",cons:64,netR:0.158,pf:1.39,n:110,day:"0.15",week:"1.1",month:"4.5",note:"Cap 1/dia"},
+  {asset:"XAU",name:"LH_048_D19",entry:"Handoff Londres asia ≤0,48 · delta ≥0,19. 1/dia.",hours:"09:00–11:00",cons:64,netR:0.142,pf:1.34,n:107,day:"0.15",week:"1.0",month:"4.4",note:"Cap 1/dia"},
+  {asset:"XAU",name:"US_DRIFT",entry:"Fim da sessão US: hora no quintil superior + volume do dia alto + EMA200 subindo → COMPRA. SL 1×ATR · TP 2×ATR.",hours:"fim de sessão US (hora alta no dia)",cons:77,netR:0.343,pf:1.61,n:null,day:"~",week:"~",month:"~",note:"2,1 anos · edge discovery aprovado"},
+  {asset:"XAU",name:"RND_FADE_TIGHT",entry:"Fade em número redondo (passo 50) com delta fraco (|dn|<0,08) e preço perto do nível (≤0,15 ATR).",hours:"24h",cons:58,netR:0.178,pf:1.32,n:105,day:"0.14",week:"1.0",month:"4.3"},
+  {asset:"XAU",name:"RND_FADE_07",entry:"Fade redondo mais seletivo: |dn|<0,07 · near ≤0,14 ATR.",hours:"24h",cons:70,netR:0.273,pf:1.51,n:86,day:"0.12",week:"0.8",month:"3.5"},
+  {asset:"XAU",name:"RND_FADE_MT",entry:"Igual RND_FADE_07, só seg–qui.",hours:"24h · seg–qui",cons:61,netR:0.262,pf:1.5,n:69,day:"0.09",week:"0.7",month:"2.8"},
+  {asset:"XAU",name:"RND_FADE_065",entry:"Fade ainda mais apertado: |dn|<0,065 · near 0,135 ATR.",hours:"24h",cons:68,netR:0.278,pf:1.53,n:77,day:"0.11",week:"0.7",month:"3.2"},
+  {asset:"XAU",name:"RND_FADE_075_MT",entry:"|dn|<0,075 · near 0,145 · só seg–qui.",hours:"24h · seg–qui",cons:58,netR:0.149,pf:1.26,n:73,day:"0.10",week:"0.7",month:"3.0"},
+  {asset:"XAU",name:"XAU_INSIDE_H4",entry:"Inside bar 09–14 + vol ≥1,2× + rompe a favor do bias H4.",hours:"09:00–14:00 (servidor)",cons:67,netR:0.315,pf:1.62,n:75,day:"0.10",week:"0.7",month:"3.1"},
+  {asset:"XAU",name:"XAU_INS_AM",entry:"Mesmo inside H4, só manhã.",hours:"09:00–12:00",cons:58,netR:0.295,pf:1.57,n:70,day:"0.10",week:"0.7",month:"2.9"},
+  {asset:"XAU",name:"XAU_IMP_CONT_20",entry:"Continuação após barra de impulso (range ≥2×ATR + vol) a favor do H4.",hours:"09:00–18:00",cons:74,netR:0.400,pf:2.33,n:68,day:"0.09",week:"0.7",month:"2.8",note:"GO v11 · melhor impulso XAU"},
+  {asset:"XAU",name:"XAU_NR4_1016_H4",entry:"NR4 (compressão de 4 barras) + vol ≥1,3× + bias H4 · 10–16h.",hours:"10:00–16:00",cons:60,netR:0.224,pf:1.39,n:77,day:"0.15",week:"1.0",month:"4.5",note:"GO mega-sweep gaps · OOS +0,50 R"},
+  {asset:"XAU",name:"XAU_PDH_H4",entry:"Rompimento do máximo/mínimo das ~96 barras anteriores (PDH/PDL proxy) + vol ≥1,2× + H4.",hours:"10:00–16:00",cons:65,netR:0.205,pf:1.39,n:158,day:"0.31",week:"2.2",month:"9.3",note:"GO mega-sweep gaps · OOS +0,33 R"},
+  {asset:"XAU",name:"XAU_PDH_1115",entry:"Mesmo PDH/PDL + vol ≥1,2× + H4, janela mais curta 11–15h.",hours:"11:00–15:00",cons:60,netR:0.175,pf:1.32,n:77,day:"0.15",week:"1.0",month:"4.5",note:"GO mega-sweep gaps · OOS +0,23 R"},
+  {asset:"XAU",name:"XAU_HL_24H",entry:"Higher-low (compra) ou lower-high (venda) + rompe + vol ≥1,3× + bias H4 · 24h.",hours:"24h",cons:85,netR:0.170,pf:1.31,n:927,day:"1.81",week:"12.7",month:"54.5",note:"GO mega-sweep gaps · OOS +0,17 R · alta frequência"},
+  {asset:"XAU",name:"XAUUSD_L_35",entry:"Feature-cond: bar_of_day=q5 & ema200_slope=q5 & dist_day_hi=q2 → COMPRA. SL 1×ATR · TP 2×ATR. Thresholds IS congelados.",hours:"quando condições (M15)",cons:77,netR:0.496,pf:1.98,n:155,day:"~",week:"~",month:"~",note:"GO discovery harness 26/07 · melhor net XAU disc · OOS +0,48 R"},
+  {asset:"XAU",name:"XAUUSD_L_07",entry:"vol_day_cum_rel=q5 & hour=q5 & ema200_dist=q5 & day_range_pos=q5 → COMPRA. SL1 TP2.",hours:"fim de sessão (hora q5)",cons:78,netR:0.449,pf:1.85,n:136,day:"~",week:"~",month:"~",note:"GO discovery · OOS +0,64 R"},
+  {asset:"XAU",name:"XAUUSD_L_14",entry:"hour=q5 & day_range_pos=q5 & h4_rsi=q5 → COMPRA. SL1 TP2.",hours:"hora q5",cons:81,netR:0.421,pf:1.79,n:104,day:"~",week:"~",month:"~",note:"GO discovery · OOS +0,40 R"},
+  {asset:"XAU",name:"XAUUSD_L_31",entry:"vol_day_cum_rel=q5 & ema200_slope=q5 & dist_day_hi=q2 → COMPRA. SL1 TP2.",hours:"quando condições",cons:68,netR:0.385,pf:1.70,n:170,day:"~",week:"~",month:"~",note:"GO discovery · OOS +0,48 R"},
+  {asset:"XAU",name:"XAUUSD_L_04",entry:"hour=q5 & ema200_slope=q5 & day_range_pos=q5 → COMPRA. SL1 TP2.",hours:"hora q5",cons:73,netR:0.340,pf:1.61,n:168,day:"~",week:"~",month:"~",note:"GO discovery · OOS +0,28 R"},
+  {asset:"XAU",name:"XAUUSD_L_02",entry:"hour=q5 & ema200_dist=q5 & day_range_pos=q5 → COMPRA. SL1 TP2.",hours:"hora q5",cons:68,netR:0.332,pf:1.58,n:154,day:"~",week:"~",month:"~",note:"GO discovery · OOS +0,26 R · L_07 é superconjunto com vol"},
+  {asset:"XAU",name:"XAUUSD_S_40",entry:"h4_rsi=q2 & vol_pctl=q1 & squeeze=1 → VENDA. SL1 TP2.",hours:"quando squeeze + vol seco",cons:73,netR:0.232,pf:1.38,n:132,day:"~",week:"~",month:"~",note:"GO discovery · OOS +0,40 R"},
+
+  {asset:"XAU",name:"PULLBACK",entry:"Macro H1 alinhado + micro M5 realinha após recuo → entra a favor da tendência maior.",hours:"quando macro/micro disparam (sem clock fixo)",cons:null,netR:0.208,pf:1.64,n:47,day:"0.05",week:"0.3",month:"1.4",note:"🟡 amostra fraca (n=47) · 1,4 anos no motor PRO"},
+
+  {asset:"ETH",name:"ORDER_FLOW",entry:"Mesma lógica de delta + área de valor, no TF validado M15 para ETH.",hours:"24h · TF M15",cons:67,netR:0.26,pf:1.51,n:null,day:"~",week:"~",month:"~",note:"OOS segurou"},
+  {asset:"ETH",name:"ETH_INSIDE_H4",entry:"Inside + vol + bias H4 (mesmo conceito do XAU_INSIDE_H4).",hours:"09:00–14:00 (servidor)",cons:65,netR:0.191,pf:1.34,n:85,day:"0.12",week:"0.8",month:"3.5"},
+  {asset:"ETH",name:"ETH_INS_1015",entry:"Inside + vol ≥1,2× + bias H4, janela 10–15h.",hours:"10:00–15:00",cons:59,netR:0.251,pf:1.46,n:92,day:"0.13",week:"0.9",month:"3.8",note:"GO v8"},
+  {asset:"ETH",name:"ETH_INS_0918_V13",entry:"Inside + vol ≥1,3× + H4, janela ampliada 09–18h.",hours:"09:00–18:00",cons:67,netR:0.232,pf:1.43,n:116,day:"0.16",week:"1.1",month:"4.8",note:"GO v11"},
+  {asset:"ETH",name:"ETH_IMP_CONT_24H",entry:"Continuação após barra de impulso (range ≥2×ATR + vol) a favor do H4 — sem filtro de hora.",hours:"24h",cons:76,netR:0.230,pf:1.68,n:67,day:"0.09",week:"0.6",month:"2.8",note:"GO v13 24h · OOS +0,33 R"},
+  {asset:"ETH",name:"ETH_IMP_CONT_24H_V18",entry:"Impulso continuação com ATR×1,8 + vol ≥1,6× + H4 · 24h (mais permissivo no range).",hours:"24h",cons:82,netR:0.260,pf:1.8,n:72,day:"0.10",week:"0.7",month:"3.0",note:"GO v14 · OOS +0,09 R"},
+  {asset:"ETH",name:"ETH_IMP_TP25_24H",entry:"Mesmo impulso ATR×2 + vol, TP 2,5R · 24h.",hours:"24h",cons:76,netR:0.201,pf:1.58,n:68,day:"0.09",week:"0.6",month:"2.8",note:"GO v14 · OOS +0,12 R"},
+  {asset:"ETH",name:"ETH_INS_24H_MT",entry:"Inside + vol ≥1,3× + H4 · 24h · só seg–qui.",hours:"24h · seg–qui",cons:82,netR:0.237,pf:1.42,n:135,day:"0.26",week:"1.3",month:"5.6",note:"GO v14 · OOS +0,40 R · cobre overnight semana"},
+  {asset:"ETH",name:"ETH_HL_24H_MT",entry:"Higher-low / lower-high + vol ≥1,3× + H4 · 24h · seg–qui.",hours:"24h · seg–qui",cons:82,netR:0.197,pf:1.35,n:389,day:"0.75",week:"3.8",month:"16.2",note:"GO v14 · OOS +0,09 R"},
+  {asset:"ETH",name:"ETH_RSI_RECL_M60",entry:"RSI ant. &lt;30 (ou &gt;70) + reclaim na barra atual + vol ≥1,2× + bias H4.",hours:"24h · TF M60",cons:65,netR:0.191,pf:1.37,n:125,day:"0.05",week:"0.3",month:"1.4",note:"GO v20 · OOS +0,17 R"},
+
+  {asset:"BTC",name:"BTC_INS_1015",entry:"Primeiro GO BTC: inside + vol ≥1,2× + H4 · 10–15h.",hours:"10:00–15:00",cons:72,netR:0.195,pf:1.34,n:106,day:"0.15",week:"1.0",month:"4.3",note:"GO v8 · histórico ~1,4a"},
+  {asset:"BTC",name:"BTC_INS_1015_V13",entry:"Versão mais seletiva: inside + vol ≥1,3× + H4 · 10–15h.",hours:"10:00–15:00",cons:65,netR:0.306,pf:1.57,n:65,day:"0.09",week:"0.6",month:"2.7",note:"GO v10 · OOS +0,36 R"},
+  {asset:"BTC",name:"BTC_INS_0918_V13",entry:"Inside + vol ≥1,3× + H4 · janela 09–18h (captura mais sessões).",hours:"09:00–18:00",cons:83,netR:0.294,pf:1.55,n:135,day:"0.19",week:"1.3",month:"5.6",note:"GO v11 · OOS +0,18 R"},
+  {asset:"BTC",name:"BTC_NR5_1016",entry:"Barra mais estreita das 5 + rompe com vol ≥1,3× + bias H4.",hours:"10:00–16:00",cons:56,netR:0.211,pf:1.36,n:79,day:"0.11",week:"0.8",month:"3.3",note:"GO v11 · OOS +0,12 R"},
+  {asset:"BTC",name:"BTC_INS_1017_V13",entry:"Inside + vol ≥1,3× + H4 · janela 10–17h.",hours:"10:00–17:00",cons:78,netR:0.314,pf:1.6,n:114,day:"0.16",week:"1.1",month:"4.7",note:"GO v12 weekend · OOS +0,11 R"},
+  {asset:"BTC",name:"BTC_INS_1117_V13",entry:"Inside + vol ≥1,3× + H4 · janela 11–17h.",hours:"11:00–17:00",cons:83,netR:0.412,pf:1.86,n:102,day:"0.14",week:"1.0",month:"4.2",note:"GO v12 weekend · OOS +0,17 R"},
+  {asset:"BTC",name:"BTC_INS_1218_V13",entry:"Inside + vol ≥1,3× + H4 · janela 12–18h.",hours:"12:00–18:00",cons:61,netR:0.443,pf:1.95,n:100,day:"0.14",week:"1.0",month:"4.1",note:"GO v12 weekend · OOS +0,17 R"},
+  {asset:"BTC",name:"BTC_INS_V135_0916",entry:"Inside + vol ≥1,35× + H4 · janela 09–16h.",hours:"09:00–16:00",cons:83,netR:0.309,pf:1.58,n:79,day:"0.11",week:"0.8",month:"3.2",note:"GO v12 weekend · OOS +0,38 R"},
+  {asset:"BTC",name:"BTC_INS_0816_V13",entry:"Inside + vol ≥1,3× + H4 · janela 08–16h (abre cedo).",hours:"08:00–16:00",cons:83,netR:0.273,pf:1.51,n:103,day:"0.14",week:"1.0",month:"4.2",note:"GO v12 weekend · OOS +0,33 R"},
+  {asset:"BTC",name:"BTC_NR5_0915",entry:"Barra mais estreita das 5 + rompe com vol ≥1,3× + bias H4 · 09–15h.",hours:"09:00–15:00",cons:61,netR:0.365,pf:1.66,n:71,day:"0.10",week:"0.7",month:"2.9",note:"GO v12 weekend · OOS +0,23 R"},
+  {asset:"BTC",name:"BTC_NR4_1016",entry:"NR4 (compressão de 4 barras) + vol ≥1,3× + bias H4 · 10–16h.",hours:"10:00–16:00",cons:67,netR:0.220,pf:1.38,n:107,day:"0.15",week:"1.0",month:"4.4",note:"GO v12 weekend · OOS +0,16 R"},
+  {asset:"BTC",name:"BTC_H4_PB_EMA",entry:"Pullback na EMA21 a favor do bias H4 · janela 10–18h.",hours:"10:00–18:00",cons:83,netR:0.154,pf:1.28,n:1024,day:"1.40",week:"9.8",month:"42.1",note:"GO v12 weekend · OOS +0,34 R"},
+  {asset:"BTC",name:"BTC_INS_24H_V13",entry:"Inside + vol ≥1,3× + bias H4 · sem filtro de hora (cobre noite e fim de semana).",hours:"24h",cons:78,netR:0.181,pf:1.33,n:266,day:"0.36",week:"2.5",month:"11.0",note:"GO v13 24h · OOS +0,12 R · diurnos têm prioridade no cascade"},
+  {asset:"BTC",name:"BTC_PDH_H4",entry:"Rompimento PDH/PDL (proxy 96 barras) + vol ≥1,2× + bias H4 · 10–16h.",hours:"10:00–16:00",cons:67,netR:0.181,pf:1.34,n:95,day:"0.19",week:"1.3",month:"5.6",note:"GO mega-sweep gaps · OOS +0,35 R"},
+  {asset:"BTC",name:"BTC_PDH_24H",entry:"PDH/PDL + vol ≥1,2× + H4 · sem filtro de hora (noite/FDS).",hours:"24h",cons:78,netR:0.192,pf:1.37,n:342,day:"0.47",week:"3.3",month:"14.2",note:"GO v14 · OOS +0,24 R"},
+  {asset:"BTC",name:"BTC_PDH_24H_V13",entry:"PDH/PDL + vol ≥1,3× + H4 · 24h.",hours:"24h",cons:78,netR:0.168,pf:1.32,n:283,day:"0.39",week:"2.7",month:"11.8",note:"GO v14 · OOS +0,17 R"},
+  {asset:"BTC",name:"BTC_PDH_ASIA_0008",entry:"PDH/PDL + vol ≥1,2× + H4 · sessão Ásia.",hours:"00:00–08:00",cons:78,netR:0.213,pf:1.43,n:138,day:"0.19",week:"1.3",month:"5.7",note:"GO v14 · OOS +0,17 R"},
+  {asset:"BTC",name:"BTC_PDH_NIGHT_2010",entry:"PDH/PDL + vol ≥1,2× + H4 · janela noturna wrap.",hours:"20:00–10:00",cons:78,netR:0.172,pf:1.33,n:193,day:"0.26",week:"1.9",month:"8.0",note:"GO v14 · OOS +0,23 R"},
+  {asset:"BTC",name:"BTC_PDH_24H_MT",entry:"PDH/PDL + vol ≥1,2× + H4 · 24h · seg–qui.",hours:"24h · seg–qui",cons:65,netR:0.155,pf:1.29,n:229,day:"0.44",week:"2.2",month:"9.5",note:"GO v14 · OOS +0,16 R"},
+  {asset:"BTC",name:"BTC_NR4_24H_V14",entry:"NR4 + vol ≥1,4× + H4 · 24h.",hours:"24h",cons:72,netR:0.190,pf:1.35,n:222,day:"0.30",week:"2.1",month:"9.2",note:"GO v14 · OOS +0,31 R"},
+  {asset:"BTC",name:"BTC_NR5_24H_V14",entry:"NR5 + vol ≥1,4× + H4 · 24h.",hours:"24h",cons:72,netR:0.197,pf:1.37,n:167,day:"0.23",week:"1.6",month:"6.9",note:"GO v14 · OOS +0,14 R"},
+  {asset:"BTC",name:"BTC_NR5_1622",entry:"NR5 + vol ≥1,3× + H4 · janela late (fora FX late).",hours:"16:00–22:00",cons:59,netR:0.273,pf:1.56,n:65,day:"0.09",week:"0.6",month:"2.7",note:"GO v14 · OOS +0,24 R"},
+  {asset:"BTC",name:"BTC_H4_PB_EMA_MT24",entry:"Pullback EMA21 + bias H4 · 24h · seg–qui.",hours:"24h · seg–qui",cons:83,netR:0.139,pf:1.25,n:1203,day:"2.31",week:"11.6",month:"50.1",note:"GO v14 · OOS +0,12 R"},
+  {asset:"BTC",name:"BTC_RSI_RECL_M60",entry:"RSI ant. &lt;30 (ou &gt;70) + reclaim + vol ≥1,2× + bias H4.",hours:"24h · TF M60",cons:56,netR:0.200,pf:1.38,n:115,day:"0.04",week:"0.3",month:"1.3",note:"GO v20 · OOS +0,35 R"},
+  {asset:"BTC",name:"BTC_BBFADE_NY",entry:"Poke fora da Bollinger + rejeição (close volta) + bias H4 · sessão NY.",hours:"13:00–17:00",cons:65,netR:0.175,pf:1.34,n:168,day:"0.23",week:"1.6",month:"7.0",note:"GO v20 · OOS +0,15 R"},
+  {asset:"BTC",name:"BTCUSD_L_30",entry:"bb_width=q1 & h1_rsi=q4 & bb_width_pctl=q1 & vol_day_cum_rel=q2 → COMPRA. SL1 TP2.",hours:"quando squeeze BB",cons:61,netR:0.183,pf:1.29,n:126,day:"~",week:"~",month:"~",note:"GO discovery · OOS +0,15 R"},
+  {asset:"BTC",name:"BTCUSD_L_33",entry:"squeeze=1 & vol_pctl=q1 & ema200_dist=q4 → COMPRA. SL1 TP2.",hours:"quando squeeze + vol seco",cons:71,netR:0.175,pf:1.28,n:174,day:"~",week:"~",month:"~",note:"GO discovery · OOS +0,16 R"},
+
+  {asset:"EUR",name:"EUR_LH_047_TP165",entry:"London handoff: range asiático ≤0,47 ATR + delta ≥0,18 · TP 1,65×asia. Máx. 1/dia.",hours:"09:00–11:00 (servidor)",cons:68,netR:0.145,pf:1.33,n:135,day:"0.19",week:"1.3",month:"5.5",note:"GO v10 · primeiro path EUR · OOS +0,20 R"},
+  {asset:"EUR",name:"EUR_PDH_H4",entry:"Rompimento PDH/PDL (proxy 96 barras) + vol ≥1,2× + bias H4 · 10–16h.",hours:"10:00–16:00",cons:72,netR:0.191,pf:1.41,n:159,day:"0.31",week:"2.2",month:"9.4",note:"GO mega-sweep gaps · OOS +0,18 R"},
+  {asset:"EUR",name:"EUR_IMP_CONT_24H_MT",entry:"Continuação após impulso ATR×2 + vol · 24h · só seg–qui.",hours:"24h · seg–qui",cons:58,netR:0.124,pf:1.29,n:109,day:"0.21",week:"1.1",month:"4.5",note:"GO yellow refine · OOS +0,09 R"},
+
+  {asset:"GBP",name:"GBP_INS_AM_V13",entry:"Inside manhã + vol ≥1,3× + bias H4 (refino do 🟡 INS_AM).",hours:"09:00–12:00",cons:64,netR:0.344,pf:1.71,n:71,day:"0.10",week:"0.7",month:"2.9",note:"GO v9 refine · OOS +0,12 R"},
+  {asset:"GBP",name:"GBP_INS_1017_V13",entry:"Inside + vol ≥1,3× + H4 · janela 10–17h.",hours:"10:00–17:00",cons:68,netR:0.284,pf:1.58,n:98,day:"0.14",week:"0.9",month:"4.0",note:"GO v11 · OOS +0,17 R"},
+];
+
+let cur = "ALL";
+
+function count(a){ return SETUPS.filter(s => s.asset === a).length; }
+
+function renderStats(){
+  document.getElementById("stats").innerHTML = [
+    ["WIN", count("WIN")],
+    ["WDO", count("WDO")],
+    ["XAU", count("XAU")],
+    ["ETH", count("ETH")],
+    ["BTC", count("BTC")],
+    ["EUR", count("EUR")],
+    ["GBP", count("GBP")],
+    ["TOTAL", SETUPS.length],
+  ].map(([l,v]) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
+}
+
+function row(s){
+  const cons = s.cons != null ? s.cons + "%" : "—";
+  const n = s.n != null ? s.n : "—";
+  const net = (s.netR >= 0 ? "+" : "") + s.netR.toFixed(3);
+  const note = s.note ? `<span class="note">${s.note}</span>` : "";
+  return `<tr>
+    <td class="name">${s.name}</td>
+    <td class="entry">${s.entry}${note}</td>
+    <td class="hours">${s.hours}</td>
+    <td class="num">${cons}</td>
+    <td class="num">${net}</td>
+    <td class="num">${s.pf.toFixed(2)}</td>
+    <td class="num">${n}</td>
+    <td class="num">${s.day}</td>
+    <td class="num">${s.week}</td>
+    <td class="num">${s.month}</td>
+  </tr>`;
+}
+
+function section(asset){
+  const list = SETUPS.filter(s => s.asset === asset);
+  const m = META[asset];
+  return `<section class="card" data-asset="${asset}">
+    <h2>${m.title}<span class="pill">${list.length} setup${list.length===1?"":"s"}</span></h2>
+    <div class="blurb">${m.blurb}</div>
+    <div class="table-wrap"><table>
+      <thead><tr>
+        <th>Setup</th><th>Como entra</th><th>Horário</th><th>Cons.%</th>
+        <th>Net R</th><th>PF</th><th>n</th><th>Dia</th><th>Sem</th><th>Mês</th>
+      </tr></thead>
+      <tbody>${list.map(row).join("")}</tbody>
+    </table></div>
+  </section>`;
+}
+
+function render(){
+  const order = ["WIN","WDO","XAU","ETH","BTC","EUR","GBP"];
+  const show = cur === "ALL" ? order : [cur];
+  document.getElementById("sections").innerHTML = show.map(section).join("");
+  document.querySelectorAll(".filters .btn").forEach(b => {
+    b.classList.toggle("on", b.dataset.f === cur);
+  });
+}
+
+function filterTo(a){ cur = a; render(); }
+
+renderStats();
+render();
+</script>
+</body>
+</html>

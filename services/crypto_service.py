@@ -129,20 +129,19 @@ def symbol_spec(symbol: str) -> dict:
         return {}
 
 
+# Cache USD/BRL (evita bater no MT5/HTTP a cada poll do dashboard).
+_USDBRL_CACHE = {"v": None, "ts": 0.0, "src": "fallback"}
+_USDBRL_TTL = 3600.0  # 1h
+
+
 @_serialized
-def usd_brl_rate() -> float:
-    """Cotação USD/BRL do dia. Ordem: env CRYPTO_USDBRL → símbolo USDBRL do MT5 → 5.20."""
-    env = os.getenv("CRYPTO_USDBRL")
-    if env:
-        try:
-            return float(env)
-        except Exception:
-            pass
+def _usdbrl_from_mt5() -> float | None:
+    """Tenta cotação USDBRL no terminal MT5 da conta crypto."""
     if not MT5_OK:
-        return 5.20
+        return None
     try:
         if not mt5.initialize(**_init_kwargs()):
-            return 5.20
+            return None
         for s in ("USDBRL", "USDBRL.a", "USDBRLm", "USDBRL.i"):
             try:
                 mt5.symbol_select(s, True)
@@ -156,7 +155,58 @@ def usd_brl_rate() -> float:
     except Exception:
         try: mt5.shutdown()
         except Exception: pass
+    return None
+
+
+def _usdbrl_from_awesome() -> float | None:
+    """Fallback HTTP: AwesomeAPI USD-BRL (economia.awesomeapi.com.br)."""
+    try:
+        import json
+        import urllib.request
+        url = "https://economia.awesomeapi.com.br/json/last/USD-BRL"
+        req = urllib.request.Request(url, headers={"User-Agent": "trader_analizer/1.0"})
+        with urllib.request.urlopen(req, timeout=4) as resp:
+            data = json.loads(resp.read().decode("utf-8", errors="replace"))
+        bid = (data.get("USDBRL") or {}).get("bid")
+        if bid:
+            return round(float(bid), 4)
+    except Exception as exc:
+        logger.debug("usd_brl AwesomeAPI: %s", exc)
+    return None
+
+
+def usd_brl_rate() -> float:
+    """Cotação USD/BRL. Ordem: env CRYPTO_USDBRL → MT5 → AwesomeAPI (cache 1h) → 5.20."""
+    import time as _time
+    env = os.getenv("CRYPTO_USDBRL")
+    if env:
+        try:
+            v = float(env)
+            _USDBRL_CACHE.update(v=v, ts=_time.time(), src="env")
+            return v
+        except Exception:
+            pass
+    now = _time.time()
+    if _USDBRL_CACHE["v"] and (now - _USDBRL_CACHE["ts"]) < _USDBRL_TTL:
+        return float(_USDBRL_CACHE["v"])
+    rate = _usdbrl_from_mt5()
+    if rate:
+        _USDBRL_CACHE.update(v=rate, ts=now, src="mt5")
+        return rate
+    rate = _usdbrl_from_awesome()
+    if rate:
+        _USDBRL_CACHE.update(v=rate, ts=now, src="awesomeapi")
+        return rate
+    if _USDBRL_CACHE["v"]:
+        return float(_USDBRL_CACHE["v"])
+    _USDBRL_CACHE.update(v=5.20, ts=now, src="fallback")
     return 5.20
+
+
+def usd_brl_meta() -> dict:
+    """Valor + fonte da cotação (p/ UI indicar discretamente)."""
+    v = usd_brl_rate()
+    return {"usdbrl": v, "source": _USDBRL_CACHE.get("src") or "fallback"}
 
 
 @_serialized
@@ -370,6 +420,7 @@ def get_positions(symbol: str = None):
                 "volume": float(p.volume), "price_open": float(p.price_open),
                 "price_current": float(p.price_current), "sl": float(p.sl), "tp": float(p.tp),
                 "profit": float(p.profit),
+                "time": int(getattr(p, "time", 0) or 0),   # epoch de abertura (p/ time-stop)
             })
         return out, None
     except Exception as exc:
@@ -380,7 +431,65 @@ def get_positions(symbol: str = None):
 
 # ── Execução ────────────────────────────────────────────────────────────────
 
+_READY_CACHE = {"ts": 0.0, "ok": True, "detail": "ok"}
+_READY_TTL = 20.0
+
+
 @_serialized
+def mt5_execution_ready():
+    """
+    Pré-checagem operacional antes do cascade GO.
+    Retorna (ok: bool, detail: str).
+    Cobre o caso clássico retcode 10027 (AutoTrading desligado no terminal).
+    Cache curto: o runtime checa 5 símbolos/ciclo — evita 5× initialize.
+    """
+    import time as _t
+    now = _t.time()
+    if now - float(_READY_CACHE["ts"]) < _READY_TTL:
+        return bool(_READY_CACHE["ok"]), str(_READY_CACHE["detail"])
+    if not MT5_OK:
+        return False, "MetaTrader5 não instalado"
+    try:
+        if not mt5.initialize(**_init_kwargs()):
+            detail = f"MT5 não inicializado: {mt5.last_error()}"
+            _READY_CACHE.update(ts=now, ok=False, detail=detail)
+            return False, detail
+        ti = mt5.terminal_info()
+        ai = mt5.account_info()
+        mt5.shutdown()
+        if ti is None:
+            detail = "MT5 terminal_info indisponível (terminal fechado?)"
+            _READY_CACHE.update(ts=now, ok=False, detail=detail)
+            return False, detail
+        if not getattr(ti, "connected", True):
+            detail = "MT5 terminal desconectado"
+            _READY_CACHE.update(ts=now, ok=False, detail=detail)
+            return False, detail
+        if not getattr(ti, "trade_allowed", True):
+            detail = ("MT5 AutoTrading DESLIGADO no terminal "
+                      "(botão Algo Trading / AutoTrading) — GOs disparam mas fill=10027")
+            _READY_CACHE.update(ts=now, ok=False, detail=detail)
+            return False, detail
+        if ai is not None and hasattr(ai, "trade_expert") and not ai.trade_expert:
+            detail = "Conta MT5 com trade por Expert Advisors desabilitado"
+            _READY_CACHE.update(ts=now, ok=False, detail=detail)
+            return False, detail
+        if ai is not None and hasattr(ai, "trade_allowed") and not ai.trade_allowed:
+            detail = "Conta MT5 sem permissão de trade"
+            _READY_CACHE.update(ts=now, ok=False, detail=detail)
+            return False, detail
+        _READY_CACHE.update(ts=now, ok=True, detail="ok")
+        return True, "ok"
+    except Exception as exc:
+        try:
+            mt5.shutdown()
+        except Exception:
+            pass
+        detail = f"checagem MT5 falhou: {exc}"
+        _READY_CACHE.update(ts=now, ok=False, detail=detail)
+        return False, detail
+
+
 def execute(symbol: str, acao: str, volume: float, sl: float = None, tp: float = None):
     """Abre ordem a mercado. Retorna (result_dict, err)."""
     if not MT5_OK:
@@ -388,6 +497,14 @@ def execute(symbol: str, acao: str, volume: float, sl: float = None, tp: float =
     try:
         if not mt5.initialize(**_init_kwargs()):
             return None, f"MT5 não inicializado: {mt5.last_error()}"
+        # Fail-fast operacional (evita cascade inteiro achar que "não há gatilho")
+        ti = mt5.terminal_info()
+        if ti is not None and not getattr(ti, "trade_allowed", True):
+            mt5.shutdown()
+            _READY_CACHE.update(ts=0.0, ok=False,
+                                detail="MT5 AutoTrading DESLIGADO no terminal")
+            return None, ("MT5 retcode 10027: AutoTrading disabled by client "
+                          "(ligue Algo Trading no terminal IC Markets)")
         if not mt5.symbol_select(symbol, True):
             mt5.shutdown()
             return None, f"Símbolo '{symbol}' não disponível no Market Watch."
@@ -402,6 +519,16 @@ def execute(symbol: str, acao: str, volume: float, sl: float = None, tp: float =
         tick_size = float(info.trade_tick_size or info.point or 0.00001)
         stops_lvl = int(getattr(info, "trade_stops_level", 0) or 0)
         point     = float(info.point or tick_size)
+
+        # Caps live SL/TP (ETH/BTC/EUR/GBP) — evita ATR H1 discovery / estrutural gigante.
+        # Posição já aberta: crypto_bp/manage encurta TP via modify_sl_tp.
+        if sl is not None and tp is not None:
+            try:
+                from services.crypto_edge_setups import apply_live_caps, live_caps_for
+                if live_caps_for(symbol):
+                    sl, tp = apply_live_caps(symbol, acao, price, sl, tp)
+            except Exception:
+                pass
 
         def snap(p):
             if p is None or tick_size == 0:
@@ -509,6 +636,34 @@ def modify_sl(symbol: str, new_sl: float):
         mt5.shutdown()
         if res is None or res.retcode != mt5.TRADE_RETCODE_DONE:
             return False, f"Falha ao mover stop: {res.comment if res else 'None'}"
+        return True, None
+    except Exception as exc:
+        try: mt5.shutdown()
+        except Exception: pass
+        return False, str(exc)
+
+
+@_serialized
+def modify_sl_tp(symbol: str, new_sl: float = None, new_tp: float = None):
+    """Altera SL e/ou TP da posição do Monitor Crypto. Retorna (ok, err)."""
+    if not MT5_OK:
+        return False, "MetaTrader5 não instalado."
+    try:
+        if not mt5.initialize(**_init_kwargs()):
+            return False, f"MT5 não inicializado: {mt5.last_error()}"
+        poss = [p for p in (mt5.positions_get(symbol=symbol) or []) if p.magic == MAGIC_CRYPTO]
+        if not poss:
+            mt5.shutdown()
+            return False, "Sem posição do Monitor Crypto."
+        p = poss[0]
+        sl = float(new_sl) if new_sl is not None else float(p.sl)
+        tp = float(new_tp) if new_tp is not None else float(p.tp)
+        req = {"action": mt5.TRADE_ACTION_SLTP, "symbol": symbol, "position": p.ticket,
+               "sl": sl, "tp": tp}
+        res = mt5.order_send(req)
+        mt5.shutdown()
+        if res is None or res.retcode != mt5.TRADE_RETCODE_DONE:
+            return False, f"Falha ao alterar SL/TP: {res.comment if res else 'None'}"
         return True, None
     except Exception as exc:
         try: mt5.shutdown()

@@ -226,12 +226,31 @@ def build_daily_report() -> str:
     mon = _monitor_stats()
     sca = _scalper_today()
 
+    # Hub B3 (V7+WinGo+EOD) + Crypto CSV
+    hub = {}
+    try:
+        from services.b3_trade_hub import unified_period
+        hub = unified_period("day") or {}
+    except Exception as exc:
+        logger.debug("daily_report hub: %s", exc)
+    cy_rows = []
+    cy_pnl_usd = 0.0
+    cy_rate = 5.2
+    try:
+        from services.crypto_telegram import _rows_period, _usdbrl
+        cy_rows = _rows_period("day")
+        cy_rate = _usdbrl()
+        cy_pnl_usd = round(sum(float(r.get("profit") or 0) for r in cy_rows), 2)
+    except Exception as exc:
+        logger.debug("daily_report crypto: %s", exc)
+
     mon_pnl = mon.get("pnl_total_brl", 0.0) or 0.0
     sca_pnl = sca.get("pnl", 0.0) or 0.0
-    combined = round(mon_pnl + sca_pnl, 2)
+    hub_pnl = float(hub.get("pnl_brl") or 0.0)
+    cy_pnl_brl = round(cy_pnl_usd * cy_rate, 2)
+    combined = round(mon_pnl + sca_pnl + hub_pnl + cy_pnl_brl, 2)
     comb_icon = "🟢" if combined > 0 else ("🔴" if combined < 0 else "⚪")
 
-    # Monitor
     m_total = mon.get("total", 0)
     m_wins = mon.get("wins", 0)
     m_loss = mon.get("losses", 0)
@@ -239,7 +258,6 @@ def build_daily_report() -> str:
     m_bloq = mon.get("bloqueados_ia", 0)
     mon_icon = "📈" if mon_pnl >= 0 else "📉"
 
-    # Scalper
     s_total = sca.get("total", 0)
     s_wins = sca.get("wins", 0)
     s_loss = sca.get("losses", 0)
@@ -274,6 +292,35 @@ def build_daily_report() -> str:
     else:
         lines.append("   Sem trades hoje.")
 
+    # Hub B3
+    h_n = int(hub.get("trades") or 0)
+    h_icon = "📈" if hub_pnl >= 0 else "📉"
+    lines += ["", "🏗 <b>HUB B3</b> (V7 + WinGo + EOD)"]
+    if h_n:
+        lines.append(
+            f"   Trades: {h_n}   ✅{hub.get('wins', 0)}  ❌{hub.get('losses', 0)}   "
+            f"WR: {hub.get('win_rate', 0)}%"
+        )
+        lines.append(f"   {h_icon} P&L: {_fmt_brl(hub_pnl)}")
+        by = hub.get("by_setup") or {}
+        if by:
+            top = sorted(by.items(), key=lambda kv: abs(kv[1].get("pnl_brl") or 0), reverse=True)[:5]
+            for name, d in top:
+                lines.append(f"   · {name}: {d.get('n', 0)} · {_fmt_brl(d.get('pnl_brl'))}")
+    else:
+        lines.append("   Sem trades hoje.")
+
+    # Crypto
+    cy_icon = "📈" if cy_pnl_usd >= 0 else "📉"
+    lines += ["", "🪙 <b>CRYPTO</b>"]
+    if cy_rows:
+        cy_w = sum(1 for r in cy_rows if float(r.get("profit") or 0) > 0)
+        cy_l = sum(1 for r in cy_rows if float(r.get("profit") or 0) < 0)
+        lines.append(f"   Trades: {len(cy_rows)}   ✅{cy_w}  ❌{cy_l}")
+        lines.append(f"   {cy_icon} P&L: $ {cy_pnl_usd:+.2f} · {_fmt_brl(cy_pnl_brl)}")
+    else:
+        lines.append("   Sem trades hoje.")
+
     lines += [
         "",
         "━━━━━━━━━━━━━━━━━━",
@@ -283,7 +330,6 @@ def build_daily_report() -> str:
     if hint:
         lines.append(hint.lstrip("\n"))
 
-    # remove linhas vazias duplicadas mantendo espaçamento intencional
     return "\n".join(l for l in lines if l is not None)
 
 

@@ -1,0 +1,1180 @@
+{
+  "version": 1,
+  "description": "Discovery feature-condition GOs B3 (harness 27/07/2026) — thresholds IS congelados",
+  "harness": "backtest_discovery_candidates_go.py",
+  "rule": "SL 1xATR TP 2xATR · quintis IS-only (70%) · sem abaixar barra GO",
+  "generated_at": "2026-07-27T06:45:10",
+  "paths": [
+    {
+      "name": "WIND_S_01",
+      "path": "WIND_S_01",
+      "symbol": "WIN$D",
+      "tf": 15,
+      "side": "VENDA",
+      "conds": [
+        {
+          "feat": "ema200_slope",
+          "bucket": "q3"
+        },
+        {
+          "feat": "ema200_dist",
+          "bucket": "q3"
+        },
+        {
+          "feat": "gap_pct",
+          "bucket": "q5"
+        }
+      ],
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "comment": "[WIND_S_01 M15 GO disc] feature-cond SL1 TP2",
+      "source_json": "edge_discovery/out/candidatos_v2_b3_20260727_0047.json",
+      "harness_log": "logs/discovery_candidates_go_20260727_0536.txt",
+      "metrics": {
+        "net": 0.152,
+        "pf": 1.25,
+        "cons": 58,
+        "oos_net": 0.239,
+        "n": 236,
+        "score": 96.6
+      },
+      "thresholds_is": {
+        "ema200_slope": {
+          "kind": "q",
+          "bucket": "q3",
+          "qs": [
+            -0.0004069583892223686,
+            -0.00017957344165022663,
+            7.270407796670225e-05,
+            0.0003562639998810159
+          ],
+          "lo": -0.00017957344165022663,
+          "hi": 7.270407796670225e-05,
+          "q_idx": 2
+        },
+        "ema200_dist": {
+          "kind": "q",
+          "bucket": "q3",
+          "qs": [
+            -4.503331063126309,
+            -2.016923398241162,
+            0.868962054092169,
+            4.388718711980338
+          ],
+          "lo": -2.016923398241162,
+          "hi": 0.868962054092169,
+          "q_idx": 2
+        },
+        "gap_pct": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            -0.3105334029514414,
+            -0.08406388855530203,
+            0.09437523593808984,
+            0.29611565929280614
+          ],
+          "lo": 0.29611565929280614,
+          "hi": null,
+          "q_idx": 4
+        }
+      },
+      "thresholds_meta": {
+        "oos_frac": 0.3,
+        "n_bars": 46545,
+        "cut": 32581,
+        "fit_from": "mt5_b3",
+        "index_start": "2021-07-26 09:00:00",
+        "index_end": "2025-01-31 15:00:00"
+      },
+      "enabled": true,
+      "asset_group": "win"
+    },
+    {
+      "name": "WIND_S_08",
+      "path": "WIND_S_08",
+      "symbol": "WIN$D",
+      "tf": 15,
+      "side": "VENDA",
+      "conds": [
+        {
+          "feat": "h1_rsi",
+          "bucket": "q2"
+        },
+        {
+          "feat": "ema200_slope",
+          "bucket": "q2"
+        },
+        {
+          "feat": "vol_day_cum_rel",
+          "bucket": "q3"
+        }
+      ],
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "comment": "[WIND_S_08 M15 GO disc] feature-cond SL1 TP2",
+      "source_json": "edge_discovery/out/candidatos_v2_b3_20260727_0047.json",
+      "harness_log": "logs/discovery_candidates_go_20260727_0536.txt",
+      "metrics": {
+        "net": 0.39,
+        "pf": 1.75,
+        "cons": 61,
+        "oos_net": 0.167,
+        "n": null,
+        "score": 96.1
+      },
+      "thresholds_is": {
+        "h1_rsi": {
+          "kind": "q",
+          "bucket": "q2",
+          "qs": [
+            38.235218932841164,
+            45.26578380535328,
+            53.093347298370524,
+            61.25808617169432
+          ],
+          "lo": 38.235218932841164,
+          "hi": 45.26578380535328,
+          "q_idx": 1
+        },
+        "ema200_slope": {
+          "kind": "q",
+          "bucket": "q2",
+          "qs": [
+            -0.0004069583892223686,
+            -0.00017957344165022663,
+            7.270407796670225e-05,
+            0.0003562639998810159
+          ],
+          "lo": -0.0004069583892223686,
+          "hi": -0.00017957344165022663,
+          "q_idx": 1
+        },
+        "vol_day_cum_rel": {
+          "kind": "q",
+          "bucket": "q3",
+          "qs": [
+            11.240265517430668,
+            20.445042344825985,
+            26.74929281231372,
+            32.91267797913942
+          ],
+          "lo": 20.445042344825985,
+          "hi": 26.74929281231372,
+          "q_idx": 2
+        }
+      },
+      "thresholds_meta": {
+        "oos_frac": 0.3,
+        "n_bars": 46545,
+        "cut": 32581,
+        "fit_from": "mt5_b3",
+        "index_start": "2021-07-26 09:00:00",
+        "index_end": "2025-01-31 15:00:00"
+      },
+      "enabled": true,
+      "asset_group": "win"
+    },
+    {
+      "name": "WIND_L_11",
+      "path": "WIND_L_11",
+      "symbol": "WIN$D",
+      "tf": 15,
+      "side": "COMPRA",
+      "conds": [
+        {
+          "feat": "hour",
+          "bucket": "q5"
+        },
+        {
+          "feat": "ema200_slope",
+          "bucket": "q1"
+        },
+        {
+          "feat": "vol_rel50",
+          "bucket": "q1"
+        }
+      ],
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "comment": "[WIND_L_11 M15 GO disc] feature-cond SL1 TP2",
+      "source_json": "edge_discovery/out/candidatos_v2_b3_20260727_0047.json",
+      "harness_log": "logs/discovery_candidates_go_20260727_0536.txt",
+      "metrics": {
+        "net": 0.207,
+        "pf": 1.4,
+        "cons": 65,
+        "oos_net": 0.177,
+        "n": null,
+        "score": 95.4
+      },
+      "thresholds_is": {
+        "hour": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            10.0,
+            12.0,
+            14.0,
+            16.0
+          ],
+          "lo": 16.0,
+          "hi": null,
+          "q_idx": 4
+        },
+        "ema200_slope": {
+          "kind": "q",
+          "bucket": "q1",
+          "qs": [
+            -0.0004069583892223686,
+            -0.00017957344165022663,
+            7.270407796670225e-05,
+            0.0003562639998810159
+          ],
+          "lo": null,
+          "hi": -0.0004069583892223686,
+          "q_idx": 0
+        },
+        "vol_rel50": {
+          "kind": "q",
+          "bucket": "q1",
+          "qs": [
+            0.6163699603934659,
+            0.7903283315198737,
+            0.9920184465548832,
+            1.3566823302326803
+          ],
+          "lo": null,
+          "hi": 0.6163699603934659,
+          "q_idx": 0
+        }
+      },
+      "thresholds_meta": {
+        "oos_frac": 0.3,
+        "n_bars": 46545,
+        "cut": 32581,
+        "fit_from": "mt5_b3",
+        "index_start": "2021-07-26 09:00:00",
+        "index_end": "2025-01-31 15:00:00"
+      },
+      "enabled": true,
+      "asset_group": "win"
+    },
+    {
+      "name": "WIND_S_12",
+      "path": "WIND_S_12",
+      "symbol": "WIN$D",
+      "tf": 15,
+      "side": "VENDA",
+      "conds": [
+        {
+          "feat": "h4_rsi",
+          "bucket": "q3"
+        },
+        {
+          "feat": "ema200_dist",
+          "bucket": "q3"
+        },
+        {
+          "feat": "gap_pct",
+          "bucket": "q5"
+        }
+      ],
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "comment": "[WIND_S_12 M15 GO disc] feature-cond SL1 TP2",
+      "source_json": "edge_discovery/out/candidatos_v2_b3_20260727_0047.json",
+      "harness_log": "logs/discovery_candidates_go_20260727_0536.txt",
+      "metrics": {
+        "net": 0.308,
+        "pf": 1.55,
+        "cons": 68,
+        "oos_net": 0.174,
+        "n": null,
+        "score": 95.4
+      },
+      "thresholds_is": {
+        "h4_rsi": {
+          "kind": "q",
+          "bucket": "q3",
+          "qs": [
+            37.81978688002489,
+            44.01269587012816,
+            51.54602421449606,
+            60.57879861563341
+          ],
+          "lo": 44.01269587012816,
+          "hi": 51.54602421449606,
+          "q_idx": 2
+        },
+        "ema200_dist": {
+          "kind": "q",
+          "bucket": "q3",
+          "qs": [
+            -4.503331063126309,
+            -2.016923398241162,
+            0.868962054092169,
+            4.388718711980338
+          ],
+          "lo": -2.016923398241162,
+          "hi": 0.868962054092169,
+          "q_idx": 2
+        },
+        "gap_pct": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            -0.3105334029514414,
+            -0.08406388855530203,
+            0.09437523593808984,
+            0.29611565929280614
+          ],
+          "lo": 0.29611565929280614,
+          "hi": null,
+          "q_idx": 4
+        }
+      },
+      "thresholds_meta": {
+        "oos_frac": 0.3,
+        "n_bars": 46545,
+        "cut": 32581,
+        "fit_from": "mt5_b3",
+        "index_start": "2021-07-26 09:00:00",
+        "index_end": "2025-01-31 15:00:00"
+      },
+      "enabled": true,
+      "asset_group": "win"
+    },
+    {
+      "name": "VALE3_L_14",
+      "path": "VALE3_L_14",
+      "symbol": "VALE3",
+      "tf": 15,
+      "side": "COMPRA",
+      "conds": [
+        {
+          "feat": "gap_pct",
+          "bucket": "q1"
+        },
+        {
+          "feat": "dist_day_lo",
+          "bucket": "q5"
+        },
+        {
+          "feat": "day_range_pos",
+          "bucket": "q4"
+        }
+      ],
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "comment": "[VALE3_L_14 M15 GO disc] feature-cond SL1 TP2",
+      "source_json": "edge_discovery/out/candidatos_v2_b3_20260727_0047.json",
+      "harness_log": "logs/discovery_candidates_go_20260727_0536.txt",
+      "metrics": {
+        "net": 0.282,
+        "pf": 1.48,
+        "cons": 62,
+        "oos_net": 0.787,
+        "n": null,
+        "score": 95.0
+      },
+      "thresholds_is": {
+        "gap_pct": {
+          "kind": "q",
+          "bucket": "q1",
+          "qs": [
+            -0.9626274065684945,
+            -0.2684323550465336,
+            0.36679536679536906,
+            1.1238170347002938
+          ],
+          "lo": null,
+          "hi": -0.9626274065684945,
+          "q_idx": 0
+        },
+        "dist_day_lo": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            0.6727329823053139,
+            1.3191900116603013,
+            2.148952635225741,
+            3.465394306108491
+          ],
+          "lo": 3.465394306108491,
+          "hi": null,
+          "q_idx": 4
+        },
+        "day_range_pos": {
+          "kind": "q",
+          "bucket": "q4",
+          "qs": [
+            0.1599999999999966,
+            0.34615384615384365,
+            0.5697674418604678,
+            0.7877130580770001
+          ],
+          "lo": 0.5697674418604678,
+          "hi": 0.7877130580770001,
+          "q_idx": 3
+        }
+      },
+      "thresholds_meta": {
+        "oos_frac": 0.3,
+        "n_bars": 36598,
+        "cut": 25618,
+        "fit_from": "mt5_b3",
+        "index_start": "2021-07-26 10:00:00",
+        "index_end": "2025-01-21 16:00:00"
+      },
+      "enabled": true,
+      "asset_group": "acoes"
+    },
+    {
+      "name": "VALE3_L_17",
+      "path": "VALE3_L_17",
+      "symbol": "VALE3",
+      "tf": 15,
+      "side": "COMPRA",
+      "conds": [
+        {
+          "feat": "gap_pct",
+          "bucket": "q1"
+        },
+        {
+          "feat": "vol_day_cum_rel",
+          "bucket": "q5"
+        },
+        {
+          "feat": "ema9_slope",
+          "bucket": "q3"
+        }
+      ],
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "comment": "[VALE3_L_17 M15 GO disc] feature-cond SL1 TP2",
+      "source_json": "edge_discovery/out/candidatos_v2_b3_20260727_0047.json",
+      "harness_log": "logs/discovery_candidates_go_20260727_0536.txt",
+      "metrics": {
+        "net": 0.318,
+        "pf": 1.55,
+        "cons": 62,
+        "oos_net": 0.31,
+        "n": null,
+        "score": 94.7
+      },
+      "thresholds_is": {
+        "gap_pct": {
+          "kind": "q",
+          "bucket": "q1",
+          "qs": [
+            -0.9626274065684945,
+            -0.2684323550465336,
+            0.36679536679536906,
+            1.1238170347002938
+          ],
+          "lo": null,
+          "hi": -0.9626274065684945,
+          "q_idx": 0
+        },
+        "vol_day_cum_rel": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            6.908551332154351,
+            11.36828645428357,
+            15.74507571970547,
+            21.92489623138172
+          ],
+          "lo": 21.92489623138172,
+          "hi": null,
+          "q_idx": 4
+        },
+        "ema9_slope": {
+          "kind": "q",
+          "bucket": "q3",
+          "qs": [
+            -0.002903322666861361,
+            -0.000890381638097996,
+            0.0005766742957387296,
+            0.002701479712389962
+          ],
+          "lo": -0.000890381638097996,
+          "hi": 0.0005766742957387296,
+          "q_idx": 2
+        }
+      },
+      "thresholds_meta": {
+        "oos_frac": 0.3,
+        "n_bars": 36598,
+        "cut": 25618,
+        "fit_from": "mt5_b3",
+        "index_start": "2021-07-26 10:00:00",
+        "index_end": "2025-01-21 16:00:00"
+      },
+      "enabled": true,
+      "asset_group": "acoes"
+    },
+    {
+      "name": "WDOD_S_18",
+      "path": "WDOD_S_18",
+      "symbol": "WDO$D",
+      "tf": 15,
+      "side": "VENDA",
+      "conds": [
+        {
+          "feat": "vwap_slope",
+          "bucket": "q3"
+        },
+        {
+          "feat": "vol_day_cum_rel",
+          "bucket": "q5"
+        },
+        {
+          "feat": "gap_pct",
+          "bucket": "q5"
+        }
+      ],
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "comment": "[WDOD_S_18 M15 GO disc] feature-cond SL1 TP2",
+      "source_json": "edge_discovery/out/candidatos_v2_b3_20260727_0047.json",
+      "harness_log": "logs/discovery_candidates_go_20260727_0536.txt",
+      "metrics": {
+        "net": 0.19,
+        "pf": 1.32,
+        "cons": 56,
+        "oos_net": 0.263,
+        "n": null,
+        "score": 94.4
+      },
+      "thresholds_is": {
+        "vwap_slope": {
+          "kind": "q",
+          "bucket": "q3",
+          "qs": [
+            -0.0005471451593322087,
+            -0.00012076894883632111,
+            9.70291253739308e-05,
+            0.0005133874661942025
+          ],
+          "lo": -0.00012076894883632111,
+          "hi": 9.70291253739308e-05,
+          "q_idx": 2
+        },
+        "vol_day_cum_rel": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            13.466737958800493,
+            22.446111685498547,
+            28.450244959812167,
+            34.06871417095934
+          ],
+          "lo": 34.06871417095934,
+          "hi": null,
+          "q_idx": 4
+        },
+        "gap_pct": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            -0.2798880447820871,
+            -0.10607667828458857,
+            0.05815402508930796,
+            0.2511797838331557
+          ],
+          "lo": 0.2511797838331557,
+          "hi": null,
+          "q_idx": 4
+        }
+      },
+      "thresholds_meta": {
+        "oos_frac": 0.3,
+        "n_bars": 46544,
+        "cut": 32580,
+        "fit_from": "mt5_b3",
+        "index_start": "2021-07-26 09:00:00",
+        "index_end": "2025-01-31 15:30:00"
+      },
+      "enabled": true,
+      "asset_group": "wdo"
+    },
+    {
+      "name": "VALE3_S_22",
+      "path": "VALE3_S_22",
+      "symbol": "VALE3",
+      "tf": 60,
+      "side": "VENDA",
+      "conds": [
+        {
+          "feat": "month",
+          "bucket": "q3"
+        },
+        {
+          "feat": "h4_trend_up",
+          "bucket": "1"
+        },
+        {
+          "feat": "ema200_dist",
+          "bucket": "q4"
+        }
+      ],
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "comment": "[VALE3_S_22 M60 GO disc] feature-cond SL1 TP2",
+      "source_json": "edge_discovery/out/candidatos_v2_b3_20260727_0047.json",
+      "harness_log": "logs/discovery_candidates_go_20260727_0536.txt",
+      "metrics": {
+        "net": 0.198,
+        "pf": 1.35,
+        "cons": 78,
+        "oos_net": 0.158,
+        "n": null,
+        "score": 94.0
+      },
+      "thresholds_is": {
+        "month": {
+          "kind": "q",
+          "bucket": "q3",
+          "qs": [
+            3.0,
+            6.0,
+            8.0,
+            10.0
+          ],
+          "lo": 6.0,
+          "hi": 8.0,
+          "q_idx": 2
+        },
+        "h4_trend_up": {
+          "kind": "bin",
+          "eq": 1.0
+        },
+        "ema200_dist": {
+          "kind": "q",
+          "bucket": "q4",
+          "qs": [
+            -6.421671598536938,
+            -3.0585983404314994,
+            0.802989365449176,
+            4.663065102394792
+          ],
+          "lo": 0.802989365449176,
+          "hi": 4.663065102394792,
+          "q_idx": 3
+        }
+      },
+      "thresholds_meta": {
+        "oos_frac": 0.3,
+        "n_bars": 9178,
+        "cut": 6424,
+        "fit_from": "mt5_b3",
+        "index_start": "2021-07-26 10:00:00",
+        "index_end": "2025-01-21 11:00:00"
+      },
+      "enabled": true,
+      "asset_group": "acoes"
+    },
+    {
+      "name": "WDOD_S_25",
+      "path": "WDOD_S_25",
+      "symbol": "WDO$D",
+      "tf": 15,
+      "side": "VENDA",
+      "conds": [
+        {
+          "feat": "vwap_slope",
+          "bucket": "q3"
+        },
+        {
+          "feat": "month",
+          "bucket": "q2"
+        },
+        {
+          "feat": "sess_ny",
+          "bucket": "1"
+        },
+        {
+          "feat": "gap_pct",
+          "bucket": "q5"
+        }
+      ],
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "comment": "[WDOD_S_25 M15 GO disc] feature-cond SL1 TP2",
+      "source_json": "edge_discovery/out/candidatos_v2_b3_20260727_0047.json",
+      "harness_log": "logs/discovery_candidates_go_20260727_0536.txt",
+      "metrics": {
+        "net": 0.372,
+        "pf": 1.71,
+        "cons": 56,
+        "oos_net": 0.647,
+        "n": null,
+        "score": 93.6
+      },
+      "thresholds_is": {
+        "vwap_slope": {
+          "kind": "q",
+          "bucket": "q3",
+          "qs": [
+            -0.0005471451593322087,
+            -0.00012076894883632111,
+            9.70291253739308e-05,
+            0.0005133874661942025
+          ],
+          "lo": -0.00012076894883632111,
+          "hi": 9.70291253739308e-05,
+          "q_idx": 2
+        },
+        "month": {
+          "kind": "q",
+          "bucket": "q2",
+          "qs": [
+            3.0,
+            6.0,
+            8.0,
+            10.0
+          ],
+          "lo": 3.0,
+          "hi": 6.0,
+          "q_idx": 1
+        },
+        "sess_ny": {
+          "kind": "bin",
+          "eq": 1.0
+        },
+        "gap_pct": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            -0.2798880447820871,
+            -0.10607667828458857,
+            0.05815402508930796,
+            0.2511797838331557
+          ],
+          "lo": 0.2511797838331557,
+          "hi": null,
+          "q_idx": 4
+        }
+      },
+      "thresholds_meta": {
+        "oos_frac": 0.3,
+        "n_bars": 46544,
+        "cut": 32580,
+        "fit_from": "mt5_b3",
+        "index_start": "2021-07-26 09:00:00",
+        "index_end": "2025-01-31 15:30:00"
+      },
+      "enabled": true,
+      "asset_group": "wdo"
+    },
+    {
+      "name": "VALE3_S_31",
+      "path": "VALE3_S_31",
+      "symbol": "VALE3",
+      "tf": 60,
+      "side": "VENDA",
+      "conds": [
+        {
+          "feat": "dist_day_hi",
+          "bucket": "q5"
+        },
+        {
+          "feat": "h4_trend_up",
+          "bucket": "0"
+        },
+        {
+          "feat": "macd_hist",
+          "bucket": "q2"
+        }
+      ],
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "comment": "[VALE3_S_31 M60 GO disc] feature-cond SL1 TP2",
+      "source_json": "edge_discovery/out/candidatos_v2_b3_20260727_0047.json",
+      "harness_log": "logs/discovery_candidates_go_20260727_0536.txt",
+      "metrics": {
+        "net": 0.184,
+        "pf": 1.4,
+        "cons": 57,
+        "oos_net": 0.132,
+        "n": null,
+        "score": 92.3
+      },
+      "thresholds_is": {
+        "dist_day_hi": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            0.43102791334689783,
+            0.8246247214035441,
+            1.2680389393001117,
+            1.9178255023799535
+          ],
+          "lo": 1.9178255023799535,
+          "hi": null,
+          "q_idx": 4
+        },
+        "h4_trend_up": {
+          "kind": "bin",
+          "eq": 0.0
+        },
+        "macd_hist": {
+          "kind": "q",
+          "bucket": "q2",
+          "qs": [
+            -0.25128487665250715,
+            -0.07928604327660703,
+            0.06302353292429139,
+            0.24346423423177882
+          ],
+          "lo": -0.25128487665250715,
+          "hi": -0.07928604327660703,
+          "q_idx": 1
+        }
+      },
+      "thresholds_meta": {
+        "oos_frac": 0.3,
+        "n_bars": 9178,
+        "cut": 6424,
+        "fit_from": "mt5_b3",
+        "index_start": "2021-07-26 10:00:00",
+        "index_end": "2025-01-21 11:00:00"
+      },
+      "enabled": true,
+      "asset_group": "acoes"
+    },
+    {
+      "name": "VALE3_S_32",
+      "path": "VALE3_S_32",
+      "symbol": "VALE3",
+      "tf": 60,
+      "side": "VENDA",
+      "conds": [
+        {
+          "feat": "month",
+          "bucket": "q3"
+        },
+        {
+          "feat": "ema200_slope",
+          "bucket": "q4"
+        },
+        {
+          "feat": "h4_trend_up",
+          "bucket": "1"
+        }
+      ],
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "comment": "[VALE3_S_32 M60 GO disc] feature-cond SL1 TP2",
+      "source_json": "edge_discovery/out/candidatos_v2_b3_20260727_0047.json",
+      "harness_log": "logs/discovery_candidates_go_20260727_0536.txt",
+      "metrics": {
+        "net": 0.145,
+        "pf": 1.26,
+        "cons": 78,
+        "oos_net": 0.09,
+        "n": null,
+        "score": 92.2
+      },
+      "thresholds_is": {
+        "month": {
+          "kind": "q",
+          "bucket": "q3",
+          "qs": [
+            3.0,
+            6.0,
+            8.0,
+            10.0
+          ],
+          "lo": 6.0,
+          "hi": 8.0,
+          "q_idx": 2
+        },
+        "ema200_slope": {
+          "kind": "q",
+          "bucket": "q4",
+          "qs": [
+            -0.0022789271676504487,
+            -0.0010670103005881277,
+            0.00030045940403421114,
+            0.001792231789228869
+          ],
+          "lo": 0.00030045940403421114,
+          "hi": 0.001792231789228869,
+          "q_idx": 3
+        },
+        "h4_trend_up": {
+          "kind": "bin",
+          "eq": 1.0
+        }
+      },
+      "thresholds_meta": {
+        "oos_frac": 0.3,
+        "n_bars": 9178,
+        "cut": 6424,
+        "fit_from": "mt5_b3",
+        "index_start": "2021-07-26 10:00:00",
+        "index_end": "2025-01-21 11:00:00"
+      },
+      "enabled": true,
+      "asset_group": "acoes"
+    },
+    {
+      "name": "WIND_S_33",
+      "path": "WIND_S_33",
+      "symbol": "WIN$D",
+      "tf": 15,
+      "side": "VENDA",
+      "conds": [
+        {
+          "feat": "ema200_slope",
+          "bucket": "q3"
+        },
+        {
+          "feat": "h4_rsi",
+          "bucket": "q3"
+        },
+        {
+          "feat": "gap_pct",
+          "bucket": "q5"
+        }
+      ],
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "comment": "[WIND_S_33 M15 GO disc] feature-cond SL1 TP2",
+      "source_json": "edge_discovery/out/candidatos_v2_b3_20260727_0047.json",
+      "harness_log": "logs/discovery_candidates_go_20260727_0536.txt",
+      "metrics": {
+        "net": 0.198,
+        "pf": 1.33,
+        "cons": 60,
+        "oos_net": 0.171,
+        "n": null,
+        "score": 92.1
+      },
+      "thresholds_is": {
+        "ema200_slope": {
+          "kind": "q",
+          "bucket": "q3",
+          "qs": [
+            -0.0004069583892223686,
+            -0.00017957344165022663,
+            7.270407796670225e-05,
+            0.0003562639998810159
+          ],
+          "lo": -0.00017957344165022663,
+          "hi": 7.270407796670225e-05,
+          "q_idx": 2
+        },
+        "h4_rsi": {
+          "kind": "q",
+          "bucket": "q3",
+          "qs": [
+            37.81978688002489,
+            44.01269587012816,
+            51.54602421449606,
+            60.57879861563341
+          ],
+          "lo": 44.01269587012816,
+          "hi": 51.54602421449606,
+          "q_idx": 2
+        },
+        "gap_pct": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            -0.3105334029514414,
+            -0.08406388855530203,
+            0.09437523593808984,
+            0.29611565929280614
+          ],
+          "lo": 0.29611565929280614,
+          "hi": null,
+          "q_idx": 4
+        }
+      },
+      "thresholds_meta": {
+        "oos_frac": 0.3,
+        "n_bars": 46545,
+        "cut": 32581,
+        "fit_from": "mt5_b3",
+        "index_start": "2021-07-26 09:00:00",
+        "index_end": "2025-01-31 15:00:00"
+      },
+      "enabled": true,
+      "asset_group": "win"
+    },
+    {
+      "name": "WDOD_S_34",
+      "path": "WDOD_S_34",
+      "symbol": "WDO$D",
+      "tf": 15,
+      "side": "VENDA",
+      "conds": [
+        {
+          "feat": "month",
+          "bucket": "q2"
+        },
+        {
+          "feat": "bar_of_day",
+          "bucket": "q5"
+        },
+        {
+          "feat": "gap_pct",
+          "bucket": "q5"
+        }
+      ],
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "comment": "[WDOD_S_34 M15 GO disc] feature-cond SL1 TP2",
+      "source_json": "edge_discovery/out/candidatos_v2_b3_20260727_0047.json",
+      "harness_log": "logs/discovery_candidates_go_20260727_0536.txt",
+      "metrics": {
+        "net": 0.238,
+        "pf": 1.41,
+        "cons": 59,
+        "oos_net": 0.649,
+        "n": null,
+        "score": 92.0
+      },
+      "thresholds_is": {
+        "month": {
+          "kind": "q",
+          "bucket": "q2",
+          "qs": [
+            3.0,
+            6.0,
+            8.0,
+            10.0
+          ],
+          "lo": 3.0,
+          "hi": 6.0,
+          "q_idx": 1
+        },
+        "bar_of_day": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            7.0,
+            14.0,
+            22.0,
+            29.0
+          ],
+          "lo": 29.0,
+          "hi": null,
+          "q_idx": 4
+        },
+        "gap_pct": {
+          "kind": "q",
+          "bucket": "q5",
+          "qs": [
+            -0.2798880447820871,
+            -0.10607667828458857,
+            0.05815402508930796,
+            0.2511797838331557
+          ],
+          "lo": 0.2511797838331557,
+          "hi": null,
+          "q_idx": 4
+        }
+      },
+      "thresholds_meta": {
+        "oos_frac": 0.3,
+        "n_bars": 46544,
+        "cut": 32580,
+        "fit_from": "mt5_b3",
+        "index_start": "2021-07-26 09:00:00",
+        "index_end": "2025-01-31 15:30:00"
+      },
+      "enabled": true,
+      "asset_group": "wdo"
+    },
+    {
+      "name": "VALE3_S_35",
+      "path": "VALE3_S_35",
+      "symbol": "VALE3",
+      "tf": 15,
+      "side": "VENDA",
+      "conds": [
+        {
+          "feat": "month",
+          "bucket": "q3"
+        },
+        {
+          "feat": "vwap_dist",
+          "bucket": "q2"
+        },
+        {
+          "feat": "roc_10",
+          "bucket": "q1"
+        }
+      ],
+      "sl_atr": 1.0,
+      "tp_atr": 2.0,
+      "comment": "[VALE3_S_35 M15 GO disc] feature-cond SL1 TP2",
+      "source_json": "edge_discovery/out/candidatos_v2_b3_20260727_0047.json",
+      "harness_log": "logs/discovery_candidates_go_20260727_0536.txt",
+      "metrics": {
+        "net": 0.172,
+        "pf": 1.26,
+        "cons": 58,
+        "oos_net": 0.583,
+        "n": null,
+        "score": 91.8
+      },
+      "thresholds_is": {
+        "month": {
+          "kind": "q",
+          "bucket": "q3",
+          "qs": [
+            3.0,
+            6.0,
+            8.0,
+            10.0
+          ],
+          "lo": 6.0,
+          "hi": 8.0,
+          "q_idx": 2
+        },
+        "vwap_dist": {
+          "kind": "q",
+          "bucket": "q2",
+          "qs": [
+            -1.1733877916113398,
+            -0.409518508460596,
+            0.1806131677465153,
+            0.9081799673462757
+          ],
+          "lo": -1.1733877916113398,
+          "hi": -0.409518508460596,
+          "q_idx": 1
+        },
+        "roc_10": {
+          "kind": "q",
+          "bucket": "q1",
+          "qs": [
+            -0.006635973921824156,
+            -0.0019493868390302535,
+            0.0013656471565683056,
+            0.006263340851402835
+          ],
+          "lo": null,
+          "hi": -0.006635973921824156,
+          "q_idx": 0
+        }
+      },
+      "thresholds_meta": {
+        "oos_frac": 0.3,
+        "n_bars": 36598,
+        "cut": 25618,
+        "fit_from": "mt5_b3",
+        "index_start": "2021-07-26 10:00:00",
+        "index_end": "2025-01-21 16:00:00"
+      },
+      "enabled": true,
+      "asset_group": "acoes"
+    }
+  ]
+}

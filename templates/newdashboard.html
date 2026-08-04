@@ -43,8 +43,13 @@ background-image:radial-gradient(1200px 700px at 78% -8%,rgba(53,224,240,.10),tr
 .nav.active::before{content:"";position:absolute;left:-10px;top:8px;bottom:8px;width:3px;background:var(--cyan);box-shadow:var(--glow-cyan);border-radius:3px}
 .side .navfoot{margin-top:auto;font-family:'Share Tech Mono';font-size:10px;color:var(--muted);padding:10px;line-height:1.7;border-top:1px solid var(--line)}
 .side .navfoot a{color:var(--cyan);text-decoration:none}
-.menubtn{background:transparent;border:1px solid var(--line);color:var(--cyan);border-radius:8px;width:36px;height:32px;cursor:pointer;font-size:15px;line-height:1;transition:.15s;flex:none}
+.menubtn{background:transparent;border:1px solid var(--line);color:var(--cyan);border-radius:8px;width:36px;height:32px;cursor:pointer;font-size:15px;line-height:1;transition:.15s;flex:none;display:inline-flex;align-items:center;justify-content:center;padding:0}
 .menubtn:hover{background:rgba(53,224,240,.12);box-shadow:var(--glow-cyan)}
+.menubtn .hamb,.menubtn .hamb::before,.menubtn .hamb::after{
+  display:block;width:16px;height:2px;background:var(--cyan);border-radius:1px;position:relative
+}
+.menubtn .hamb::before,.menubtn .hamb::after{content:"";position:absolute;left:0}
+.menubtn .hamb::before{top:-5px}.menubtn .hamb::after{top:5px}
 .app{transition:grid-template-columns .22s ease}
 .app.collapsed{grid-template-columns:64px 1fr}
 .app.collapsed .brand{padding:0;justify-content:center}
@@ -73,6 +78,13 @@ background-image:radial-gradient(1200px 700px at 78% -8%,rgba(53,224,240,.10),tr
 .up{color:var(--green)}.down{color:var(--red)}.cy{color:var(--cyan)}.gd{color:var(--gold)}.pp{color:var(--purple)}.mut{color:var(--muted)}
 .chip{display:inline-flex;align-items:center;gap:6px;font-family:'Share Tech Mono';font-size:11px;padding:4px 9px;border-radius:6px;border:1px solid var(--line);color:var(--cyan)}
 .chip.g{color:var(--green);border-color:rgba(52,224,161,.4)}.chip.r{color:var(--red);border-color:rgba(255,91,110,.4)}.chip.gold{color:var(--gold);border-color:rgba(240,180,41,.4)}
+.cy-path.dim{opacity:.28;filter:grayscale(.4)}
+.cy-path.on-asset{box-shadow:0 0 0 1px rgba(52,224,161,.55);opacity:1;filter:none}
+.cy-paths-body{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}
+.cy-paths-wrap.collapsed .cy-paths-body{display:none}
+.cy-paths-wrap.collapsed{padding-bottom:8px}
+.collapse-btn{font-family:'Share Tech Mono';font-size:10.5px;padding:3px 10px;border-radius:5px;border:1px solid var(--line);
+background:rgba(53,224,240,.08);color:var(--cyan);cursor:pointer}
 table{width:100%;border-collapse:collapse;font-family:'Share Tech Mono';font-size:12px}
 th{text-align:left;color:var(--muted);font-weight:400;padding:7px 9px;border-bottom:1px solid var(--line);letter-spacing:1px;font-size:10.5px}
 td{padding:8px 9px;border-bottom:1px solid rgba(53,224,240,.07)}tr:hover td{background:rgba(53,224,240,.05)}
@@ -174,7 +186,7 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:rgba(240,185,53,.09)}
     <div class="brandtxt"><b>TRADE<span>AI</span></b><small>STARK · HUD</small></div>
   </div>
   <div class="topbar">
-    <button class="menubtn" id="menubtn" onclick="toggleMenu()" title="Recolher / expandir menu (Ctrl+B)">☰</button>
+    <button class="menubtn" id="menubtn" onclick="toggleMenu()" title="Recolher / expandir menu (Ctrl+B)" aria-label="Recolher menu"><span class="hamb"></span></button>
     <div class="sysline" id="sysline">CONECTANDO...</div>
     <div class="spacer"></div>
     <div class="pill"><span class="dot" id="dotMkt"></span> <span id="mktStatus">B3</span></div>
@@ -185,7 +197,10 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:rgba(240,185,53,.09)}
   <div class="side">
     <div class="nav active" data-s="dash" title="Dashboard"><i>◉</i> <span class="nlabel">Dashboard</span></div>
     <div class="nav" data-s="report" title="Relatório"><i>≣</i> <span class="nlabel">Relatório</span></div>
+    <div class="nav" data-link="/v7" title="Monitor Índices B3 (WIN · WDO)"><i>⚡</i> <span class="nlabel">Monitor Índices B3</span></div>
+    <div class="nav" data-link="/saude" title="Saúde do Portfólio (realizado × backtest)"><i>♥</i> <span class="nlabel">Saúde</span></div>
     <div class="nav" data-s="monitor" title="Monitor MT5"><i>▚</i> <span class="nlabel">Monitor MT5</span></div>
+    <div class="nav" data-link="/acoes" title="Monitor Ações B3 (blue chips)"><i>▣</i> <span class="nlabel">Monitor Ações B3</span></div>
     <div class="nav" data-s="crypto" title="Monitor Crypto"><i>₿</i> <span class="nlabel">Monitor Crypto</span></div>
     <div class="nav" data-s="cryptoreport" title="Relatório Crypto"><i>◱</i> <span class="nlabel">Relatório Crypto</span></div>
     <div class="nav" data-s="scalp" title="Scalper"><i>⚡</i> <span class="nlabel">Scalper</span></div>
@@ -195,39 +210,41 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:rgba(240,185,53,.09)}
     <div class="nav" data-s="risk" title="Risk Management"><i>⛨</i> <span class="nlabel">Risk Management</span></div>
     <div class="nav" data-s="analytics" title="Analytics" style="display:none"><i>◵</i> <span class="nlabel">Analytics</span></div>
     <div class="nav" data-s="profit" title="Profit Bridge"><i>⟲</i> <span class="nlabel">Profit Bridge</span></div>
-    <div class="navfoot">STARK HUD · v6.2<br>dados reais /api/*<br><a href="/dashboard">← UI clássica</a></div>
+    <div class="navfoot">STARK HUD · v6.2<br>dados reais /api/*<br><a href="/setups">◈ setups ativos</a><br><a href="/dashboard">← UI clássica</a></div>
   </div>
   <div class="main">
 
-  <!-- DASHBOARD -->
+  <!-- DASHBOARD — Hub B3 / V7 (Monitor MT5 fica em stand-by na aba própria) -->
   <section class="screen on" id="dash">
-    <div class="page-h"><h1>MEU <span>DESEMPENHO</span></h1><div class="sub">// dados ao vivo dos módulos</div></div>
+    <div class="page-h"><h1>MEU <span>DESEMPENHO</span></h1><div class="sub">// Hub B3 · V7 + WinGo · /api/v7/period</div></div>
     <div class="grid g4">
       <div class="panel"><div class="kpi"><div class="v" id="dTotal">—</div><div class="l">Trades hoje</div></div></div>
       <div class="panel"><div class="kpi"><div class="v up" id="dWin">—</div><div class="l">Win rate</div></div></div>
-      <div class="panel"><div class="kpi"><div class="v" id="dPnl">—</div><div class="l">P&amp;L hoje (R$)</div></div></div>
-      <div class="panel gold"><div class="kpi"><div class="v gd" id="dBlock">—</div><div class="l">Bloqueados pela IA</div></div></div>
+      <div class="panel"><div class="kpi"><div class="v" id="dPF">—</div><div class="l">Profit factor</div></div></div>
+      <div class="panel gold"><div class="kpi"><div class="v" id="dPnl">—</div><div class="l">P&amp;L hoje (R$)</div></div></div>
+    </div>
+    <div class="grid g4" style="margin-top:16px">
+      <div class="panel"><div class="kpi"><div class="v cy" id="dR">—</div><div class="l">Acumulado R</div></div></div>
+      <div class="panel"><div class="kpi"><div class="v down" id="dDD">—</div><div class="l">Max drawdown</div></div></div>
+      <div class="panel"><div class="kpi"><div class="v up" id="dWins">—</div><div class="l">Wins</div></div></div>
+      <div class="panel"><div class="kpi"><div class="v down" id="dLosses">—</div><div class="l">Losses</div></div></div>
     </div>
     <div class="grid g2" style="margin-top:16px">
-      <div class="panel"><h3>Funil de sinais do dia <span class="ln"></span></h3>
-        <div class="statbar">
-          <div><s>GERADOS</s><b class="cy" id="dFGer">—</b></div>
-          <div><s>EXECUTADOS</s><b class="up" id="dFExec">—</b></div>
-          <div><s>BLOQUEADOS IA</s><b class="gd" id="dFBloq">—</b></div>
-        </div>
-        <div class="mut mini" id="dFNote" style="margin-top:12px;line-height:1.5">—</div>
+      <div class="panel"><h3>Por setup — hoje <span class="ln"></span></h3>
+        <table><thead><tr><th>SETUP</th><th>TRADES</th><th>R</th><th>P&amp;L R$</th><th>WIN</th></tr></thead>
+          <tbody id="dBySetup"><tr><td colspan="5" class="mut">carregando…</td></tr></tbody></table>
       </div>
-      <div class="panel"><h3>Resumo por ativo — executados hoje <span class="ln"></span></h3>
-        <table><thead><tr><th>ATIVO</th><th>TRADES</th><th>WIN%</th><th>P&amp;L R$</th></tr></thead>
-          <tbody id="dBySym"><tr><td colspan="4" class="mut">carregando…</td></tr></tbody></table>
+      <div class="panel"><h3>Últimos trades (hub) <span class="ln"></span></h3>
+        <table><thead><tr><th>HORA</th><th>SETUP</th><th>DIR</th><th>R$</th><th>R</th></tr></thead>
+          <tbody id="dRecent"><tr><td colspan="5" class="mut">carregando…</td></tr></tbody></table>
       </div>
     </div>
-    <div class="mut mini" style="margin-top:10px;text-align:center">Detalhe operacional e histórico completo no <b class="cy">Monitor MT5</b> · decisões e motivos da IA na aba <b class="cy">Inteligência</b>.</div>
+    <div class="mut mini" style="margin-top:10px;text-align:center">Operação ao vivo e histórico completo no <b class="cy">Monitor Índices B3</b> (<a href="/v7" style="color:var(--cyan)">/v7</a>). Monitor MT5 permanece em stand-by.</div>
   </section>
 
-  <!-- RELATÓRIO -->
+  <!-- RELATÓRIO — Hub B3 / V7 -->
   <section class="screen" id="report">
-    <div class="page-h"><h1><span>RELATÓRIO</span></h1><div class="sub">// desempenho por período · /api/autotrade/report</div></div>
+    <div class="page-h"><h1><span>RELATÓRIO</span></h1><div class="sub">// Hub B3 · V7 + WinGo · /api/v7/period</div></div>
     <div class="panel" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px">
       <span class="tag">PERÍODO</span>
       <div class="seg"><button class="segbtn on" id="rpDay" onclick="setReport('day')">Dia</button><button class="segbtn" id="rpWeek" onclick="setReport('week')">Semana</button><button class="segbtn" id="rpMonth" onclick="setReport('month')">Mês</button></div>
@@ -269,7 +286,7 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:rgba(240,185,53,.09)}
       </div>
       <div class="panel" id="paneWDO" data-foco="WDO" data-sym="BMFBOVESPA:WDO1!">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-          <div><span class="mono gd" style="font-size:17px">WDOQ26</span> <span class="tag">Mini Dólar · 15m</span></div>
+          <div><span class="mono gd" style="font-size:17px">WDOU26</span> <span class="tag">Mini Dólar · 15m</span></div>
           <span style="display:flex;gap:8px;align-items:center">
             <button class="trbtn" id="trWDO" onclick="toggleTrades('WDO')" title="Ligar/desligar trades automáticos do WDO (independente do WIN)">TRADES: OFF</button>
             <button class="p3btn" id="p3WDO" onclick="toggle3C('WDO')" title="3 contratos: entra com 3, fecha 2 no TP1 e segura 1 até o TP2">3C: —</button>
@@ -302,7 +319,7 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:rgba(240,185,53,.09)}
 
   <!-- MONITOR CRYPTO (módulo novo, MT5 24h) -->
   <section class="screen" id="crypto">
-    <div class="page-h"><h1>₿ MONITOR <span>CRYPTO</span></h1><div class="sub">// MT5 24h · /api/crypto/* · troque o .env p/ a conta crypto</div></div>
+    <div class="page-h"><h1>₿ MONITOR <span>CRYPTO</span></h1><div class="sub">// MT5 24h · setups etiquetados · /api/crypto/* · troque o .env p/ a conta crypto</div></div>
     <div class="panel" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px">
       <span class="tag">ATIVO</span><div class="seg" id="cySyms"><span class="mut mini">carregando…</span></div>
       <span class="tag">TF</span><div class="seg" id="cyTf">
@@ -321,8 +338,167 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:rgba(240,185,53,.09)}
       <button class="btn sm" id="cyTrBtn" onclick="cyToggleTrades()">TRADES: OFF</button>
       <span class="chip" id="cyConn">—</span>
     </div>
+    <div class="panel cy-paths-wrap collapsed" id="cyPaths" style="margin-bottom:14px;padding:8px 12px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span class="tag">CAMINHOS</span>
+        <span class="mini mut" style="margin-left:auto" id="cyPathHint">diferenciação = coluna SETUP nos trades</span>
+        <button type="button" class="collapse-btn" id="cyPathsToggle" onclick="toggleCyPaths()">▸ Expandir</button>
+      </div>
+      <div class="cy-paths-body">
+      <span class="chip cy-path" data-path="ORDER_FLOW" title="Order flow · XAU M5 / ETH M15">ORDER_FLOW</span>
+      <span class="chip cy-path mut" data-path="LONDON_HANDOFF" title="Legado OFF — substituído pelos LH_* GO">LONDON_HANDOFF</span>
+      <span class="chip cy-path" data-path="LH_048_D19" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v6 · XAU M15 · 1/dia">LH_048_D19</span>
+      <span class="chip cy-path" data-path="LH_047_D18" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v4 · XAU M15 · 1/dia">LH_047_D18</span>
+      <span class="chip cy-path" data-path="LH_049_D19" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v5 · XAU M15 · 1/dia">LH_049_D19</span>
+      <span class="chip cy-path" data-path="US_DRIFT" title="US drift · XAU">US_DRIFT</span>
+      <span class="chip cy-path" data-path="RND_FADE_065" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v6 · XAU M15">RND_FADE_065</span>
+      <span class="chip cy-path" data-path="RND_FADE_075_MT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v6 · XAU · seg–qui">RND_FADE_075_MT</span>
+      <span class="chip cy-path" data-path="RND_FADE_MT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v5 · XAU M15 · seg–qui">RND_FADE_MT</span>
+      <span class="chip cy-path" data-path="RND_FADE_07" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v4 · XAU M15">RND_FADE_07</span>
+      <span class="chip cy-path" data-path="RND_FADE_TIGHT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v3 · XAU M15">RND_FADE_TIGHT</span>
+      <span class="chip cy-path" data-path="XAU_INS_AM" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v6 · XAU 09–12">XAU_INS_AM</span>
+      <span class="chip cy-path" data-path="XAU_IMP_CONT_20" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v11 · XAU impulso ATR×2">XAU_IMP_CONT_20</span>
+      <span class="chip cy-path" data-path="XAU_NR4_1016_H4" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO mega · XAU NR4+H4 · 10–16h">XAU_NR4_1016_H4</span>
+      <span class="chip cy-path" data-path="XAU_PDH_H4" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO mega · XAU PDH/PDL · 10–16h">XAU_PDH_H4</span>
+      <span class="chip cy-path" data-path="XAU_PDH_1115" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO mega · XAU PDH/PDL · 11–15h">XAU_PDH_1115</span>
+      <span class="chip cy-path" data-path="XAU_HL_24H" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO mega · XAU HL + H4 · 24h">XAU_HL_24H</span>
+      <span class="chip cy-path" data-path="XAU_IMP_ASIA" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v16 · XAU impulso Asia · TP≤30">XAU_IMP_ASIA</span>
+      <span class="chip cy-path" data-path="XAU_IMP_LN" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v16 · XAU impulso Lon+NY · TP≤30">XAU_IMP_LN</span>
+      <span class="chip cy-path" data-path="XAU_IMP_24H" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v16 · XAU impulso 24h · TP≤30">XAU_IMP_24H</span>
+      <span class="chip cy-path" data-path="XAU_IMP_24H_MT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v16 · XAU impulso 24h · seg–qui">XAU_IMP_24H_MT</span>
+      <span class="chip cy-path" data-path="XAU_IMP_OVN" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v16 · XAU impulso overnight · TP≤30">XAU_IMP_OVN</span>
+      <span class="chip cy-path" data-path="XAU_IMP_LN_M30" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v16 · XAU impulso Lon+NY · M30">XAU_IMP_LN_M30</span>
+      <span class="chip cy-path" data-path="XAU_PDH_24H" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v16 · XAU PDH 24h · TP≤30">XAU_PDH_24H</span>
+      <span class="chip cy-path" data-path="XAU_HL_24H_TP20" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v16 · XAU HL 24h TP2R/cap30">XAU_HL_24H_TP20</span>
+      <span class="chip cy-path" data-path="XAU_PDH_DAY_V13" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v16 · XAU PDH vol1.3 · 10–16h">XAU_PDH_DAY_V13</span>
+      <span class="chip cy-path" data-path="XAU_PDH_NIGHT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v16 · XAU PDH noite · TP≤30">XAU_PDH_NIGHT</span>
+      <span class="chip cy-path" data-path="XAU_PDH_LN" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v16 · XAU PDH Lon+NY · TP≤30">XAU_PDH_LN</span>
+      <span class="chip cy-path" data-path="XAU_PDH_NY" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v16 · XAU PDH NY · TP≤30">XAU_PDH_NY</span>
+      <span class="chip cy-path" data-path="XAU_PDH_ASIA" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v16 · XAU PDH Asia · TP≤30">XAU_PDH_ASIA</span>
+      <span class="chip cy-path" data-path="INSIDE_H4" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v5 · XAU/ETH M15">INSIDE_H4</span>
+      <span class="chip cy-path" data-path="BTC_NR5_0915" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v12 · BTC NR5+H4 · 09–15h">BTC_NR5_0915</span>
+      <span class="chip cy-path" data-path="BTC_NR5_1016" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v11 · BTC NR5+H4 · 10–16h">BTC_NR5_1016</span>
+      <span class="chip cy-path" data-path="BTC_NR4_1016" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v12 · BTC NR4+H4 · 10–16h">BTC_NR4_1016</span>
+      <span class="chip cy-path" data-path="INSIDE_1015_V13" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v10 · BTC M15 · vol 1.3×">INSIDE_1015_V13</span>
+      <span class="chip cy-path" data-path="BTC_INS_1117_V13" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v12 · BTC inside · 11–17 · vol 1.3×">BTC_INS_1117_V13</span>
+      <span class="chip cy-path" data-path="BTC_INS_1017_V13" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v11 · BTC inside · 10–17 · vol 1.3×">BTC_INS_1017_V13</span>
+      <span class="chip cy-path" data-path="BTC_INS_1218_V13" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v12 · BTC inside · 12–18 · vol 1.3×">BTC_INS_1218_V13</span>
+      <span class="chip cy-path" data-path="BTC_INS_V135_0916" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v12 · BTC inside · 09–16 · vol 1.35×">BTC_INS_V135_0916</span>
+      <span class="chip cy-path" data-path="BTC_INS_0816_V13" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v12 · BTC inside · 08–16 · vol 1.3×">BTC_INS_0816_V13</span>
+      <span class="chip cy-path" data-path="INS_0918_V13" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v11 · BTC/ETH · 09–18 · vol 1.3×">INS_0918_V13</span>
+      <span class="chip cy-path" data-path="INSIDE_1015" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v8 · ETH/BTC M15 · 10–15h">INSIDE_1015</span>
+      <span class="chip cy-path" data-path="BTC_H4_PB_EMA" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v12 · BTC pullback EMA + bias H4">BTC_H4_PB_EMA</span>
+      <span class="chip cy-path" data-path="BTC_INS_24H_V13" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v13 · BTC inside + H4 · 24h (noite/FDS)">BTC_INS_24H_V13</span>
+      <span class="chip cy-path" data-path="BTC_PDH_24H" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v14 · BTC PDH/PDL · 24h">BTC_PDH_24H</span>
+      <span class="chip cy-path" data-path="BTC_PDH_24H_V13" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v14 · BTC PDH vol1.3 · 24h">BTC_PDH_24H_V13</span>
+      <span class="chip cy-path" data-path="BTC_PDH_ASIA_0008" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v14 · BTC PDH · 00–08h">BTC_PDH_ASIA_0008</span>
+      <span class="chip cy-path" data-path="BTC_PDH_NIGHT_2010" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v14 · BTC PDH · 20–10h">BTC_PDH_NIGHT_2010</span>
+      <span class="chip cy-path" data-path="BTC_PDH_24H_MT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v14 · BTC PDH · 24h · seg–qui">BTC_PDH_24H_MT</span>
+      <span class="chip cy-path" data-path="BTC_NR4_24H_V14" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v14 · BTC NR4 vol1.4 · 24h">BTC_NR4_24H_V14</span>
+      <span class="chip cy-path" data-path="BTC_NR5_24H_V14" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v14 · BTC NR5 vol1.4 · 24h">BTC_NR5_24H_V14</span>
+      <span class="chip cy-path" data-path="BTC_NR5_1622" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v14 · BTC NR5 · 16–22h">BTC_NR5_1622</span>
+      <span class="chip cy-path" data-path="BTC_H4_PB_EMA_MT24" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v14 · BTC PB EMA · 24h · seg–qui">BTC_H4_PB_EMA_MT24</span>
+      <span class="chip cy-path" data-path="BTC_PDH_H4" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO mega · BTC PDH/PDL · 10–16h">BTC_PDH_H4</span>
+      <span class="chip cy-path" data-path="ETH_IMP_CONT_24H" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v13 · ETH impulso ATR×2 · 24h">ETH_IMP_CONT_24H</span>
+      <span class="chip cy-path" data-path="ETH_INS_24H_MT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v14 · ETH inside · 24h · seg–qui">ETH_INS_24H_MT</span>
+      <span class="chip cy-path" data-path="ETH_HL_24H_MT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v14 · ETH HL · 24h · seg–qui">ETH_HL_24H_MT</span>
+      <span class="chip cy-path" data-path="ETH_IMP_CONT_24H_V18" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v14 · ETH impulso ATR×1.8 · 24h">ETH_IMP_CONT_24H_V18</span>
+      <span class="chip cy-path" data-path="ETH_IMP_TP25_24H" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v14 · ETH impulso TP 2.5R · 24h">ETH_IMP_TP25_24H</span>
+      <span class="chip cy-path" data-path="BTC_INS_NY_1317" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · BTC inside · 13–17h">BTC_INS_NY_1317</span>
+      <span class="chip cy-path" data-path="BTC_HL_ASIA_MT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · BTC HL Asia · seg–qui">BTC_HL_ASIA_MT</span>
+      <span class="chip cy-path" data-path="BTC_FRI_MON_NR4" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · BTC NR4 · sex–seg">BTC_FRI_MON_NR4</span>
+      <span class="chip cy-path" data-path="BTC_NR4_NY_1317" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · BTC NR4 · 13–17h">BTC_NR4_NY_1317</span>
+      <span class="chip cy-path" data-path="ETH_HL_ASIA_MT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · ETH HL Asia · seg–qui">ETH_HL_ASIA_MT</span>
+      <span class="chip cy-path" data-path="BTC_FRI_SUN_NR4" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · BTC NR4 · sex–dom">BTC_FRI_SUN_NR4</span>
+      <span class="chip cy-path" data-path="BTC_HL_ASIA_V15" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · BTC HL Asia vol1.5">BTC_HL_ASIA_V15</span>
+      <span class="chip cy-path" data-path="ETH_HL_NIGHT_MT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · ETH HL noite · seg–qui">ETH_HL_NIGHT_MT</span>
+      <span class="chip cy-path" data-path="ETH_PDH_ASIA_V13" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · ETH PDH Asia vol1.3">ETH_PDH_ASIA_V13</span>
+      <span class="chip cy-path" data-path="BTC_WE_NR5_V14" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · BTC NR5 · FDS">BTC_WE_NR5_V14</span>
+      <span class="chip cy-path" data-path="BTC_HL_OVN_MT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · BTC HL overnight · seg–qui">BTC_HL_OVN_MT</span>
+      <span class="chip cy-path" data-path="BTC_WE_NR4_V14" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · BTC NR4 · FDS">BTC_WE_NR4_V14</span>
+      <span class="chip cy-path" data-path="BTC_HL_NIGHT_MT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · BTC HL noite · seg–qui">BTC_HL_NIGHT_MT</span>
+      <span class="chip cy-path" data-path="BTC_HL_NIGHT_V16" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · BTC HL noite vol1.6">BTC_HL_NIGHT_V16</span>
+      <span class="chip cy-path" data-path="BTC_NR5_LN_0817" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · BTC NR5 · 08–17h">BTC_NR5_LN_0817</span>
+      <span class="chip cy-path" data-path="ETH_PDH_ASIA_TP20" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · ETH PDH Asia TP2R">ETH_PDH_ASIA_TP20</span>
+      <span class="chip cy-path" data-path="BTC_ENGULF_24H_M30" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · BTC engolfo · M30">BTC_ENGULF_24H_M30</span>
+      <span class="chip cy-path" data-path="BTC_WE_NR4_TP20" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · BTC NR4 FDS TP2R">BTC_WE_NR4_TP20</span>
+      <span class="chip cy-path" data-path="ETH_HL_24H_MT_V15" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · ETH HL 24h vol1.5 · seg–qui">ETH_HL_24H_MT_V15</span>
+      <span class="chip cy-path" data-path="BTC_VWAP_CONT_NY" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · BTC VWAP cont · 13–17h">BTC_VWAP_CONT_NY</span>
+      <span class="chip cy-path" data-path="BTC_NR7_24H_V14" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · BTC NR7 · 24h">BTC_NR7_24H_V14</span>
+      <span class="chip cy-path" data-path="ETH_PDH_NIGHT_MT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · ETH PDH noite · seg–qui">ETH_PDH_NIGHT_MT</span>
+      <span class="chip cy-path" data-path="BTC_PDH_LON_0713" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · BTC PDH · 07–13h">BTC_PDH_LON_0713</span>
+      <span class="chip cy-path" data-path="BTC_PDH_ASIA_M30" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · BTC PDH Asia · M30">BTC_PDH_ASIA_M30</span>
+      <span class="chip cy-path" data-path="ETH_HL_NY_1317" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · ETH HL · 13–17h">ETH_HL_NY_1317</span>
+      <span class="chip cy-path" data-path="BTC_PDH_LN_0817" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · BTC PDH · 08–17h">BTC_PDH_LN_0817</span>
+      <span class="chip cy-path" data-path="BTC_PDH_LON_0812" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · BTC PDH · 08–12h">BTC_PDH_LON_0812</span>
+      <span class="chip cy-path" data-path="BTC_EMA_RECL_NY" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · BTC EMA reclaim · 13–17h">BTC_EMA_RECL_NY</span>
+      <span class="chip cy-path" data-path="ETH_HL_24H_MT_TP20" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · ETH HL 24h TP2R · seg–qui">ETH_HL_24H_MT_TP20</span>
+      <span class="chip cy-path" data-path="ETH_HL_24H_MT_V14" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · ETH HL 24h vol1.4 · seg–qui">ETH_HL_24H_MT_V14</span>
+      <span class="chip cy-path" data-path="ETH_INS_DAY" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v17 · ETH inside · 10–16h">ETH_INS_DAY</span>
+      <span class="chip cy-path" data-path="ETH_HL_24H_MT_V16" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v17 · ETH HL 24h vol1.6 · seg–qui">ETH_HL_24H_MT_V16</span>
+      <span class="chip cy-path" data-path="ETH_INS_LN" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v17 · ETH inside · 08–17h">ETH_INS_LN</span>
+      <span class="chip cy-path" data-path="ETH_INS_LN_M30" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v17 · ETH inside Lon+NY · M30">ETH_INS_LN_M30</span>
+      <span class="chip cy-path" data-path="ETH_INS_ASIA_MT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v17 · ETH inside Asia · seg–qui">ETH_INS_ASIA_MT</span>
+      <span class="chip cy-path" data-path="ETH_HL_OVN_MT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v17 · ETH HL overnight · seg–qui">ETH_HL_OVN_MT</span>
+      <span class="chip cy-path" data-path="ETH_HL_NY_TP20" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v17 · ETH HL NY TP2R">ETH_HL_NY_TP20</span>
+      <span class="chip cy-path" data-path="ETH_HL_NY_V15" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v17 · ETH HL NY vol1.5">ETH_HL_NY_V15</span>
+      <span class="chip cy-path" data-path="ETH_HL_ASIA_V15" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v17 · ETH HL Asia vol1.5">ETH_HL_ASIA_V15</span>
+      <span class="chip cy-path" data-path="ETH_NR4_24H_V16" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v17 · ETH NR4 vol1.6 · 24h">ETH_NR4_24H_V16</span>
+      <span class="chip cy-path" data-path="ETH_EMA_RECL_NY_V14_MT_M30" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v18 · ETH EMA reclaim NY vol1.4 · M30 · seg–qui">ETH_EMA_RECL_NY_V14_MT_M30</span>
+      <span class="chip cy-path" data-path="ETH_VWAP_CONT_ASIA_MT_M30" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v18 · ETH VWAP cont Asia · M30 · seg–qui">ETH_VWAP_CONT_ASIA_MT_M30</span>
+      <span class="chip cy-path" data-path="ETH_EMA_RECL_DAY_V15" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v18 · ETH EMA reclaim · 10–16h vol1.5">ETH_EMA_RECL_DAY_V15</span>
+      <span class="chip cy-path" data-path="BTC_RSI_RECL_M60" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v20 · BTC RSI reclaim · M60">BTC_RSI_RECL_M60</span>
+      <span class="chip cy-path" data-path="ETH_RSI_RECL_M60" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v20 · ETH RSI reclaim · M60">ETH_RSI_RECL_M60</span>
+      <span class="chip cy-path" data-path="BTC_BBFADE_NY" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v20 · BTC BB fade · 13–17h">BTC_BBFADE_NY</span>
+      <span class="chip cy-path" data-path="BTC_HL_NIGHT_V15" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · BTC HL noite vol1.5">BTC_HL_NIGHT_V15</span>
+      <span class="chip cy-path" data-path="BTC_VWAP_CONT_24H_MT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · BTC VWAP cont 24h · seg–qui">BTC_VWAP_CONT_24H_MT</span>
+      <span class="chip cy-path" data-path="BTC_HL_24H_MT_M30" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · BTC HL 24h · M30 · seg–qui">BTC_HL_24H_MT_M30</span>
+      <span class="chip cy-path" data-path="BTC_EMA_RECL_24H_M30" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · BTC EMA reclaim · M30">BTC_EMA_RECL_24H_M30</span>
+      <span class="chip cy-path" data-path="BTC_FRI_MON_INS" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · BTC inside · sex–seg">BTC_FRI_MON_INS</span>
+      <span class="chip cy-path" data-path="BTC_VWAP_CONT_LON" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · BTC VWAP cont · 08–12h">BTC_VWAP_CONT_LON</span>
+      <span class="chip cy-path" data-path="BTC_H4_PB_EMA_NY" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v15 · BTC PB EMA · 13–17h">BTC_H4_PB_EMA_NY</span>
+      <span class="chip cy-path" data-path="GBP_INS_AM_V13" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v9 · GBP M15 · 09–12 · vol 1.3×">GBP_INS_AM_V13</span>
+      <span class="chip cy-path" data-path="GBP_INS_1017_V13" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v11 · GBP · 10–17 · vol 1.3×">GBP_INS_1017_V13</span>
+      <span class="chip cy-path" data-path="GBP_INS_DAY" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v16 · GBP inside · 10–16h">GBP_INS_DAY</span>
+      <span class="chip cy-path" data-path="GBP_INS_LN" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v16 · GBP inside · 08–17h">GBP_INS_LN</span>
+      <span class="chip cy-path" data-path="GBP_INS_LN_MT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v16 · GBP inside · 08–17h · seg–qui">GBP_INS_LN_MT</span>
+      <span class="chip cy-path" data-path="EUR_LH_047_TP165" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v10 · EUR M15 · LH TP1.65 · 1/dia">EUR_LH_047_TP165</span>
+      <span class="chip cy-path" data-path="EUR_PDH_H4" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO mega · EUR PDH/PDL · 10–16h">EUR_PDH_H4</span>
+      <span class="chip cy-path" data-path="EUR_IMP_CONT_24H_MT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO yellow · EUR impulso 24h · seg–qui">EUR_IMP_CONT_24H_MT</span>
+      <span class="chip cy-path" data-path="EUR_VWAP_FADE_NY" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v16 · EUR VWAP fade · 13–17h">EUR_VWAP_FADE_NY</span>
+      <span class="chip cy-path" data-path="EUR_PDH_DAY_MT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v16 · EUR PDH 10–16 · seg–qui">EUR_PDH_DAY_MT</span>
+      <span class="chip cy-path" data-path="EUR_PDH_DAY_V13" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v16 · EUR PDH vol1.3 · 10–16h">EUR_PDH_DAY_V13</span>
+      <span class="chip cy-path" data-path="EUR_PDH_LN_MT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v16 · EUR PDH Lon+NY · seg–qui">EUR_PDH_LN_MT</span>
+      <span class="chip cy-path" data-path="EUR_NR4_LON0713" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v16 · EUR NR4 · 07–13h">EUR_NR4_LON0713</span>
+      <span class="chip cy-path" data-path="EUR_NR4_LN_MT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v16 · EUR NR4 Lon+NY · seg–qui">EUR_NR4_LN_MT</span>
+      <span class="chip cy-path" data-path="EUR_H4_PB_NY" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v16 · EUR PB EMA · 13–17h">EUR_H4_PB_NY</span>
+      <span class="chip cy-path" data-path="EUR_H4_PB_NY_MT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v16 · EUR PB EMA · 13–17h · seg–qui">EUR_H4_PB_NY_MT</span>
+      <span class="chip cy-path" data-path="EUR_ENGULF_LON_MT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v16 · EUR engolfo Lon · seg–qui">EUR_ENGULF_LON_MT</span>
+      <span class="chip cy-path" data-path="EUR_ENGULF_LN_MT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v16 · EUR engolfo Lon+NY · seg–qui">EUR_ENGULF_LN_MT</span>
+      <span class="chip cy-path" data-path="EUR_ENGULF_LN_M30" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v16 · EUR engolfo Lon+NY · M30">EUR_ENGULF_LN_M30</span>
+      <span class="chip cy-path" data-path="EUR_NR4_LON0713_MT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v17 · EUR NR4 · 07–13h · seg–qui">EUR_NR4_LON0713_MT</span>
+      <span class="chip cy-path" data-path="EUR_NR4_AM" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v17 · EUR NR4 · 09–12h">EUR_NR4_AM</span>
+      <span class="chip cy-path" data-path="EUR_HL_AM_MT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v17 · EUR HL · 09–12h · seg–qui">EUR_HL_AM_MT</span>
+      <span class="chip cy-path" data-path="EUR_ENGULF_LON_M30" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v17 · EUR engolfo Lon · M30">EUR_ENGULF_LON_M30</span>
+      <span class="chip cy-path" data-path="EUR_VWAP_FADE_LN_MT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v17 · EUR VWAP fade Lon+NY · seg–qui">EUR_VWAP_FADE_LN_MT</span>
+      <span class="chip cy-path" data-path="EUR_PDH_LON0713_MT" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v17 · EUR PDH · 07–13h · seg–qui">EUR_PDH_LON0713_MT</span>
+      <span class="chip cy-path" data-path="EUR_VWAP_FADE_LN_D14" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO v17 · EUR VWAP fade dist1.4 · Lon+NY">EUR_VWAP_FADE_LN_D14</span>
+      <span class="chip cy-path" data-path="XAUUSD_L_35" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO disc · XAU M15 feature-cond">XAUUSD_L_35</span>
+      <span class="chip cy-path" data-path="XAUUSD_L_07" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO disc · XAU M15 feature-cond">XAUUSD_L_07</span>
+      <span class="chip cy-path" data-path="XAUUSD_L_14" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO disc · XAU M15 feature-cond">XAUUSD_L_14</span>
+      <span class="chip cy-path" data-path="XAUUSD_L_31" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO disc · XAU M15 feature-cond">XAUUSD_L_31</span>
+      <span class="chip cy-path" data-path="XAUUSD_L_04" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO disc · XAU M15 feature-cond">XAUUSD_L_04</span>
+      <span class="chip cy-path" data-path="XAUUSD_L_02" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO disc · XAU M15 feature-cond">XAUUSD_L_02</span>
+      <span class="chip cy-path" data-path="XAUUSD_S_40" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO disc · XAU M15 feature-cond">XAUUSD_S_40</span>
+      <span class="chip cy-path" data-path="BTCUSD_L_30" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO disc · BTC M15 feature-cond">BTCUSD_L_30</span>
+      <span class="chip cy-path" data-path="BTCUSD_L_33" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO disc · BTC M15 feature-cond">BTCUSD_L_33</span>
+      <span class="chip cy-path" data-path="ETHUSD_S_36" style="border-color:rgba(52,224,161,.5);color:var(--green)" title="GO disc · ETH M60 feature-cond">ETHUSD_S_36</span>
+      <span class="chip cy-path mut" data-path="SCORE" title="Score + IA — OFF no auto">SCORE / IA</span>
+      <span class="chip cy-path" data-path="PULLBACK" title="Pullback macro/micro · só XAU">PULLBACK</span>
+      </div>
+    </div>
     <div class="grid g2">
-      <div class="panel"><h3 id="cyTitle">—</h3><div class="chartwrap" id="cyChartBox" style="height:340px;position:relative"><div id="cwCrypto" style="position:absolute;inset:0"></div></div></div>
+      <div class="panel"><h3 id="cyTitle">—</h3><div class="chartwrap" id="cyChartBox" style="height:470px;position:relative"><div id="cwCrypto" style="position:absolute;inset:0"></div></div></div>
       <div class="panel"><h3>Análise de oportunidade <span class="ln"></span></h3>
         <div id="cySignal"><div class="mut mini">carregando…</div></div>
         <div class="mini" id="cyReason" style="text-align:center;min-height:14px;color:var(--amber);margin-top:8px"></div>
@@ -350,8 +526,8 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:rgba(240,185,53,.09)}
       <div><s>RESULTADO</s><b id="cyRes">—</b></div>
     </div>
     <div class="panel" style="margin-top:16px"><h3>Trades do Monitor Crypto <span class="ln"></span></h3>
-      <table><thead><tr><th>HORA</th><th>ATIVO</th><th>DIR</th><th>ENTRADA</th><th>SAÍDA</th><th>PROFIT</th><th>RESULTADO</th></tr></thead>
-        <tbody id="cyHist"><tr><td colspan="7" class="mut">sem trades ainda</td></tr></tbody></table>
+      <table><thead><tr><th>DATA/HORA</th><th>ATIVO</th><th>SETUP</th><th>DIR</th><th>ENTRADA</th><th>SAÍDA</th><th>PROFIT</th><th>RESULTADO</th><th>MOTIVO</th></tr></thead>
+        <tbody id="cyHist"><tr><td colspan="9" class="mut">sem trades ainda</td></tr></tbody></table>
     </div>
   </section>
 
@@ -488,7 +664,7 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:rgba(240,185,53,.09)}
       <div class="panel" data-ck="D">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
           <div style="display:flex;align-items:center;gap:8px">
-            <input id="ckDsymIn" value="WDOQ26" style="width:100px;background:#0d1420;border:1px solid #223;color:#cfe;padding:4px 6px;border-radius:5px;font-family:'Share Tech Mono'">
+            <input id="ckDsymIn" value="WDOU26" style="width:100px;background:#0d1420;border:1px solid #223;color:#cfe;padding:4px 6px;border-radius:5px;font-family:'Share Tech Mono'">
             <span class="chip" id="ckDb3">—</span>
           </div>
           <div class="mono" id="ckDpx" style="font-size:20px">—</div>
@@ -594,11 +770,25 @@ const cls=n=>n>0?'up':n<0?'down':'mut';
 let active='dash';
 
 document.querySelectorAll('.nav').forEach(n=>n.onclick=()=>{
+  // Itens com data-link (ex.: Monitor Índices B3) navegam para uma página própria,
+  // em vez de trocar de seção interna do SPA.
+  const link=n.dataset.link;
+  if(link){location.href=link;return;}
+  if(!n.dataset.s)return;
   document.querySelectorAll('.nav').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('.screen').forEach(x=>x.classList.remove('on'));
   n.classList.add('active');active=n.dataset.s;document.getElementById(active).classList.add('on');
   refresh();
 });
+// Deep-link a partir de /v7 (ex.: /newdashboard?s=crypto)
+(function(){
+  try{
+    const s=new URLSearchParams(location.search).get('s');
+    if(!s)return;
+    const n=document.querySelector('.nav[data-s="'+s+'"]');
+    if(n)n.click();
+  }catch(e){}
+})();
 setInterval(()=>{document.getElementById('clock').textContent=new Date().toLocaleTimeString('pt-BR');},1000);
 
 // ===== menu retrátil (mais espaço para a área de trade) =====
@@ -611,6 +801,29 @@ function toggleMenu(){
 (function(){try{if(localStorage.getItem('hud_menu_collapsed')==='1')document.querySelector('.app').classList.add('collapsed');}catch(e){}})();
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&(e.key==='b'||e.key==='B')){e.preventDefault();toggleMenu();}});
 
+// ===== CAMINHOS crypto retrátil (mesmo padrão WIN/WDO /v7) =====
+function syncCyPathsUi(){
+  const wrap=document.getElementById('cyPaths');
+  const btn=document.getElementById('cyPathsToggle');
+  if(!wrap||!btn)return;
+  const open=!wrap.classList.contains('collapsed');
+  btn.textContent=open?'▾ Recolher':'▸ Expandir';
+}
+window.toggleCyPaths=function(){
+  const wrap=document.getElementById('cyPaths');
+  if(!wrap)return;
+  wrap.classList.toggle('collapsed');
+  try{localStorage.setItem('cy_paths_open',wrap.classList.contains('collapsed')?'0':'1');}catch(e){}
+  syncCyPathsUi();
+};
+(function(){
+  try{
+    const wrap=document.getElementById('cyPaths');
+    if(wrap&&localStorage.getItem('cy_paths_open')==='1')wrap.classList.remove('collapsed');
+  }catch(e){}
+  syncCyPathsUi();
+})();
+
 // ===== gráfico Lightweight Charts (mesma lib do Monitor atual) =====
 // Zoom/pan nativos + último candle atualizado a cada 1s via /api/monitor/tick.
 const charts={};   // cid -> {chart,candle,ema9,ema21,ema50,vwap,bbU,bbL,last,lines,fitted}
@@ -621,7 +834,9 @@ function ensureChart(cid){
   if(!el||!el.clientWidth||typeof LightweightCharts==='undefined')return null;
   el.innerHTML='';
   const chart=LightweightCharts.createChart(el,{
-    width:el.clientWidth,height:240,
+    // altura: usa a do container quando ele é grande (Crypto, 470px); mantém 240
+    // para os gráficos do Monitor MT5 (containers ~240px) — não os afeta.
+    width:el.clientWidth,height:(el.clientHeight>280?el.clientHeight:240),
     layout:{background:{type:'solid',color:'rgba(5,7,13,0)'},textColor:'#7f96ab',fontFamily:'Share Tech Mono',fontSize:10},
     grid:{vertLines:{color:'rgba(53,224,240,.06)'},horzLines:{color:'rgba(53,224,240,.06)'}},
     crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
@@ -687,7 +902,12 @@ let _monInit=false;
 let _monLastClosedId=null;   // som de saída: maior id de trade fechado já visto
 function setTrBtn(side){const b=document.getElementById('tr'+side);if(!b)return;b.textContent='TRADES: '+(tradeOn[side]?'ON':'OFF');b.classList.toggle('on',tradeOn[side]);}
 function _syncGate(side){try{post('/api/autotrade/symbol-gate',{token:side,enabled:!!tradeOn[side]});}catch(e){}}
-function loadTradesState(){try{const o=JSON.parse(localStorage.getItem('mon_trades')||'{}');tradeOn.WIN=!!o.WIN;tradeOn.WDO=!!o.WDO;}catch(e){}setTrBtn('WIN');setTrBtn('WDO');_syncGate('WIN');_syncGate('WDO');}
+function loadTradesState(){
+  // Monitor MT5 sobe SEMPRE OFF — auto no boot é só V7 + Crypto.
+  tradeOn.WIN=false;tradeOn.WDO=false;
+  try{localStorage.setItem('mon_trades',JSON.stringify(tradeOn));}catch(e){}
+  setTrBtn('WIN');setTrBtn('WDO');_syncGate('WIN');_syncGate('WDO');
+}
 function toggleTrades(side){tradeOn[side]=!tradeOn[side];setTrBtn(side);try{localStorage.setItem('mon_trades',JSON.stringify(tradeOn));}catch(e){}_syncGate(side);}
 function _setReason(side,r){const e=document.getElementById('trReason'+side);if(e)e.textContent=r||'';}
 async function driveMonitorExecute(side,sym,sig){
@@ -1195,32 +1415,65 @@ function renderTape(tape){
   el.innerHTML=tape.slice(0,60).map(t=>`<div><span class="mono">${fmt(t.price,0)}</span><span class="mono">${fmt(t.vol,0)}</span><span class="${t.side==='BUY'?'B':'S'}">${t.side==='BUY'?'C':'V'}</span></div>`).join('');
 }
 
-// ===== Dashboard =====
-async function loadDashboard(){
-  const at=await api('/api/autotrade/trades?limit=200');   // pega TODOS os sinais do dia (não só 50)
-  if(at&&at.stats){const st=at.stats;
-    // GERADOS = todos os sinais; BLOQUEADOS = IA aguardou/bloqueou; EXECUTADOS = o resto (trades reais)
-    const ger=+(st.total||0),bloq=+(st.bloqueados_ia??st.ia_bloqueados??st.blocked??0),exe=Math.max(0,ger-bloq);
-    setTxt('dTotal',exe);   // "Trades hoje" = EXECUTADOS de verdade (não sinais)
-    const wr=st.win_rate_pct??st.win_rate;setTxt('dWin',wr!=null?fmt(wr,0)+'%':'—');
-    const pnl=st.pnl_total_brl??st.pnl_brl;const el=document.getElementById('dPnl');if(el){el.textContent=sign(pnl,2);el.className='v '+cls(pnl);}
-    setTxt('dBlock',bloq);
-    const ph=document.getElementById('pnlHoje');if(ph){ph.textContent='R$ '+sign(pnl,0);ph.className=cls(pnl);}
-    setTxt('dFGer',ger);setTxt('dFExec',exe);setTxt('dFBloq',bloq);
-    setTxt('dFNote',ger===0?'Nenhum sinal atingiu o gatilho hoje — mercado sem setup válido (não é falha).'
-      :exe===0?'Todos os '+ger+' sinais foram segurados pela IA (menos trades, mais qualidade).'
-      :exe+' executado(s) de '+ger+' sinal(is) · '+bloq+' bloqueado(s) pela IA.');
-    renderBySym('dBySym',at.items);
-  }
+// ===== Dashboard / Relatório — Hub B3 (V7 + WinGo). Monitor MT5 NÃO entra aqui. =====
+function _v7Asset(t){
+  const s=String((t&&(t.symbol||t.setup))||'');
+  if(/WDO/i.test(s))return 'WDO';
+  if(/WIN|WIND|GAP|ORB|NR|INSIDE|EOD|HL|PDH|IMP/i.test(s))return 'WIN';
+  return (t&&t.symbol)||'—';
 }
-function renderBySym(id,items){
-  const tb=document.getElementById(id);if(!tb)return;
-  const g={};(items||[]).forEach(t=>{if(_isBlocked(t)||t.pnl_brl==null)return;const k=(t.tv_symbol||'—').split(':').pop();
-    (g[k]=g[k]||{n:0,w:0,pnl:0});g[k].n++;if((+t.pnl_brl)>0)g[k].w++;g[k].pnl+=(+t.pnl_brl||0);});
-  const ks=Object.keys(g);
-  if(!ks.length){tb.innerHTML='<tr><td colspan="4" class="mut">sem trades executados hoje</td></tr>';return;}
-  tb.innerHTML=ks.map(k=>{const x=g[k],wr=x.n?Math.round(x.w/x.n*100):0;
-    return `<tr><td>${k}</td><td>${x.n}</td><td class="${wr>=50?'up':'gd'}">${wr}%</td><td class="${cls(x.pnl)}">${sign(x.pnl,2)}</td></tr>`;}).join('');
+function _v7Px(v, asset){
+  if(v==null||v==='')return '—';
+  const n=Number(v); if(!isFinite(n))return String(v);
+  return asset==='WDO'?n.toFixed(1):n.toFixed(0);
+}
+function _applyV7HeaderPnl(pnl){
+  const ph=document.getElementById('pnlHoje');
+  if(ph){ph.textContent='R$ '+sign(pnl,0);ph.className=cls(pnl);}
+}
+function _renderBySetup(id, by){
+  const tb=document.getElementById(id); if(!tb)return;
+  const rows=Object.entries(by||{}).sort((a,b)=>Number(b[1].pnl_brl||0)-Number(a[1].pnl_brl||0));
+  if(!rows.length){tb.innerHTML='<tr><td colspan="5" class="mut">sem trades no período</td></tr>';return;}
+  tb.innerHTML=rows.map(([k,v])=>{
+    const rr=Number(v.pnl_r||0), brl=Number(v.pnl_brl||0);
+    return `<tr><td class="gd">${k}</td><td>${v.n}</td>`
+      +`<td class="${cls(rr)}">${rr>=0?'+':''}${rr.toFixed(2)} R</td>`
+      +`<td class="${cls(brl)}">${sign(brl,0)}</td>`
+      +`<td class="mut">${v.wins||0}/${v.n}</td></tr>`;
+  }).join('');
+}
+function _renderV7Recent(id, trades){
+  const tb=document.getElementById(id); if(!tb)return;
+  const closed=(trades||[]).filter(t=>(t.exit_reason||'')!=='ABERTO'&&t.profit_brl!==''&&t.profit_brl!=null);
+  if(!closed.length){tb.innerHTML='<tr><td colspan="5" class="mut">sem trades fechados hoje</td></tr>';return;}
+  tb.innerHTML=closed.slice(0,12).map(t=>{
+    const ts=(t.ts_close||t.ts||'').replace('T',' ').slice(11,16)||'—';
+    const pnl=t.profit_brl, rr=t.r_multiple;
+    return `<tr><td>${ts}</td><td class="gd">${t.setup||''}</td>`
+      +`<td class="${t.dir==='COMPRA'?'up':'down'}">${t.dir||''}</td>`
+      +`<td class="${cls(pnl)}">${pnl!=null&&pnl!==''?sign(+pnl,0):'—'}</td>`
+      +`<td class="${cls(rr)}">${rr!=null&&rr!==''?(Number(rr)>=0?'+':'')+Number(rr).toFixed(2):'—'}</td></tr>`;
+  }).join('');
+}
+async function loadDashboard(){
+  const d=await api('/api/v7/period?range=day&trades=1');
+  if(!d||!d.ok){setTxt('dTotal','—');return;}
+  setTxt('dTotal', d.trades??0);
+  setTxt('dWin', (d.win_rate!=null?d.win_rate+'%':'—'));
+  const pf=d.pf; setTxt('dPF', pf==null?'—':(pf>=99?'∞':Number(pf).toFixed(2)));
+  const pnl=d.pnl_brl; const el=document.getElementById('dPnl');
+  if(el){el.textContent=sign(pnl,2); el.className='v '+cls(pnl);}
+  _applyV7HeaderPnl(pnl);
+  const kr=document.getElementById('dR'); if(kr){kr.textContent=Number(d.pnl_r||0).toFixed(2)+' R'; kr.className='v '+cls(d.pnl_r);}
+  setTxt('dDD', Number(d.max_dd_r||0).toFixed(1)+' R');
+  setTxt('dWins', d.wins??0); setTxt('dLosses', d.losses??0);
+  _renderBySetup('dBySetup', d.by_setup);
+  _renderV7Recent('dRecent', d.trade_list);
+}
+async function updateV7HeaderPnl(){
+  const d=await api('/api/v7/period?range=day');
+  if(d&&d.ok)_applyV7HeaderPnl(d.pnl_brl);
 }
 // ===== renderizadores genéricos (lidam com qualquer formato de retorno) =====
 function pretty(k){return String(k).replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());}
@@ -1378,17 +1631,46 @@ async function cyInit(){
   const box=document.getElementById('cySyms');
   if(box)box.innerHTML=syms.map(s=>`<button class="segbtn ${s===_cy.sym?'on':''}" data-sym="${s}" onclick="cyPick('${s}')">${s}</button>`).join('');
   const st=await api('/api/crypto/auto-state');if(st&&st.state)Object.assign(_cyOn,st.state);
-  const ac=await api('/api/crypto/account');_cy.ccy=(ac&&ac.account&&ac.account.currency)||'USD';_cy.usdbrl=(ac&&ac.usdbrl)||5.2;
-  const cc=document.getElementById('cyCcy');if(cc)cc.textContent=_cy.ccy+' · R$ '+(+_cy.usdbrl).toFixed(2)+'/US$';
+  await cyRefreshRate(true);
   const lt=await api('/api/crypto/lot');if(lt&&lt.lots)_cy.lots=lt.lots;
   cySetTrBtn();cyApplyLot();await cyLoadSpec();
+}
+async function cyRefreshRate(force){
+  if(!force&&_cy._rateTs&&(Date.now()-_cy._rateTs)<300000)return; // 5 min
+  try{
+    const ac=await api('/api/crypto/account');
+    if(!ac||!ac.ok)return;
+    _cy.ccy=(ac.account&&ac.account.currency)||_cy.ccy||'USD';
+    _cy.usdbrl=(ac.usdbrl!=null?+ac.usdbrl:null)||_cy.usdbrl||5.2;
+    _cy.usdbrlSrc=ac.usdbrl_source||_cy.usdbrlSrc||'';
+    _cy._rateTs=Date.now();
+    const cc=document.getElementById('cyCcy');
+    if(cc){
+      const src=_cy.usdbrlSrc&&_cy.usdbrlSrc!=='fallback'?(' · '+_cy.usdbrlSrc):'';
+      cc.textContent=_cy.ccy+' · R$ '+(+_cy.usdbrl).toFixed(2)+'/US$';
+      cc.title='Cotação USD/BRL'+src+' (converte P&L da conta para Real)';
+    }
+  }catch(e){}
 }
 async function cyLoadSpec(){
   const d=await api('/api/crypto/symbol-info?symbol='+encodeURIComponent(_cy.sym));
   _cy.spec=_cy.spec||{};if(d&&d.spec)_cy.spec[_cy.sym]=d.spec;cyUpdatePip();
 }
 function _cyCur(){const m={USD:'$',EUR:'€',BRL:'R$',GBP:'£',JPY:'¥'};return m[_cy.ccy]||(_cy.ccy||'$');}
-function _cyMoney(usd){const u=+usd||0,brl=u*(_cy.usdbrl||5.2);return _cyCur()+' '+sign(u,2)+' · R$ '+sign(brl,2);}
+function _cyMoney(usd){
+  const u=+usd||0;
+  if((_cy.ccy||'USD')==='BRL') return 'R$ '+sign(u,2);
+  const brl=u*(_cy.usdbrl||5.2);
+  return _cyCur()+' '+sign(u,2)+' · R$ '+sign(brl,2);
+}
+/** Célula PROFIT do histórico: compacta, com R$ em muted. */
+function _cyProfitCell(v){
+  if(v==null||v==='')return '—';
+  const u=+v||0;
+  if((_cy.ccy||'USD')==='BRL') return 'R$ '+sign(u,2);
+  const brl=u*(_cy.usdbrl||5.2);
+  return sign(u,2)+' <span class="mut">· R$ '+sign(brl,2)+'</span>';
+}
 function cyUpdatePip(){
   const el=document.getElementById('cyPip');if(!el)return;
   const sp=(_cy.spec||{})[_cy.sym];const inp=document.getElementById('cyLot');const lot=parseFloat(inp&&inp.value)||0.1;
@@ -1416,6 +1698,7 @@ async function cyLoad(){
     _cy.mtFail=0;
     if(conn){conn.className='chip g';conn.textContent='CONECTADO';}
     cyRenderChart('cwCrypto',d.candles);
+    cyMarkPaths(d.active_paths||[]);
     const pos=await api('/api/crypto/position?symbol='+encodeURIComponent(sym));const p=pos&&pos.position;
     if(p&&p.type){
       _cy.lastTicket=p.ticket;_cy.lastProfit=p.profit;_cy.noPos=0;
@@ -1423,7 +1706,7 @@ async function cyLoad(){
       const mg=await api('/api/crypto/manage?symbol='+encodeURIComponent(sym)+'&interval='+_cy.tf);
       cyRenderManage(p,mg);
       drawLines('cwCrypto',p.type,p.price_open,(mg&&mg.applied)||p.sl,p.tp);
-      if(_cyOn[sym]&&mg&&mg.close){await cyClose();}
+      if(_cyOn[sym]&&mg&&mg.close){await cyClose(mg.close_code||'MANAGER', mg.reason||'');}
     } else if(_cy.lastTicket){
       // Posição NÃO veio nesta leitura. Confirma o fechamento no servidor.
       const cl=await registerCryptoClose(sym,_cy.lastProfit);
@@ -1434,18 +1717,21 @@ async function cyLoad(){
       if((cl&&cl.closed)||_cy.noPos>=3){
         _cy.lastTicket=null;_cy.pos=null;_cy.noPos=0;
         drawLines('cwCrypto');   // LIMPA Entrada/Stop/TP1 do gráfico
-        cyRenderSignal(d.signal,d.last_ai);
-        if(d.signal&&d.signal.acao!=='NEUTRO')drawLines('cwCrypto',d.signal.acao,d.signal.entrada,d.signal.stop,d.signal.tp1);
+        cyRenderSignal(d.signal,d.last_ai,d);
+        if(d.score_armed&&d.signal&&d.signal.acao!=='NEUTRO')drawLines('cwCrypto',d.signal.acao,d.signal.entrada,d.signal.stop,d.signal.tp1);
       }
       // senão (transitório, <3 leituras): mantém o modo MANAGER
     } else {
       // sem posição e sem trade em aberto → painel de sinal + auto-check
       _cy.pos=null;
-      cyRenderSignal(d.signal,d.last_ai);
-      if(d.signal&&d.signal.acao!=='NEUTRO')drawLines('cwCrypto',d.signal.acao,d.signal.entrada,d.signal.stop,d.signal.tp1);
+      cyRenderSignal(d.signal,d.last_ai,d);
+      if(d.score_armed&&d.signal&&d.signal.acao!=='NEUTRO')drawLines('cwCrypto',d.signal.acao,d.signal.entrada,d.signal.stop,d.signal.tp1);
       else drawLines('cwCrypto');   // sem sinal → LIMPA as linhas
-      if(_cyOn[sym]){const r=await post('/api/crypto/auto-check',{symbol:sym,interval:_cy.tf});
-        if(r){if(r.action==='EXECUTED')playEntry();setTxt('cyReason',r.action==='EXECUTED'?'✅ ordem executada ('+sym+')':(r.action==='BLOCKED'?'🚫 '+(r.reason||''):(r.reason||'')));}}
+      // Auto do SERVIDOR (crypto_auto_runtime) tem prioridade — UI não compete pelo lock
+      if(_cyOn[sym] && !(await cyRuntimeAlive())){
+        const r=await post('/api/crypto/auto-check',{symbol:sym,interval:_cy.tf});
+        if(r){if(r.action==='EXECUTED')playEntry();setTxt('cyReason',r.action==='EXECUTED'?'✅ ordem executada ('+sym+')':(r.action==='BLOCKED'?'🚫 '+(r.reason||''):(r.reason||'')));}
+      }
     }
   }
   const s=await api('/api/crypto/session');const ss=(s&&s.session)?s.session:s;
@@ -1537,15 +1823,51 @@ async function cyLoadMM(){
   if(key!==_cyMMlast){if(d.kind==='PULLBACK'||d.kind==='REVERSAO')playAlert();_cyMMlast=key;}
 }
 function playAlert(){if(!_snd.on||!_actx())return;_tone(880,0,0.10,'sine',0.14);_tone(660,0.12,0.14,'sine',0.14);_tone(990,0.28,0.16,'sine',0.12);}
-function cyRenderSignal(sig,ai){
-  const b=document.getElementById('cySignal');if(!b)return;sig=sig||{};
-  const a=sig.acao||'NEUTRO',ac=a==='COMPRA'?'up':a==='VENDA'?'down':'mut';
+function cyMarkPaths(paths){
+  const set={};
+  (paths||[]).forEach(function(p){set[String(p).toUpperCase()]=true;});
+  document.querySelectorAll('#cyPaths .cy-path').forEach(function(el){
+    const k=String(el.dataset.path||'').toUpperCase();
+    const on=!!set[k];
+    el.classList.toggle('on-asset',on);
+    el.classList.toggle('dim',!on);
+  });
+  const hint=document.getElementById('cyPathHint');
+  if(hint){
+    if(!paths||!paths.length)hint.textContent=_cy.sym+': nenhum caminho auto neste ativo';
+    else hint.textContent=_cy.sym+': '+paths.length+' caminhos GO ativos';
+  }
+}
+function cyRenderSignal(sig,ai,meta){
+  const b=document.getElementById('cySignal');if(!b)return;sig=sig||{};meta=meta||{};
+  const paths=meta.active_paths||[];
+  const armed=!!meta.score_armed;
   const row=(l,v,c)=>`<div class="mrow"><span class="ml">${l}</span><span class="mv ${c||''}">${v}</span></div>`;
-  let h=row('Sinal',`${a} · score ${(sig.score>=0?'+':'')}${sig.score??0} · ${sig.forca||'—'}`,ac);
+  let h='';
+  if(!armed){
+    h+='<div class="panel" style="margin-bottom:8px;padding:8px 10px">'
+      +'<b class="cy">AUTO SÓ VIA CAMINHOS GO</b>'
+      +'<div class="mini mut" style="margin-top:4px">Score / pullback <b>não</b> disparam entrada neste ativo. '
+      +(meta.auto_blocked?'Score legado OFF (spread M15 no backtest) — GOs abaixo seguem. ':'')
+      +'Aguardando · <span class="gd">'+(paths.length?paths.length+' GOs (ver chips)':'nenhum GO')+'</span></div></div>';
+    h+=row('Status auto','SCAN · sem gatilho GO','mut');
+    if(ai&&ai.veredito&&String(ai.veredito).indexOf('EXECUTAR')<0&&String(ai.veredito).indexOf('BLOQUEAR')<0){
+      h+='<div class="panel" style="margin-top:10px"><b class="gd">último caminho: '+ai.veredito+'</b>'
+        +'<div class="mini mut" style="margin-top:4px">'+(ai.motivo||'')+'</div></div>';
+    }
+    // contexto técnico (informativo, sem parecer ordem)
+    h+='<div class="mini mut" style="margin-top:10px;letter-spacing:1px">CONTEXTO (não é gatilho)</div>';
+    h+=row('Score / força',`${(sig.score>=0?'+':'')}${sig.score??0} · ${sig.forca||'—'} · ${sig.acao||'NEUTRO'}`,'mut');
+    h+=row('RSI / ADX / 1h',`${sig.rsi??'—'} / ${sig.adx??'—'} / ${sig.htf_trend||'—'}`,'mut');
+    b.innerHTML=h;return;
+  }
+  const a=sig.acao||'NEUTRO',ac=a==='COMPRA'?'up':a==='VENDA'?'down':'mut';
+  h+=row('Sinal',`${a} · score ${(sig.score>=0?'+':'')}${sig.score??0} · ${sig.forca||'—'}`,ac);
   h+=row('Entrada',_cyFmt(sig.entrada));
   h+=row('Stop / TP1',_cyFmt(sig.stop)+' / '+_cyFmt(sig.tp1));
   h+=row('RSI / ADX / 1h',`${sig.rsi??'—'} / ${sig.adx??'—'} / ${sig.htf_trend||'—'}`);
   if(sig.confluences&&sig.confluences.length)h+='<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">'+sig.confluences.map(x=>`<span class="chip mini">${x}</span>`).join('')+'</div>';
+  if(paths&&paths.length)h+='<div class="mini mut" style="margin-top:8px">caminhos auto: '+paths.length+' GOs</div>';
   if(ai&&ai.veredito){const vc=ai.veredito==='EXECUTAR'?'up':ai.veredito==='BLOQUEAR'?'down':'gd';
     h+='<div class="panel" style="margin-top:10px"><b class="'+vc+'">🤖 IA: '+ai.veredito+(ai.confianca!=null?' ('+ai.confianca+'%)':'')+'</b><div class="mini mut" style="margin-top:4px">'+(ai.motivo||'')+'</div></div>';}
   b.innerHTML=h;
@@ -1574,7 +1896,35 @@ async function cyManual(acao){
   if(r&&r.ok)playEntry();
   setTxt('cyReason',r&&r.ok?'✅ ordem enviada':'✕ '+String((r&&r.error)||'falha').slice(0,70));cyLoad();
 }
-async function cyClose(){const r=await post('/api/crypto/close',{symbol:_cy.sym});setTxt('cyReason',r&&r.ok?'posição fechada':'✕ '+String((r&&r.error)||'nada a fechar').slice(0,70));cyLoad();}
+async function cyClose(reason, detail){
+  const body={symbol:_cy.sym};
+  if(reason){body.reason=reason; body.detail=detail||'';}
+  const r=await post('/api/crypto/close',body);
+  setTxt('cyReason',r&&r.ok?'posição fechada':'✕ '+String((r&&r.error)||'nada a fechar').slice(0,70));
+  cyLoad();
+}
+function _cyExitLbl(er){
+  if(!er)return '<span class="mut">—</span>';
+  const s=String(er);
+  const code=s.split('·')[0].trim().toUpperCase();
+  const map={
+    GIVEBACK:{t:'🔒 Giveback',c:'gd'},
+    MICRO:{t:'⚡ Micro',c:'gd'},
+    REVERSAO:{t:'⚠️ Reversão',c:'gd'},
+    SAIDA_ANTECIPADA:{t:'🛡 Saída antecipada',c:'gd'},
+    SAIDA:{t:'Saída',c:'mut'},
+    TIME_STOP:{t:'⏱ Time-stop',c:'mut'},
+    MANUAL:{t:'✋ Manual',c:'cy'},
+    MANAGER:{t:'🛡 Manager',c:'gd'},
+    TP:{t:'🎯 TP',c:'up'},
+    SL:{t:'🛑 SL',c:'down'},
+    BE:{t:'➖ BE',c:'mut'},
+    MT5:{t:'🔄 Broker',c:'mut'},
+  };
+  const m=map[code];
+  if(m) return `<span class="${m.c}" title="${s.replace(/"/g,'&quot;')}">${m.t}</span>`;
+  return `<span class="mut" title="${s.replace(/"/g,'&quot;')}">${s.slice(0,28)}</span>`;
+}
 async function registerCryptoClose(sym,fallbackProfit){
   // servidor autoritativo: só registra/soa se houver fechamento REAL (retorna {closed,profit})
   try{
@@ -1586,6 +1936,7 @@ async function registerCryptoClose(sym,fallbackProfit){
 }
 async function cyHist(){
   const tb=document.getElementById('cyHist');if(!tb)return;
+  await cyRefreshRate(false);
   const [d,pp]=await Promise.all([api('/api/crypto/trades'),api('/api/crypto/positions')]);
   const open=(pp&&pp.items)||[];const it=(d&&d.items)||[];
   // som de saída: só dispara p/ trade fechado NOVO (init silencioso), igual ao B3.
@@ -1599,11 +1950,27 @@ async function cyHist(){
     }
   }catch(e){}
   let rows='';
-  open.forEach(p=>{rows+=`<tr style="background:rgba(53,224,240,.06)"><td class="cy">agora</td><td>${p.symbol||''}</td><td class="${p.type==='COMPRA'?'up':'down'}">${p.type||''}</td><td>${_cyFmt(p.price_open)}</td><td class="mut">— aberto —</td><td class="${(+p.profit||0)>=0?'up':'down'}">${sign(+p.profit||0,2)}</td><td class="cy">● ABERTO</td></tr>`;});
-  it.slice().reverse().slice(0,40).forEach(t=>{rows+=`<tr><td>${(t.datetime_brt||'').slice(11,19)}</td><td>${t.symbol||''}</td><td class="${t.direcao==='COMPRA'?'up':'down'}">${t.direcao||''}</td><td>${t.entry_price||'—'}</td><td>${t.exit_price||'—'}</td><td class="${(+t.profit||0)>=0?'up':'down'}">${t.profit!=null?sign(+t.profit,2):'—'}</td><td>${t.resultado||''}</td></tr>`;});
-  tb.innerHTML=rows||'<tr><td colspan="7" class="mut">sem trades ainda</td></tr>';
+  const _cyDt=s=>{if(!s)return '—';s=String(s);return s.length>=16?(s.slice(8,10)+'/'+s.slice(5,7)+' '+s.slice(11,16)):s;};
+  open.forEach(p=>{rows+=`<tr style="background:rgba(53,224,240,.06)"><td class="cy">agora</td><td>${p.symbol||''}</td><td class="gd">—</td><td class="${p.type==='COMPRA'?'up':'down'}">${p.type||''}</td><td>${_cyFmt(p.price_open)}</td><td class="mut">— aberto —</td><td class="${(+p.profit||0)>=0?'up':'down'}">${_cyProfitCell(p.profit)}</td><td class="cy">● ABERTO</td><td class="mut">—</td></tr>`;});
+  it.slice().reverse().slice(0,40).forEach(t=>{rows+=`<tr><td>${_cyDt(t.datetime_brt)}</td><td>${t.symbol||''}</td><td class="gd">${t.ai_veredito||t.source||'—'}</td><td class="${t.direcao==='COMPRA'?'up':'down'}">${t.direcao||''}</td><td>${t.entry_price||'—'}</td><td>${t.exit_price||'—'}</td><td class="${(+t.profit||0)>=0?'up':'down'}">${t.profit!=null?_cyProfitCell(t.profit):'—'}</td><td>${t.resultado||''}</td><td>${_cyExitLbl(t.exit_reason)}</td></tr>`;});
+  tb.innerHTML=rows||'<tr><td colspan="9" class="mut">sem trades ainda · baseline GO limpa</td></tr>';
 }
-async function cyBgDrive(){for(const sym of Object.keys(_cyOn)){if(!_cyOn[sym])continue;try{const r=await post('/api/crypto/auto-check',{symbol:sym,interval:_cy.tf});if(r&&r.action==='EXECUTED')playEntry();}catch(e){}}}
+let _cyRtAlive={ok:false,ts:0};
+async function cyRuntimeAlive(){
+  if(Date.now()-_cyRtAlive.ts < 15000) return !!_cyRtAlive.ok;
+  try{
+    const d=await api('/api/crypto/runtime-alive');
+    _cyRtAlive={ok:!!(d&&d.alive), ts:Date.now()};
+  }catch(e){ _cyRtAlive={ok:false, ts:Date.now()}; }
+  return !!_cyRtAlive.ok;
+}
+async function cyBgDrive(){
+  if(await cyRuntimeAlive()) return; // servidor já varre todos os símbolos
+  for(const sym of Object.keys(_cyOn)){
+    if(!_cyOn[sym])continue;
+    try{const r=await post('/api/crypto/auto-check',{symbol:sym,interval:_cy.tf});if(r&&r.action==='EXECUTED')playEntry();}catch(e){}
+  }
+}
 setInterval(()=>{if(active!=='crypto'&&Object.values(_cyOn).some(v=>v))cyBgDrive();},12000);
 
 // ===== RELATÓRIO CRYPTO (dia/semana/mês) — só crypto, independente da B3 =====
@@ -1618,33 +1985,44 @@ async function cyRebuild(){
 }
 async function loadCryptoReport(){
   const b=document.getElementById('cryptoReportBox');if(!b)return;
+  await cyRefreshRate(false);
   const d=await api('/api/crypto/report?period='+_crPeriod);
   if(!d||!d.ok){b.innerHTML='<div class="mut">sem dados no período</div>';return;}
-  const s=d.summary||{},tr=d.trades||[];const cur=(typeof _cyCur==='function'?_cyCur():'$');
+  const s=d.summary||{},tr=d.trades||[];
+  const money=typeof _cyMoney==='function'?_cyMoney:(u)=>sign(u,2);
   const rr=document.getElementById('crRange');if(rr)rr.textContent=(d.date_from||'')+(d.date_to&&d.date_to!==d.date_from?' → '+d.date_to:'');
   const pnl=s.pnl||0;
   const kpi=(v,l,c,t)=>`<div class="panel"><div class="kpi"><div class="v ${c||''}">${v}</div><div class="l">${l}</div>${t?'<div class="trend">'+t+'</div>':''}</div></div>`;
   let h='<div class="grid g4">'
-    +kpi(cur+' '+sign(pnl,2),'P&L do período',cls(pnl))
+    +kpi(money(pnl),'P&L do período',cls(pnl))
     +kpi((s.win_rate!=null?s.win_rate+'%':'—'),'Win rate','up',(s.wins||0)+'W / '+(s.losses||0)+'L')
     +kpi((s.profit_factor!=null?(+s.profit_factor).toFixed(2):'—'),'Profit factor',(s.profit_factor>=1?'up':'down'))
     +kpi((s.total??0),'Trades','cy',(s.be?s.be+' BE':''))
     +'</div>';
   let card3='',card4='';
   if(_crPeriod!=='day'&&s.best_day){
-    card3=kpi(cur+' '+fmt(s.best_day.pnl,0),'Melhor dia',cls(s.best_day.pnl),s.best_day.date);
-    card4=s.worst_day?kpi(cur+' '+fmt(s.worst_day.pnl,0),'Pior dia',cls(s.worst_day.pnl),s.worst_day.date):'';
+    card3=kpi(money(s.best_day.pnl),'Melhor dia',cls(s.best_day.pnl),s.best_day.date);
+    card4=s.worst_day?kpi(money(s.worst_day.pnl),'Pior dia',cls(s.worst_day.pnl),s.worst_day.date):'';
   } else {
     let bt=null,wt=null;tr.forEach(t=>{const v=+t.profit||0;if(!bt||v>(+bt.profit||0))bt=t;if(!wt||v<(+wt.profit||0))wt=t;});
-    card3=bt?kpi(cur+' '+sign(+bt.profit||0,0),'Melhor trade',cls(+bt.profit),(bt.symbol||'')):'';
-    card4=wt?kpi(cur+' '+sign(+wt.profit||0,0),'Pior trade',cls(+wt.profit),(wt.symbol||'')):'';
+    card3=bt?kpi(money(+bt.profit||0),'Melhor trade',cls(+bt.profit),(bt.symbol||'')):'';
+    card4=wt?kpi(money(+wt.profit||0),'Pior trade',cls(+wt.profit),(wt.symbol||'')):'';
   }
   h+='<div class="grid g4" style="margin-top:16px">'
-    +kpi((s.expectativa!=null?sign(s.expectativa,2):'—'),'Expectativa (por trade)')
+    +kpi((s.expectativa!=null?money(s.expectativa):'—'),'Expectativa (por trade)')
     +kpi((s.avg_score??'—'),'Score médio','gd')+card3+card4+'</div>';
   const daily=(d.daily||[]);
-  if(daily.length)h+=panelHTML('Resultado por dia','<table><thead><tr><th>DIA</th><th>TRADES</th><th>WINS</th><th>LOSSES</th><th>P&L R$</th></tr></thead><tbody>'+daily.map(x=>`<tr><td>${x.date}</td><td>${x.trades}</td><td class="up">${x.wins}</td><td class="down">${x.losses}</td><td class="${cls(x.pnl)}">${sign(x.pnl,2)}</td></tr>`).join('')+'</tbody></table>');
-  h+=panelHTML('Trades do período',tr.length?'<table><thead><tr><th>DATA/HORA</th><th>ATIVO</th><th>DIR</th><th>SCORE</th><th>ENTRADA</th><th>SAÍDA</th><th>P&L R$</th><th>IA</th></tr></thead><tbody>'+tr.slice().reverse().slice(0,80).map(t=>`<tr><td>${(t.datetime_brt||'').slice(5,16)}</td><td>${t.symbol||''}</td><td class="${t.direcao==='COMPRA'?'up':'down'}">${t.direcao||''}</td><td>${t.score||''}</td><td>${t.entry_price||'—'}</td><td>${t.exit_price||'—'}</td><td class="${(+t.profit||0)>=0?'up':'down'}">${t.profit!=null?sign(+t.profit,2):'—'}</td><td class="mut">${t.ai_veredito||''}</td></tr>`).join('')+'</tbody></table>':'<div class="mut mini">nenhum trade no período</div>');
+  if(daily.length)h+=panelHTML('Resultado por dia','<table><thead><tr><th>DIA</th><th>TRADES</th><th>WINS</th><th>LOSSES</th><th>P&L</th></tr></thead><tbody>'+daily.map(x=>`<tr><td>${x.date}</td><td>${x.trades}</td><td class="up">${x.wins}</td><td class="down">${x.losses}</td><td class="${cls(x.pnl)}">${money(x.pnl)}</td></tr>`).join('')+'</tbody></table>');
+  // Agrega por SETUP (ai_veredito guarda o caminho: ORDER_FLOW, RND_FADE_TIGHT, …)
+  const bySetup={};
+  tr.forEach(t=>{const s=(t.ai_veredito||'SCORE/IA').trim()||'SCORE/IA';
+    const d=bySetup[s]||(bySetup[s]={n:0,wins:0,pnl:0});d.n++;const p=+t.profit||0;d.pnl+=p;if(p>0)d.wins++;});
+  const setupRows=Object.entries(bySetup).sort((a,b)=>b[1].n-a[1].n);
+  if(setupRows.length)h+=panelHTML('Por setup','<table><thead><tr><th>SETUP</th><th>TRADES</th><th>WINS</th><th>P&L</th></tr></thead><tbody>'
+    +setupRows.map(([k,v])=>`<tr><td class="gd">${k}</td><td>${v.n}</td><td class="up">${v.wins}</td><td class="${cls(v.pnl)}">${money(v.pnl)}</td></tr>`).join('')
+    +'</tbody></table>');
+  const pcell=typeof _cyProfitCell==='function'?_cyProfitCell:(v)=>v!=null?sign(+v,2):'—';
+  h+=panelHTML('Trades do período',tr.length?'<table><thead><tr><th>DATA/HORA</th><th>ATIVO</th><th>SETUP</th><th>DIR</th><th>ENTRADA</th><th>SAÍDA</th><th>P&L</th><th>MOTIVO</th></tr></thead><tbody>'+tr.slice().reverse().slice(0,80).map(t=>`<tr><td>${(t.datetime_brt||'').slice(5,16)}</td><td>${t.symbol||''}</td><td class="gd">${t.ai_veredito||'—'}</td><td class="${t.direcao==='COMPRA'?'up':'down'}">${t.direcao||''}</td><td>${t.entry_price||'—'}</td><td>${t.exit_price||'—'}</td><td class="${(+t.profit||0)>=0?'up':'down'}">${t.profit!=null?pcell(t.profit):'—'}</td><td>${typeof _cyExitLbl==='function'?_cyExitLbl(t.exit_reason):(t.exit_reason||'—')}</td></tr>`).join('')+'</tbody></table>':'<div class="mut mini">nenhum trade no período</div>');
   b.innerHTML=h;
 }
 
@@ -1668,56 +2046,113 @@ function setTF(tf){monTF.v=tf;document.querySelectorAll('#tfSel .segbtn').forEac
   Object.values(charts).forEach(c=>c.fitted=false);   // re-ajusta moldura ao trocar TF
   setTimeout(loadMonitor,30);}
 
-// ===== RELATÓRIO (dia/semana/mês) =====
+// ===== RELATÓRIO Hub B3 (dia/semana/mês) =====
 let _rpPeriod='day';
-function setReport(p){_rpPeriod=p;[['day','rpDay'],['week','rpWeek'],['month','rpMonth']].forEach(([x,id])=>document.getElementById(id).classList.toggle('on',x===p));loadReport();}
-function renderReportTrades(tr){
-  if(!tr.length)return '<div class="mut mini">nenhum trade executado no período</div>';
-  return '<table><thead><tr><th>DATA/HORA</th><th>ATIVO</th><th>AÇÃO</th><th>SCORE</th><th>ENTRADA</th><th>SAÍDA</th><th>P&L R$</th><th>MOTIVO</th></tr></thead><tbody>'
-    +tr.slice().reverse().slice(0,80).map(t=>{const a=t.acao||'',ac=a==='COMPRA'?'up':a==='VENDA'?'down':'mut';const pnl=t.pnl_brl;
-      return `<tr><td>${(t.opened_at||'').replace('T',' ').slice(5,16)}</td><td>${(t.tv_symbol||'').slice(-6)}</td><td class="${ac}">${a}</td><td>${t.score??''}</td><td>${fmt(t.entry_price,2)}</td><td>${t.exit_price?fmt(t.exit_price,2):'—'}</td><td class="${cls(pnl)}">${pnl!=null?sign(pnl,2):'—'}</td><td>${t.close_reason||''}</td></tr>`;}).join('')+'</tbody></table>';
+function setReport(p){
+  _rpPeriod=p;
+  [['day','rpDay'],['week','rpWeek'],['month','rpMonth']].forEach(([x,id])=>{
+    const el=document.getElementById(id); if(el)el.classList.toggle('on',x===p);
+  });
+  loadReport();
+}
+function _v7ClosedInRange(trades, dateFrom){
+  const df=dateFrom||'';
+  return (trades||[]).filter(t=>{
+    if((t.exit_reason||'')==='ABERTO')return false;
+    if(t.profit_brl===''||t.profit_brl==null)return false;
+    const day=(t.ts_close||t.ts||'').replace('T',' ').slice(0,10);
+    if(df && day && day<df)return false;
+    return true;
+  });
+}
+function renderV7ReportTrades(tr){
+  if(!tr.length)return '<div class="mut mini">nenhum trade no período</div>';
+  return '<table><thead><tr><th>DATA/HORA</th><th>SETUP</th><th>DIR</th><th>ENTRADA</th><th>SAÍDA</th><th>R$</th><th>R</th></tr></thead><tbody>'
+    +tr.map(t=>{
+      const asset=_v7Asset(t);
+      const ts=(t.ts_close||t.ts_open||t.ts||'').replace('T',' ').slice(5,16);
+      const pnl=Number(t.profit_brl), rr=t.r_multiple===''||t.r_multiple==null?null:Number(t.r_multiple);
+      const exit=(t.exit?_v7Px(t.exit,asset)+' · ':'')+(t.exit_reason||'—');
+      return `<tr><td>${ts||'—'}</td><td class="gd">${t.setup||''} <span class="mut">${asset}</span></td>`
+        +`<td class="${t.dir==='COMPRA'?'up':'down'}">${t.dir||''}</td>`
+        +`<td>${_v7Px(t.entry,asset)}</td><td class="mut">${exit}</td>`
+        +`<td class="${cls(pnl)}">${sign(pnl,2)}</td>`
+        +`<td class="${cls(rr)}">${rr==null||isNaN(rr)?'—':((rr>=0?'+':'')+rr.toFixed(2))}</td></tr>`;
+    }).join('')+'</tbody></table>';
 }
 async function loadReport(){
   const b=document.getElementById('reportBox');
-  const d=await api('/api/autotrade/report?period='+_rpPeriod);
-  if(!d||!d.ok){b.innerHTML='<div class="mut">sem dados no período</div>';return;}
-  const s=d.summary||{};
-  const rr=document.getElementById('rpRange');if(rr)rr.textContent=(d.date_from||'')+(d.date_to&&d.date_to!==d.date_from?' → '+d.date_to:'');
-  const tr=(d.trades||[]).filter(t=>t.closed_at&&t.close_reason!=='BLOQUEADO_IA'&&t.close_reason!=='AGUARDADO_IA');
-  let gw=0,gl=0;tr.forEach(t=>{const v=t.pnl_brl||0;if(v>0)gw+=v;else gl+=-v;});
-  const pf=gl>0?(gw/gl):(gw>0?99:0),pnl=s.pnl_total_brl;
-  // Melhor/Pior: por DIA (Semana/Mês) ou por TRADE (Dia). Cor pelo valor real.
-  let card3='',card4='';
-  if(_rpPeriod!=='day'&&s.best_day){
-    card3=`<div class="panel"><div class="kpi"><div class="v ${cls(s.best_day.pnl_brl)}">R$ ${fmt(s.best_day.pnl_brl,0)}</div><div class="l">Melhor dia</div><div class="trend">${s.best_day.date}</div></div></div>`;
-    card4=s.worst_day?`<div class="panel"><div class="kpi"><div class="v ${cls(s.worst_day.pnl_brl)}">R$ ${fmt(s.worst_day.pnl_brl,0)}</div><div class="l">Pior dia</div><div class="trend">${s.worst_day.date}</div></div></div>`:'';
-  } else {
-    let bt=null,wt=null;tr.forEach(t=>{const v=t.pnl_brl;if(v==null)return;if(!bt||v>bt.pnl_brl)bt=t;if(!wt||v<wt.pnl_brl)wt=t;});
-    const lab=t=>`${(t.tv_symbol||'').slice(-6)} ${(t.opened_at||'').slice(11,16)}`;
-    card3=bt?`<div class="panel"><div class="kpi"><div class="v ${cls(bt.pnl_brl)}">R$ ${fmt(bt.pnl_brl,0)}</div><div class="l">Melhor trade</div><div class="trend">${lab(bt)}</div></div></div>`:'';
-    card4=wt?`<div class="panel"><div class="kpi"><div class="v ${cls(wt.pnl_brl)}">R$ ${fmt(wt.pnl_brl,0)}</div><div class="l">Pior trade</div><div class="trend">${lab(wt)}</div></div></div>`:'';
-  }
+  if(b)b.innerHTML='<div class="mut">carregando…</div>';
+  const d=await api('/api/v7/period?range='+encodeURIComponent(_rpPeriod)+'&trades=1');
+  if(!d||!d.ok){if(b)b.innerHTML='<div class="mut">sem dados no período</div>';return;}
+  const rrEl=document.getElementById('rpRange');
+  if(rrEl)rrEl.textContent=(d.date_from||'')+(d.date_to&&d.date_to!==d.date_from?' → '+d.date_to:'');
+
+  const pnl=Number(d.pnl_brl||0), pf=d.pf, tradesList=d.trade_list||[];
+  const closed=_v7ClosedInRange(tradesList, d.date_from);
+  const openN=(tradesList||[]).filter(t=>(t.exit_reason||'')==='ABERTO').length;
+
+  // Recalcula do mesmo conjunto da tabela (garante coerência visual com KPIs)
+  let sumPnl=0, sumR=0, w=0, l=0, gw=0, gl=0;
+  closed.forEach(t=>{
+    const p=Number(t.profit_brl)||0;
+    const r=Number(t.r_multiple); const rr=isNaN(r)?0:r;
+    sumPnl+=p; sumR+=rr;
+    if(p>0){w++; gw+=Math.abs(rr||p);}
+    else if(p<0){l++; gl+=Math.abs(rr||p);}
+  });
+  const nClosed=closed.length;
+  const wr= (w+l)? Math.round(w/(w+l)*1000)/10 : 0;
+  const pfCalc= gl>0 ? Math.round((gw/gl)*100)/100 : (gw>0?99:0);
+  // Preferir KPI do hub; se lista truncar no futuro, avisar
+  const kpiN=Number(d.trades||0);
+  const useList=Math.abs(kpiN-nClosed)<0.5; // lista completa
+  const showPnl=useList?sumPnl:pnl;
+  const showWr=useList?wr:(d.win_rate??0);
+  const showPf=useList?pfCalc:(pf==null?0:Number(pf));
+  const showR=useList?sumR:Number(d.pnl_r||0);
+  const showW=useList?w:(d.wins??0);
+  const showL=useList?l:(d.losses??0);
+  const warn=(!useList)?`<div class="mut mini" style="margin:8px 0;color:var(--amber)">⚠ lista (${nClosed}) ≠ KPI hub (${kpiN}) — KPIs usam o hub.</div>`:'';
+
+  let best=null,worst=null;
+  closed.forEach(t=>{const v=Number(t.profit_brl); if(best==null||v>best.p)best={t,p:v}; if(worst==null||v<worst.p)worst={t,p:v};});
+  const lab=x=>x?(x.t.setup||'')+' '+(x.t.ts_close||x.t.ts||'').replace('T',' ').slice(11,16):'';
+
   let h='<div class="grid g4">'
-    +`<div class="panel gold"><div class="kpi"><div class="v ${cls(pnl)}">R$ ${sign(pnl,2)}</div><div class="l">P&L do período</div><div class="trend cy">${s.pnl_total_pts!=null?sign(s.pnl_total_pts,0)+' pts':''}</div></div></div>`
-    +`<div class="panel"><div class="kpi"><div class="v up">${s.win_rate!=null?s.win_rate+'%':'—'}</div><div class="l">Win rate</div><div class="trend">${s.wins??0}W / ${s.losses??0}L</div></div></div>`
-    +`<div class="panel"><div class="kpi"><div class="v ${pf>=1?'up':'down'}">${pf.toFixed(2)}</div><div class="l">Profit factor</div></div></div>`
-    +`<div class="panel"><div class="kpi"><div class="v cy">${s.fechados??0}</div><div class="l">Trades fechados</div><div class="trend">${s.abertos?s.abertos+' abertos':''}</div></div></div>`
+    +`<div class="panel gold"><div class="kpi"><div class="v ${cls(showPnl)}">R$ ${sign(showPnl,2)}</div><div class="l">P&L do período</div><div class="trend cy">${showR>=0?'+':''}${Number(showR).toFixed(2)} R</div></div></div>`
+    +`<div class="panel"><div class="kpi"><div class="v up">${showWr}%</div><div class="l">Win rate</div><div class="trend">${showW}W / ${showL}L</div></div></div>`
+    +`<div class="panel"><div class="kpi"><div class="v ${showPf>=1?'up':'down'}">${showPf>=99?'∞':Number(showPf).toFixed(2)}</div><div class="l">Profit factor</div></div></div>`
+    +`<div class="panel"><div class="kpi"><div class="v cy">${useList?nClosed:kpiN}</div><div class="l">Trades fechados</div><div class="trend">${openN?openN+' abertos':''}</div></div></div>`
     +'</div><div class="grid g4" style="margin-top:16px">'
-    +`<div class="panel"><div class="kpi"><div class="v">${s.expectativa!=null?sign(s.expectativa,1):'—'}</div><div class="l">Expectativa (pts)</div></div></div>`
-    +`<div class="panel"><div class="kpi"><div class="v gd">${s.avg_score??'—'}</div><div class="l">Score médio</div></div></div>`
-    +card3+card4
-    +'</div>';
-  const daily=(d.daily||[]).filter(x=>(x.trades-x.abertos)>0);
-  if(daily.length)h+=panelHTML('Resultado por dia','<table><thead><tr><th>DIA</th><th>TRADES</th><th>WINS</th><th>LOSSES</th><th>P&L pts</th><th>P&L R$</th></tr></thead><tbody>'
-    +daily.map(x=>`<tr><td>${x.date}</td><td>${x.trades}</td><td class="up">${x.wins}</td><td class="down">${x.losses}</td><td class="${cls(x.pnl_pts)}">${sign(x.pnl_pts,0)}</td><td class="${cls(x.pnl_brl)}">${sign(x.pnl_brl,2)}</td></tr>`).join('')+'</tbody></table>');
-  h+=panelHTML('Trades do período',renderReportTrades(tr));
-  b.innerHTML=h;
+    +`<div class="panel"><div class="kpi"><div class="v">${Number(d.max_dd_r||0).toFixed(1)} R</div><div class="l">Max drawdown</div></div></div>`
+    +(best?`<div class="panel"><div class="kpi"><div class="v ${cls(best.p)}">R$ ${fmt(best.p,0)}</div><div class="l">Melhor trade</div><div class="trend">${lab(best)}</div></div></div>`:'<div class="panel"><div class="kpi"><div class="v mut">—</div><div class="l">Melhor trade</div></div></div>')
+    +(worst?`<div class="panel"><div class="kpi"><div class="v ${cls(worst.p)}">R$ ${fmt(worst.p,0)}</div><div class="l">Pior trade</div><div class="trend">${lab(worst)}</div></div></div>`:'<div class="panel"><div class="kpi"><div class="v mut">—</div><div class="l">Pior trade</div></div></div>')
+    +`<div class="panel"><div class="kpi"><div class="v cy">${Object.keys(d.by_setup||{}).length}</div><div class="l">Setups no período</div></div></div>`
+    +'</div>'+warn;
+
+  const daily=(d.daily||[]).filter(x=>(x.trades||0)>0);
+  if(_rpPeriod!=='day' && daily.length){
+    h+=panelHTML('Resultado por dia','<table><thead><tr><th>DIA</th><th>TRADES</th><th>WINS</th><th>LOSSES</th><th>R</th><th>P&L R$</th></tr></thead><tbody>'
+      +daily.map(x=>`<tr><td>${x.date}</td><td>${x.trades}</td><td class="up">${x.wins||0}</td><td class="down">${x.losses||0}</td>`
+        +`<td class="${cls(x.pnl_r)}">${Number(x.pnl_r||0)>=0?'+':''}${Number(x.pnl_r||0).toFixed(2)}</td>`
+        +`<td class="${cls(x.pnl_brl)}">${sign(x.pnl_brl,2)}</td></tr>`).join('')
+      +'</tbody></table>');
+  }
+
+  h+=panelHTML('Por setup','<table><thead><tr><th>SETUP</th><th>TRADES</th><th>R</th><th>P&L R$</th><th>WIN</th></tr></thead><tbody id="rpBySetup"></tbody></table>');
+  h+=panelHTML('Trades do período (hub unificado)',renderV7ReportTrades(closed));
+  if(b)b.innerHTML=h;
+  _renderBySetup('rpBySetup', d.by_setup);
+  if(_rpPeriod==='day')_applyV7HeaderPnl(showPnl);
 }
 
 // ===== router =====
 async function refresh(){
-  document.getElementById('sysline').innerHTML='SISTEMA <b>ONLINE</b> · consumindo /api/*';
+  document.getElementById('sysline').innerHTML='SISTEMA <b>ONLINE</b> · Hub B3 /api/v7/*';
   try{
+    // P&L HOJE do header sempre do hub V7 (não do Monitor MT5)
+    if(active!=='dash'&&active!=='report')await updateV7HeaderPnl();
     if(active==='dash')await loadDashboard();
     else if(active==='report')await loadReport();
     else if(active==='monitor')await loadMonitor();
@@ -1734,7 +2169,7 @@ async function refresh(){
 }
 refresh();
 // refresh pesado (candles/sinal/histórico) — o tempo real fica nos loops leves abaixo
-setInterval(()=>{if(active==='monitor'||active==='dash')refresh();},8000);
+setInterval(()=>{if(active==='monitor'||active==='dash'||active==='report')refresh();},8000);
 setInterval(()=>{if(active==='crypto')cyLoad();},6000);   // atualiza a aba crypto (senão o gráfico congela)
 setInterval(()=>{if(active==='crypto')cyLoadMM();},5000); // medidores macro/micro
 setInterval(()=>{if(active==='crypto')cyQuickRefresh();},2500); // lista de trades + contadores QUASE em tempo real

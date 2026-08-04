@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monitor Ações B3 · STARK</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#070b12; --bg2:#0c121c; --panel:#101826; --panel2:#141e2c;
+  --line:rgba(120,160,190,.14); --line2:rgba(80,200,220,.35);
+  --cyan:#3ec8d8; --cyan-soft:rgba(62,200,216,.12);
+  --green:#3dcf9a; --green-soft:rgba(61,207,154,.12);
+  --muted:#7a8fa3; --text:#e6eef5; --text2:#b7c7d6;
+  --gold:#e0b34a; --red:#f07178; --amber:#e8c15a;
+  --radius:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:'DM Sans',system-ui,sans-serif;
+  background:var(--bg);color:var(--text);min-height:100vh;
+  background-image:
+    radial-gradient(ellipse 900px 420px at 10% -10%, rgba(62,200,216,.08), transparent 55%),
+    radial-gradient(ellipse 700px 380px at 90% 0%, rgba(61,207,154,.05), transparent 50%),
+    linear-gradient(180deg, #070b12 0%, #0a1018 100%);
+}
+.wrap{max-width:1240px;margin:0 auto;padding:20px 20px 56px}
+a.back{
+  color:var(--muted);font-size:13px;text-decoration:none;
+  display:inline-flex;align-items:center;gap:6px;
+}
+a.back:hover{color:var(--cyan)}
+.hero{margin-top:14px;display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px}
+.hero h1{font-size:28px;font-weight:700;letter-spacing:-.02em;line-height:1.15}
+.hero h1 span{color:var(--cyan)}
+.hero .sub{color:var(--muted);font-size:13px;margin-top:6px;max-width:520px;line-height:1.45}
+.navrow{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.navrow a{
+  font-size:12px;color:var(--text2);text-decoration:none;
+  border:1px solid var(--line);padding:6px 12px;border-radius:8px;background:rgba(16,24,38,.5);
+}
+.navrow a:hover{border-color:var(--line2);color:var(--cyan)}
+
+/* KPI header */
+.kpis{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:18px;
+}
+@media(max-width:800px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.kpi{
+  background:linear-gradient(160deg, var(--panel) 0%, var(--bg2) 100%);
+  border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;
+}
+.kpi .lbl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.kpi .val{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:600;margin-top:6px}
+.kpi .hint{font-size:12px;color:var(--muted);margin-top:4px}
+
+.panel{
+  margin-top:14px;background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--radius);padding:16px 18px;
+}
+.panel h3{
+  font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+  font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:8px;
+}
+.panel h3 .count{
+  font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--cyan);
+  background:var(--cyan-soft);padding:2px 8px;border-radius:999px;letter-spacing:0;
+}
+
+.badge{
+  display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;
+  font-size:12px;font-weight:600;border:1px solid rgba(224,179,74,.4);color:var(--gold);
+  background:rgba(224,179,74,.08);
+}
+.badge.go{border-color:rgba(61,207,154,.45);color:var(--green);background:var(--green-soft)}
+.badge .pulse{width:7px;height:7px;border-radius:50%;background:currentColor}
+
+.chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
+.chip{
+  font-family:'JetBrains Mono',monospace;font-size:12px;padding:7px 12px;border-radius:8px;
+  border:1px solid var(--line);color:var(--muted);cursor:pointer;background:transparent;
+  transition:border-color .15s, background .15s, color .15s;
+}
+.chip:hover{border-color:var(--line2);color:var(--text)}
+.chip.on{color:var(--cyan);border-color:rgba(62,200,216,.5);background:var(--cyan-soft)}
+.chip .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;background:var(--muted);vertical-align:middle}
+.chip.go .dot{background:var(--green)}
+.chip.open{box-shadow:inset 0 0 0 1px rgba(61,207,154,.25)}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.card{
+  border:1px solid var(--line);border-radius:10px;padding:14px;
+  background:var(--panel2);cursor:pointer;transition:border-color .15s, transform .12s;
+}
+.card:hover{border-color:var(--line2);transform:translateY(-1px)}
+.card.sel{border-color:rgba(62,200,216,.55);background:linear-gradient(160deg,rgba(62,200,216,.08),var(--panel2))}
+.card .top{display:flex;justify-content:space-between;align-items:center}
+.card .sym{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:600;color:var(--text)}
+.card .st{
+  font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;
+  background:rgba(224,179,74,.1);color:var(--gold);
+}
+.card .st.go{background:var(--green-soft);color:var(--green)}
+.card .st.open{background:var(--cyan-soft);color:var(--cyan)}
+.card .pnl{font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:600;margin-top:10px}
+.card .meta{
+  display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;
+  margin-top:10px;font-size:12px;color:var(--muted);
+}
+.card .meta b{color:var(--text2);font-weight:500;font-family:'JetBrains Mono',monospace}
+.card .paths{margin-top:10px;font-size:11px;color:var(--muted);line-height:1.4}
+.card .paths code{color:var(--text2);font-family:'JetBrains Mono',monospace;font-size:10px}
+
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:900px){.row2{grid-template-columns:1fr}}
+
+.kv{display:flex;justify-content:space-between;padding:7px 0;font-size:13px;border-bottom:1px solid rgba(120,160,190,.08)}
+.kv:last-child{border-bottom:0}
+.kv span{color:var(--muted)}.kv b{font-family:'JetBrains Mono',monospace;font-weight:500}
+
+.pos-list{display:flex;flex-direction:column;gap:8px;margin-top:4px}
+.pos-item{
+  border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:rgba(7,11,18,.35);
+  display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:center;
+}
+.pos-item .p-setup{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--cyan)}
+.pos-item .p-dir{font-size:11px;color:var(--muted)}
+.pos-item .p-pnl{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:600;text-align:right}
+.pos-item .p-px{font-size:11px;color:var(--muted);text-align:right}
+
+details.paths-box{margin-top:8px;border:1px solid var(--line);border-radius:8px;padding:8px 12px;background:rgba(7,11,18,.3)}
+details.paths-box summary{
+  cursor:pointer;font-size:12px;color:var(--muted);font-weight:600;list-style:none;
+  display:flex;justify-content:space-between;align-items:center;
+}
+details.paths-box summary::-webkit-details-marker{display:none}
+details.paths-box summary::after{content:"▸";color:var(--cyan);font-size:12px}
+details.paths-box[open] summary::after{content:"▾"}
+.paths-top{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.path-chip{
+  font-family:'JetBrains Mono',monospace;font-size:10px;padding:4px 8px;border-radius:6px;
+  border:1px solid var(--line);color:var(--text2);background:rgba(62,200,216,.06);
+}
+.path-all{margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);line-height:1.7}
+
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{
+  color:var(--muted);text-align:left;padding:8px 8px;border-bottom:1px solid var(--line);
+  font-weight:600;font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+}
+td{padding:9px 8px;border-bottom:1px solid rgba(120,160,190,.07);vertical-align:middle}
+td.mono{font-family:'JetBrains Mono',monospace;font-size:11px}
+.scroll{max-height:420px;overflow:auto}
+.scroll::-webkit-scrollbar{width:8px;height:8px}
+.scroll::-webkit-scrollbar-thumb{background:rgba(120,160,190,.25);border-radius:8px}
+
+.up{color:var(--green)}.down{color:var(--red)}.gd{color:var(--gold)}.cy{color:var(--cyan)}.mut{color:var(--muted)}
+.pill{
+  display:inline-block;padding:2px 7px;border-radius:5px;font-size:10px;font-weight:600;
+  border:1px solid var(--line);font-family:'JetBrains Mono',monospace;
+}
+.pill.go,.pill.tp{color:var(--green);border-color:rgba(61,207,154,.4);background:var(--green-soft)}
+.pill.open{color:var(--cyan);border-color:rgba(62,200,216,.4);background:var(--cyan-soft)}
+.pill.sl,.pill.red{color:var(--red);border-color:rgba(240,113,120,.4);background:rgba(240,113,120,.1)}
+.pill.yel{color:var(--amber);border-color:rgba(232,193,90,.4)}
+.pill.buy{color:var(--green)}.pill.sell{color:var(--red)}
+
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;margin-bottom:10px}
+.seg{display:flex;gap:4px}
+.segbtn{
+  font-size:11px;padding:5px 10px;border-radius:6px;border:1px solid var(--line);
+  background:transparent;color:var(--muted);cursor:pointer;font-family:'DM Sans',sans-serif;
+}
+.segbtn.on{color:var(--cyan);border-color:rgba(62,200,216,.45);background:var(--cyan-soft)}
+.empty{padding:28px 12px;text-align:center;color:var(--muted);font-size:13px}
+.foot{margin-top:18px;font-size:11px;color:var(--muted);text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="/newdashboard">← HUD principal</a>
+
+  <div class="hero">
+    <div>
+      <h1>Monitor <span>Ações</span> B3</h1>
+      <div class="sub">Blue chips · magics 202608* · resumo do dia e posições abertas mesmo fora do pregão</div>
+    </div>
+    <span class="badge wait" id="badge"><span class="pulse"></span> carregando</span>
+  </div>
+
+  <div class="navrow">
+    <a href="/v7">Monitor Índices B3</a>
+    <a href="/newdashboard?s=crypto">Monitor Crypto</a>
+    <a href="/setups">Setups ativos</a>
+  </div>
+
+  <div class="kpis" id="kpis">
+    <div class="kpi"><div class="lbl">P&amp;L dia</div><div class="val" id="kpiPnl">—</div><div class="hint" id="kpiPnlHint">realizado + flutuante</div></div>
+    <div class="kpi"><div class="lbl">Trades</div><div class="val" id="kpiTrades">—</div><div class="hint" id="kpiTradesHint">fechados · abertos</div></div>
+    <div class="kpi"><div class="lbl">Win rate</div><div class="val" id="kpiWr">—</div><div class="hint">só fechados do dia</div></div>
+    <div class="kpi"><div class="lbl">Execuções</div><div class="val" id="kpiExec">—</div><div class="hint" id="kpiNote">entradas hoje</div></div>
+  </div>
+
+  <div class="panel" style="margin-top:14px">
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between">
+      <div>
+        <div class="mut" id="msg" style="font-size:13px;line-height:1.45">Carregando…</div>
+      </div>
+      <div class="chips" id="syms"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Papers <span class="count" id="cardCount">0</span></h3>
+    <div class="grid" id="cards"></div>
+  </div>
+
+  <div class="row2">
+    <div class="panel">
+      <h3>Detalhe · <span class="cy" id="curSym" style="letter-spacing:0;text-transform:none;font-size:13px">—</span></h3>
+      <div class="kv"><span>Scan</span><b id="stScan">—</b></div>
+      <div class="kv"><span>P&amp;L dia</span><b id="stPnl">—</b></div>
+      <div class="kv"><span>Realizado / flutuante</span><b id="stPnlSplit">—</b></div>
+      <div class="kv"><span>Posições</span><b id="stPos">0</b></div>
+      <div class="kv"><span>Executados hoje</span><b id="stExec">0</b></div>
+      <div class="mut" id="stMsg" style="margin-top:10px;font-size:13px;line-height:1.45"></div>
+      <div id="posBox" class="pos-list" style="margin-top:12px"></div>
+      <details class="paths-box" id="pathsBox">
+        <summary><span id="pathsSummary">Paths GO</span></summary>
+        <div class="paths-top" id="pathsTop"></div>
+        <div class="path-all" id="pathsAll" hidden></div>
+        <button type="button" class="segbtn" id="pathsMore" style="margin-top:8px">Ver todos</button>
+      </details>
+    </div>
+    <div class="panel">
+      <h3>Bateria · resumo</h3>
+      <div class="kv"><span>Arquivo</span><b id="rkFile" class="cy" style="font-size:11px;max-width:60%;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">—</b></div>
+      <div class="kv"><span>Testados</span><b id="rkN">—</b></div>
+      <div class="kv"><span>GO</span><b id="rkGo" class="up">—</b></div>
+      <div class="kv"><span>Promissor</span><b id="rkYel" class="gd">—</b></div>
+      <div class="kv"><span>Fraco</span><b id="rkRed" class="down">—</b></div>
+      <div class="mut" style="margin-top:12px;font-size:12px;line-height:1.45">Régua: net ≥ +0,10 R · PF ≥ 1,25 · cons ≥ 55% · OOS+ · n ≥ 40</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="toolbar">
+      <h3 style="margin:0">Trades do dia <span class="count" id="histCount">0</span></h3>
+      <div class="seg">
+        <button class="segbtn on" id="filtAll" onclick="setHistFilter('all')">Todos</button>
+        <button class="segbtn" id="filtSym" onclick="setHistFilter('sym')">Ativo</button>
+      </div>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Data</th><th>Ativo</th><th>Setup</th><th>Dir</th>
+            <th>Entrada</th><th>Saída</th><th>Profit R$</th><th>Resultado</th>
+          </tr>
+        </thead>
+        <tbody id="histBody"><tr><td colspan="8" class="empty">carregando trades…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel">
+    <details>
+      <summary style="cursor:pointer;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600">Ranking bateria (top)</summary>
+      <div class="scroll" style="margin-top:10px;max-height:280px">
+        <table>
+          <thead>
+            <tr><th>Veredito</th><th>Ativo</th><th>TF</th><th>Setup</th><th>n</th><th>net</th><th>PF</th><th>cons</th><th>OOS</th></tr>
+          </thead>
+          <tbody id="rkBody"><tr><td colspan="9" class="mut">—</td></tr></tbody>
+        </table>
+      </div>
+    </details>
+  </div>
+
+  <div class="foot" id="foot">fonte: MT5 deals + acoes_trades.csv · atualiza ~20s</div>
+</div>
+<script>
+let cur='';
+let goBy={};
+let histFilter='all';
+let lastOverview=null;
+let lastHist=[];
+
+function fmt(x,d=2){
+  if(x===null||x===undefined||x===''||Number.isNaN(Number(x))) return '—';
+  const n=Number(x);
+  return (n>=0?'+':'')+n.toFixed(d);
+}
+function fmtPx(x){
+  if(x===null||x===undefined||x==='') return '—';
+  const n=Number(x);
+  if(Number.isNaN(n)) return '—';
+  return n.toFixed(n>=100?2:3);
+}
+function shortTime(s){
+  if(!s) return '—';
+  const m=String(s).match(/(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
+  if(m) return m[1].slice(5)+' '+m[2];
+  return String(s).slice(0,16);
+}
+function pillVer(v){
+  const s=String(v||'');
+  if(s.includes('GO')||s.includes('🟢')) return '<span class="pill go">GO</span>';
+  if(s.includes('PROMISSOR')||s.includes('🟡')) return '<span class="pill yel">YEL</span>';
+  return '<span class="pill red">RED</span>';
+}
+function resPill(r){
+  const s=String(r||'').toUpperCase();
+  if(s==='OPEN') return '<span class="pill open">OPEN</span>';
+  if(s==='TP') return '<span class="pill tp">TP</span>';
+  if(s==='SL') return '<span class="pill sl">SL</span>';
+  if(s==='CLOSE') return '<span class="pill">CLOSE</span>';
+  return '<span class="pill">'+(r||'—')+'</span>';
+}
+function dirPill(d){
+  const s=String(d||'').toUpperCase();
+  if(s.startsWith('COMP')||s==='BUY') return '<span class="pill buy">COMPRA</span>';
+  if(s.startsWith('VEN')||s==='SELL') return '<span class="pill sell">VENDA</span>';
+  return '<span class="pill">'+(d||'—')+'</span>';
+}
+
+async function boot(){
+  const d=await fetch('/api/acoes/symbols').then(r=>r.json()).catch(()=>null);
+  const box=document.getElementById('syms');
+  const msg=document.getElementById('msg');
+  const badge=document.getElementById('badge');
+  if(!d||!d.ok||!(d.symbols||[]).length){
+    msg.textContent='Sem símbolos (ACOES_SYMBOLS / default).';
+    return;
+  }
+  msg.textContent=d.note||'';
+  goBy=d.go_by_sym||{};
+  if(d.auto_ready){
+    badge.innerHTML='<span class="pulse"></span> '+d.go_count+' GO · SCAN';
+    badge.className='badge go';
+  } else {
+    badge.innerHTML='<span class="pulse"></span> aguardando GO';
+    badge.className='badge wait';
+  }
+  cur=d.symbols[0];
+  renderSymChips(d.symbols);
+  await refreshAll();
+}
+
+function renderSymChips(symbols){
+  const box=document.getElementById('syms');
+  box.innerHTML=symbols.map(s=>{
+    const has=(goBy[s]||[]).length>0;
+    return `<button class="chip ${s===cur?'on':''} ${has?'go':''}" data-s="${s}"><span class="dot"></span>${s}</button>`;
+  }).join('');
+  box.querySelectorAll('.chip').forEach(b=>b.onclick=()=>{
+    cur=b.dataset.s;
+    box.querySelectorAll('.chip').forEach(x=>x.classList.toggle('on',x.dataset.s===cur));
+    document.querySelectorAll('.card').forEach(c=>c.classList.toggle('sel',c.dataset.s===cur));
+    loadStatus();
+    if(histFilter==='sym') renderHist();
+  });
+}
+
+async function refreshAll(){
+  await Promise.all([loadOverview(), loadStatus(), loadRanking(), loadHist()]);
+}
+
+function paintKpis(ds){
+  ds=ds||{};
+  const pnl=Number(ds.pnl_total||0);
+  const el=document.getElementById('kpiPnl');
+  el.textContent=fmt(pnl,2);
+  el.className='val '+(pnl>0?'up':pnl<0?'down':'');
+  document.getElementById('kpiPnlHint').textContent=
+    `real ${fmt(ds.pnl_realized,2)} · flut ${fmt(ds.pnl_floating,2)}`;
+  document.getElementById('kpiTrades').textContent=
+    `${ds.n_closed??0} / ${ds.n_open??0}`;
+  document.getElementById('kpiTradesHint').textContent='fechados · abertos';
+  const wr=ds.winrate;
+  document.getElementById('kpiWr').textContent=wr==null?'—':(wr+'%');
+  document.getElementById('kpiExec').textContent=ds.n_exec??0;
+}
+
+async function loadOverview(){
+  const d=await fetch('/api/acoes/overview').then(r=>r.json()).catch(()=>null);
+  const el=document.getElementById('cards');
+  if(!d||!d.ok){ el.innerHTML='<div class="empty">overview indisponível</div>'; return; }
+  lastOverview=d;
+  paintKpis(d.day_stats||{});
+  document.getElementById('cardCount').textContent=(d.cards||[]).length;
+  if(d.auto_on!=null){
+    const badge=document.getElementById('badge');
+    const base=d.go_total||0;
+    badge.innerHTML=`<span class="pulse"></span> ${base} GO · ${d.auto_on?'AUTO ON':'SCAN'}`;
+    badge.className='badge go';
+  }
+  el.innerHTML=(d.cards||[]).map(c=>{
+    const pnl=Number(c.pnl_day||0);
+    const stClass=c.positions>0?'open':(c.status==='GO'?'go':'');
+    const stLabel=c.positions>0?('OPEN '+c.positions):(c.status==='GO'?'GO':'WAIT');
+    const tops=(c.paths_top||[]).slice(0,2).map(p=>`<code>${p.replace(c.symbol+'_','')}</code>`).join(' · ');
+    return `<div class="card ${c.symbol===cur?'sel':''}" data-s="${c.symbol}">
+      <div class="top"><span class="sym">${c.symbol}</span><span class="st ${stClass}">${stLabel}</span></div>
+      <div class="pnl ${pnl>0?'up':pnl<0?'down':''}">${fmt(pnl,2)}</div>
+      <div class="meta">
+        <span>scan <b>${c.scan||'—'}</b></span>
+        <span>exec <b>${c.executed_today||0}</b></span>
+        <span>paths <b>${c.go_n||0}</b></span>
+        <span>pos <b>${c.positions||0}</b></span>
+      </div>
+      <div class="paths">${tops||'<span class="mut">sem GO</span>'}</div>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('.card').forEach(card=>{
+    card.onclick=()=>{
+      cur=card.dataset.s;
+      document.querySelectorAll('.chip').forEach(x=>x.classList.toggle('on',x.dataset.s===cur));
+      document.querySelectorAll('.card').forEach(c=>c.classList.toggle('sel',c.dataset.s===cur));
+      loadStatus();
+      if(histFilter==='sym') renderHist();
+    };
+  });
+  // marca chips com posição aberta
+  const openSyms=new Set((d.positions||[]).map(p=>(p.symbol||'').toUpperCase()));
+  document.querySelectorAll('#syms .chip').forEach(ch=>{
+    ch.classList.toggle('open', openSyms.has(ch.dataset.s));
+  });
+  if(d.ranking_summary){
+    document.getElementById('rkFile').textContent=d.ranking_file||'—';
+    document.getElementById('rkN').textContent=d.ranking_summary.n??'—';
+    document.getElementById('rkGo').textContent=d.ranking_summary.go??0;
+    document.getElementById('rkYel').textContent=d.ranking_summary.yellow??0;
+    document.getElementById('rkRed').textContent=d.ranking_summary.red??0;
+  }
+  // se history ainda vazio, usa trades do overview
+  if((!lastHist||!lastHist.length) && (d.trades_today||[]).length){
+    lastHist=d.trades_today;
+    renderHist();
+  }
+}
+
+async function loadStatus(){
+  document.getElementById('curSym').textContent=cur;
+  const d=await fetch('/api/acoes/status?symbol='+encodeURIComponent(cur)).then(r=>r.json()).catch(()=>null);
+  if(!d||!d.ok){ document.getElementById('stMsg').textContent='status indisponível'; return; }
+  document.getElementById('stScan').textContent=d.scan||'IDLE';
+  const pnl=Number(d.pnl_day||0);
+  const pnlEl=document.getElementById('stPnl');
+  pnlEl.textContent=fmt(pnl,2);
+  pnlEl.className=pnl>0?'up':pnl<0?'down':'';
+  document.getElementById('stPnlSplit').textContent=
+    `${fmt(d.pnl_realized,2)} / ${fmt(d.pnl_floating,2)}`;
+  document.getElementById('stPos').textContent=(d.positions||[]).length;
+  document.getElementById('stExec').textContent=d.executed_today||0;
+  document.getElementById('stMsg').textContent=d.message||'';
+
+  const box=document.getElementById('posBox');
+  const poss=d.positions||[];
+  if(!poss.length){
+    box.innerHTML='<div class="mut" style="font-size:12px">Nenhuma posição aberta neste paper</div>';
+  } else {
+    box.innerHTML=poss.map(p=>{
+      const pr=Number(p.profit||0);
+      return `<div class="pos-item">
+        <div>
+          <div class="p-setup">${p.setup||p.comment||'—'}</div>
+          <div class="p-dir">${p.type||'—'} · vol ${p.volume??'—'} · magic ${p.magic??'—'}</div>
+        </div>
+        <div>
+          <div class="p-pnl ${pr>0?'up':pr<0?'down':''}">${fmt(pr,2)}</div>
+          <div class="p-px">${fmtPx(p.price_open)} → ${fmtPx(p.price_current)}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  const n=d.paths_n||(d.active_paths||[]).length||0;
+  document.getElementById('pathsSummary').textContent=`${n} paths GO · top setups`;
+  const top=d.paths_top||[];
+  document.getElementById('pathsTop').innerHTML=top.length
+    ? top.map(p=>`<span class="path-chip" title="net ${p.net} · PF ${p.pf}">${(p.setup||'').replace(cur+'_','')} · M${p.tf}</span>`).join('')
+    : '<span class="mut">nenhum</span>';
+  const all=d.active_paths||[];
+  document.getElementById('pathsAll').innerHTML=all.map(s=>s.replace(cur+'_','')).join(' · ');
+  const btn=document.getElementById('pathsMore');
+  btn.onclick=()=>{
+    const el=document.getElementById('pathsAll');
+    const hide=el.hidden;
+    el.hidden=!hide;
+    btn.textContent=hide?'Ocultar lista':'Ver todos';
+  };
+}
+
+async function loadRanking(){
+  const d=await fetch('/api/acoes/ranking?limit=60').then(r=>r.json()).catch(()=>null);
+  const body=document.getElementById('rkBody');
+  if(!d||!d.ok){ body.innerHTML='<tr><td colspan="9" class="mut">ranking indisponível</td></tr>'; return; }
+  if(d.file) document.getElementById('rkFile').textContent=d.file;
+  if(d.summary){
+    document.getElementById('rkN').textContent=d.summary.n??'—';
+    document.getElementById('rkGo').textContent=d.summary.go??0;
+    document.getElementById('rkYel').textContent=d.summary.yellow??0;
+    document.getElementById('rkRed').textContent=d.summary.red??0;
+  }
+  const rows=d.rows||[];
+  if(!rows.length){
+    body.innerHTML='<tr><td colspan="9" class="empty">sem ranking</td></tr>';
+    return;
+  }
+  body.innerHTML=rows.map(r=>`<tr>
+    <td>${pillVer(r.veredito)}</td>
+    <td class="mono">${r.sym||''}</td>
+    <td class="mono">M${r.tf||15}</td>
+    <td class="mono">${r.setup||''}</td>
+    <td class="mono">${r.n??'—'}</td>
+    <td class="mono ${(r.net||0)>=0?'up':'down'}">${r.net==null?'—':fmt(r.net,3)}</td>
+    <td class="mono">${r.PF==null?'—':Number(r.PF).toFixed(2)}</td>
+    <td class="mono">${r.cons==null?'—':Math.round(r.cons)+'%'}</td>
+    <td class="mono">${r.oos_net==null?'—':fmt(r.oos_net,3)}</td>
+  </tr>`).join('');
+}
+
+function setHistFilter(mode){
+  histFilter=mode;
+  document.getElementById('filtAll').classList.toggle('on', mode==='all');
+  document.getElementById('filtSym').classList.toggle('on', mode==='sym');
+  renderHist();
+}
+
+async function loadHist(){
+  const d=await fetch('/api/acoes/history?day=1').then(r=>r.json()).catch(()=>null);
+  if(d&&d.ok){
+    lastHist=d.rows||[];
+    if(d.day_stats) paintKpis(d.day_stats);
+    document.getElementById('foot').textContent=
+      `fonte: ${d.source||'mt5+csv'} · acoes_trades.csv · atualiza ~20s`;
+  } else {
+    lastHist=[];
+  }
+  renderHist();
+}
+
+function renderHist(){
+  const body=document.getElementById('histBody');
+  let rows=lastHist||[];
+  if(histFilter==='sym') rows=rows.filter(r=>(r.symbol||'').toUpperCase()===cur);
+  document.getElementById('histCount').textContent=rows.length;
+  if(!rows.length){
+    body.innerHTML='<tr><td colspan="8" class="empty">Sem trades do dia — posições e P&amp;L aparecem quando houver atividade</td></tr>';
+    return;
+  }
+  body.innerHTML=rows.map(r=>{
+    const pr=r.profit;
+    const pn=pr===''||pr==null?null:Number(pr);
+    const cls=pn==null?'':(pn>0?'up':pn<0?'down':'');
+    return `<tr>
+      <td class="mono">${shortTime(r.exit_brt||r.datetime_brt)}</td>
+      <td class="mono">${r.symbol||''}</td>
+      <td class="mono" title="${r.setup||''}">${(r.setup||'—').replace(/^([A-Z0-9]+)_/,'')}</td>
+      <td>${dirPill(r.direcao||r.dir)}</td>
+      <td class="mono">${fmtPx(r.entry_price)}</td>
+      <td class="mono">${r.resultado==='OPEN'||r.status==='OPEN'?'—':fmtPx(r.exit_price)}</td>
+      <td class="mono ${cls}">${pn==null?'—':fmt(pn,2)}</td>
+      <td>${resPill(r.resultado||r.status)}</td>
+    </tr>`;
+  }).join('');
+}
+
+boot();
+setInterval(refreshAll, 20000);
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+﻿HTTP=200
+{
+  "by_setup": {},
+  "equity": [],
+  "losses": 0,
+  "max_dd_r": 0.0,
+  "ok": true,
+  "pf": 0.0,
+  "pnl_brl": 0.0,
+  "pnl_r": 0.0,
+  "range": "day",
+  "trades": 0,
+  "win_rate": 0.0,
+  "wins": 0
+}
+

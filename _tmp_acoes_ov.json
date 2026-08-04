@@ -1,0 +1,878 @@
+﻿{
+    "auto_on":  true,
+    "auto_ready":  true,
+    "cards":  [
+                  {
+                      "battery_go":  0,
+                      "battery_n":  0,
+                      "battery_yellow":  0,
+                      "go_n":  17,
+                      "go_paths":  [
+                                       "PETR4_OUT_DAY_H1",
+                                       "PETR4_VWAP_OPEN_AM",
+                                       "PETR4_ORB15_GAP_V14_LATE",
+                                       "PETR4_ORB15_GAP_V12_LATE",
+                                       "PETR4_GAPC_G90_LATE_SOFT",
+                                       "PETR4_ORB15_V12_LATE",
+                                       "PETR4_OUT_DAY_V5_LOATR_H1",
+                                       "PETR4_GAPC_G90_LATE_SOFT_RR18",
+                                       "PETR4_OUT_AM_V5_TP15_H1",
+                                       "PETR4_OUT_AM_V5_H1",
+                                       "PETR4_GAPC_G60_SOFT_M5",
+                                       "PETR4_GAPC_G40_SOFT",
+                                       "PETR4_GAPC_G90_LATE_SOFT_TP15",
+                                       "PETR4_GAPC_G40_SOFT_TP15",
+                                       "PETR4_OUT_AM_V5_RR18_H1",
+                                       "PETR4_GAPC_G30_AM_TP15",
+                                       "PETR4_ORB15_V10_LATE"
+                                   ],
+                      "motivo":  "fora do pregão B3",
+                      "pnl_day":  0.0,
+                      "positions":  0,
+                      "scan":  "CLOSED",
+                      "status":  "GO",
+                      "symbol":  "PETR4"
+                  },
+                  {
+                      "battery_go":  0,
+                      "battery_n":  0,
+                      "battery_yellow":  0,
+                      "go_n":  29,
+                      "go_paths":  [
+                                       "VALE3_ORB30_V15",
+                                       "VALE3_ORB30_GAP_V13",
+                                       "VALE3_ORB30_GAP_V11",
+                                       "VALE3_IMP_DAY_M5",
+                                       "VALE3_VWAPC_AM",
+                                       "VALE3_GAPC_G30",
+                                       "VALE3_GAPC_G30_MT",
+                                       "VALE3_GAPC_G45",
+                                       "VALE3_GAPC_G60",
+                                       "VALE3_ORB30_V15_TP20",
+                                       "VALE3_IMP_AM_M5",
+                                       "VALE3_OUT_AM",
+                                       "VALE3_IMP_DAY_MT_M5",
+                                       "VALE3_ORB45_V15",
+                                       "VALE3_ORB30_GAP_TP20",
+                                       "VALE3_ORB30_GAP_V13_TP15",
+                                       "VALE3_VWAPC_AM_V14",
+                                       "VALE3_ORB30_GAP_V11_TP15",
+                                       "VALE3_ORB45_GAP_V11",
+                                       "VALE3_ORB45_V13",
+                                       "VALE3_GAPC_G35",
+                                       "VALE3_GAPC_G25",
+                                       "VALE3_GAPC_G30_RR20",
+                                       "VALE3_GAPC_G75",
+                                       "VALE3_GAPC_G35_MT",
+                                       "VALE3_GAPC_G30_TP20",
+                                       "VALE3_GAPC_G25_MT",
+                                       "VALE3_GAPC_G60_TP20",
+                                       "VALE3_GAPC_G60_RR20"
+                                   ],
+                      "motivo":  "fora do pregão B3",
+                      "pnl_day":  0.0,
+                      "positions":  0,
+                      "scan":  "CLOSED",
+                      "status":  "GO",
+                      "symbol":  "VALE3"
+                  },
+                  {
+                      "battery_go":  0,
+                      "battery_n":  1589,
+                      "battery_yellow":  36,
+                      "go_n":  0,
+                      "go_paths":  [
+
+                                   ],
+                      "motivo":  "fora do pregão B3",
+                      "pnl_day":  0.0,
+                      "positions":  0,
+                      "scan":  "CLOSED",
+                      "status":  "WAIT",
+                      "symbol":  "ITUB4"
+                  },
+                  {
+                      "battery_go":  2,
+                      "battery_n":  1589,
+                      "battery_yellow":  13,
+                      "go_n":  4,
+                      "go_paths":  [
+                                       "BBDC4_VSPIKE_T20_DAY_MT",
+                                       "BBDC4_VSPIKE_T22_DAY_MT",
+                                       "BBDC4_VSPIKE_T24_A12_DAY_V6_MT",
+                                       "BBDC4_VSPIKE_T20_A14_DAY_V6_MT"
+                                   ],
+                      "motivo":  "fora do pregão B3",
+                      "pnl_day":  0.0,
+                      "positions":  0,
+                      "scan":  "CLOSED",
+                      "status":  "GO",
+                      "symbol":  "BBDC4"
+                  },
+                  {
+                      "battery_go":  0,
+                      "battery_n":  0,
+                      "battery_yellow":  0,
+                      "go_n":  6,
+                      "go_paths":  [
+                                       "BBAS3_ORB30_V13",
+                                       "BBAS3_ORB30_TP15",
+                                       "BBAS3_ORB30_LATE",
+                                       "BBAS3_ORB30_V13_TP20",
+                                       "BBAS3_ORB45_V13",
+                                       "BBAS3_ORB30_RR20"
+                                   ],
+                      "motivo":  "fora do pregão B3",
+                      "pnl_day":  0.0,
+                      "positions":  0,
+                      "scan":  "CLOSED",
+                      "status":  "GO",
+                      "symbol":  "BBAS3"
+                  },
+                  {
+                      "battery_go":  0,
+                      "battery_n":  1589,
+                      "battery_yellow":  22,
+                      "go_n":  0,
+                      "go_paths":  [
+
+                                   ],
+                      "motivo":  "fora do pregão B3",
+                      "pnl_day":  0.0,
+                      "positions":  0,
+                      "scan":  "CLOSED",
+                      "status":  "WAIT",
+                      "symbol":  "ABEV3"
+                  },
+                  {
+                      "battery_go":  0,
+                      "battery_n":  0,
+                      "battery_yellow":  0,
+                      "go_n":  8,
+                      "go_paths":  [
+                                       "WEGE3_INS_AM",
+                                       "WEGE3_GAPC_G30_MT",
+                                       "WEGE3_GAPC_G30",
+                                       "WEGE3_NR5_AM_MT",
+                                       "WEGE3_GAPC_G30_AM",
+                                       "WEGE3_HL_AM_MT",
+                                       "WEGE3_GAPC_G25_MT",
+                                       "WEGE3_GAPC_G30_MT_H1"
+                                   ],
+                      "motivo":  "fora do pregão B3",
+                      "pnl_day":  0.0,
+                      "positions":  0,
+                      "scan":  "CLOSED",
+                      "status":  "GO",
+                      "symbol":  "WEGE3"
+                  }
+              ],
+    "go_total":  64,
+    "ok":  true,
+    "ranking_file":  "backtest_acoes_v6_mega_ranking_20260802_2337.csv",
+    "ranking_summary":  {
+                            "by_sym":  {
+                                           "ABEV3":  {
+                                                         "go":  0,
+                                                         "n":  1589,
+                                                         "yellow":  22
+                                                     },
+                                           "BBDC4":  {
+                                                         "go":  2,
+                                                         "n":  1589,
+                                                         "yellow":  13
+                                                     },
+                                           "ITUB4":  {
+                                                         "go":  0,
+                                                         "n":  1589,
+                                                         "yellow":  36
+                                                     }
+                                       },
+                            "go":  2,
+                            "n":  4767,
+                            "red":  4694,
+                            "yellow":  71
+                        },
+    "top":  [
+                {
+                    "PF":  1.39,
+                    "cons":  56.0,
+                    "n":  81,
+                    "net":  0.119,
+                    "oos_net":  0.228,
+                    "setup":  "BBDC4_VSPIKE_T24_A12_DAY_V6_MT",
+                    "sym":  "BBDC4",
+                    "tf":  15,
+                    "veredito":  "🟢 GO"
+                },
+                {
+                    "PF":  1.37,
+                    "cons":  57.0,
+                    "n":  90,
+                    "net":  0.108,
+                    "oos_net":  0.096,
+                    "setup":  "BBDC4_VSPIKE_T20_A14_DAY_V6_MT",
+                    "sym":  "BBDC4",
+                    "tf":  15,
+                    "veredito":  "🟢 GO"
+                },
+                {
+                    "PF":  1.74,
+                    "cons":  64.0,
+                    "n":  42,
+                    "net":  0.275,
+                    "oos_net":  0.249,
+                    "setup":  "ITUB4_NR5_AM_V10_V6_RR18_M30",
+                    "sym":  "ITUB4",
+                    "tf":  30,
+                    "veredito":  "🟡 PROMISSOR (OOS fraco)"
+                },
+                {
+                    "PF":  1.64,
+                    "cons":  64.0,
+                    "n":  42,
+                    "net":  0.238,
+                    "oos_net":  0.215,
+                    "setup":  "ITUB4_NR5_AM_V10_V6_M30",
+                    "sym":  "ITUB4",
+                    "tf":  30,
+                    "veredito":  "🟡 PROMISSOR (OOS fraco)"
+                },
+                {
+                    "PF":  1.57,
+                    "cons":  68.0,
+                    "n":  42,
+                    "net":  0.212,
+                    "oos_net":  0.321,
+                    "setup":  "ITUB4_NR5_AM_V10_V6_TP15_M30",
+                    "sym":  "ITUB4",
+                    "tf":  30,
+                    "veredito":  "🟡 PROMISSOR (OOS fraco)"
+                },
+                {
+                    "PF":  1.78,
+                    "cons":  61.0,
+                    "n":  59,
+                    "net":  0.185,
+                    "oos_net":  0.117,
+                    "setup":  "BBDC4_VSPIKE_T24_A14_DAY_V6_MT",
+                    "sym":  "BBDC4",
+                    "tf":  15,
+                    "veredito":  "🟡 PROMISSOR (OOS fraco)"
+                },
+                {
+                    "PF":  1.36,
+                    "cons":  55.0,
+                    "n":  50,
+                    "net":  0.168,
+                    "oos_net":  0.267,
+                    "setup":  "ITUB4_NR5_AM_V09_V6_RR18_M30",
+                    "sym":  "ITUB4",
+                    "tf":  30,
+                    "veredito":  "🟡 PROMISSOR (OOS fraco)"
+                },
+                {
+                    "PF":  1.66,
+                    "cons":  62.0,
+                    "n":  43,
+                    "net":  0.164,
+                    "oos_net":  -0.013,
+                    "setup":  "BBDC4_VSPIKE_T24_A14_AM_V6_MT",
+                    "sym":  "BBDC4",
+                    "tf":  15,
+                    "veredito":  "🟡 PROMISSOR (OOS fraco)"
+                },
+                {
+                    "PF":  1.39,
+                    "cons":  54.0,
+                    "n":  117,
+                    "net":  0.161,
+                    "oos_net":  -0.019,
+                    "setup":  "ABEV3_EMA_OPEN1H_V10_V6_MT_M15",
+                    "sym":  "ABEV3",
+                    "tf":  15,
+                    "veredito":  "🟡 PROMISSOR (OOS fraco)"
+                },
+                {
+                    "PF":  1.38,
+                    "cons":  46.0,
+                    "n":  66,
+                    "net":  0.159,
+                    "oos_net":  0.152,
+                    "setup":  "ITUB4_NR4_AM_V115_V6_RR18_M30",
+                    "sym":  "ITUB4",
+                    "tf":  30,
+                    "veredito":  "🟡 PROMISSOR"
+                },
+                {
+                    "PF":  1.29,
+                    "cons":  55.0,
+                    "n":  50,
+                    "net":  0.137,
+                    "oos_net":  0.237,
+                    "setup":  "ITUB4_NR5_AM_V09_V6_M30",
+                    "sym":  "ITUB4",
+                    "tf":  30,
+                    "veredito":  "🟡 PROMISSOR (OOS fraco)"
+                },
+                {
+                    "PF":  1.38,
+                    "cons":  65.0,
+                    "n":  41,
+                    "net":  0.125,
+                    "oos_net":  0.185,
+                    "setup":  "ABEV3_NR5_AMW_V09_V6_MT_H1",
+                    "sym":  "ABEV3",
+                    "tf":  60,
+                    "veredito":  "🟡 PROMISSOR (OOS fraco)"
+                },
+                {
+                    "PF":  1.36,
+                    "cons":  59.0,
+                    "n":  51,
+                    "net":  0.122,
+                    "oos_net":  0.155,
+                    "setup":  "ABEV3_NR5_AMW_V09_V6_TP15_H1",
+                    "sym":  "ABEV3",
+                    "tf":  60,
+                    "veredito":  "🟡 PROMISSOR (OOS fraco)"
+                },
+                {
+                    "PF":  1.25,
+                    "cons":  53.0,
+                    "n":  57,
+                    "net":  0.121,
+                    "oos_net":  0.206,
+                    "setup":  "ITUB4_OUT_AM_V10_V6_M15",
+                    "sym":  "ITUB4",
+                    "tf":  15,
+                    "veredito":  "🟡 PROMISSOR (OOS fraco)"
+                },
+                {
+                    "PF":  1.25,
+                    "cons":  57.0,
+                    "n":  44,
+                    "net":  0.12,
+                    "oos_net":  0.051,
+                    "setup":  "ITUB4_OUT_AM_V115_V6_M15",
+                    "sym":  "ITUB4",
+                    "tf":  15,
+                    "veredito":  "🟡 PROMISSOR (OOS fraco)"
+                }
+            ],
+    "ts":  "2026-08-03T21:04:29-03:00",
+    "wired":  [
+                  {
+                      "magic":  20260810,
+                      "net":  0.274,
+                      "pf":  2.69,
+                      "setup":  "VALE3_ORB30_V15",
+                      "symbol":  "VALE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260811,
+                      "net":  0.216,
+                      "pf":  2.0,
+                      "setup":  "VALE3_ORB30_GAP_V13",
+                      "symbol":  "VALE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260812,
+                      "net":  0.191,
+                      "pf":  1.9,
+                      "setup":  "VALE3_ORB30_GAP_V11",
+                      "symbol":  "VALE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260813,
+                      "net":  0.18,
+                      "pf":  1.51,
+                      "setup":  "VALE3_IMP_DAY_M5",
+                      "symbol":  "VALE3",
+                      "tf":  5
+                  },
+                  {
+                      "magic":  20260814,
+                      "net":  0.139,
+                      "pf":  1.32,
+                      "setup":  "VALE3_VWAPC_AM",
+                      "symbol":  "VALE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260815,
+                      "net":  0.133,
+                      "pf":  1.4,
+                      "setup":  "VALE3_GAPC_G30",
+                      "symbol":  "VALE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260816,
+                      "net":  0.12,
+                      "pf":  1.35,
+                      "setup":  "VALE3_GAPC_G30_MT",
+                      "symbol":  "VALE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260817,
+                      "net":  0.112,
+                      "pf":  1.33,
+                      "setup":  "VALE3_GAPC_G45",
+                      "symbol":  "VALE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260818,
+                      "net":  0.111,
+                      "pf":  1.33,
+                      "setup":  "VALE3_GAPC_G60",
+                      "symbol":  "VALE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260819,
+                      "net":  0.145,
+                      "pf":  1.73,
+                      "setup":  "BBAS3_ORB30_V13",
+                      "symbol":  "BBAS3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260820,
+                      "net":  0.141,
+                      "pf":  1.71,
+                      "setup":  "BBAS3_ORB30_TP15",
+                      "symbol":  "BBAS3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260821,
+                      "net":  0.178,
+                      "pf":  1.4,
+                      "setup":  "WEGE3_INS_AM",
+                      "symbol":  "WEGE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260822,
+                      "net":  0.144,
+                      "pf":  1.41,
+                      "setup":  "WEGE3_GAPC_G30_MT",
+                      "symbol":  "WEGE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260823,
+                      "net":  0.112,
+                      "pf":  1.31,
+                      "setup":  "WEGE3_GAPC_G30",
+                      "symbol":  "WEGE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260824,
+                      "net":  0.17,
+                      "pf":  1.58,
+                      "setup":  "PETR4_OUT_DAY_H1",
+                      "symbol":  "PETR4",
+                      "tf":  60
+                  },
+                  {
+                      "magic":  20260825,
+                      "net":  0.117,
+                      "pf":  1.25,
+                      "setup":  "PETR4_VWAP_OPEN_AM",
+                      "symbol":  "PETR4",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260826,
+                      "net":  0.274,
+                      "pf":  2.69,
+                      "setup":  "VALE3_ORB30_V15_TP20",
+                      "symbol":  "VALE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260827,
+                      "net":  0.265,
+                      "pf":  1.83,
+                      "setup":  "VALE3_IMP_AM_M5",
+                      "symbol":  "VALE3",
+                      "tf":  5
+                  },
+                  {
+                      "magic":  20260828,
+                      "net":  0.245,
+                      "pf":  1.57,
+                      "setup":  "VALE3_OUT_AM",
+                      "symbol":  "VALE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260829,
+                      "net":  0.237,
+                      "pf":  1.75,
+                      "setup":  "VALE3_IMP_DAY_MT_M5",
+                      "symbol":  "VALE3",
+                      "tf":  5
+                  },
+                  {
+                      "magic":  20260830,
+                      "net":  0.234,
+                      "pf":  2.3,
+                      "setup":  "VALE3_ORB45_V15",
+                      "symbol":  "VALE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260831,
+                      "net":  0.216,
+                      "pf":  2.0,
+                      "setup":  "VALE3_ORB30_GAP_TP20",
+                      "symbol":  "VALE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260832,
+                      "net":  0.21,
+                      "pf":  1.97,
+                      "setup":  "VALE3_ORB30_GAP_V13_TP15",
+                      "symbol":  "VALE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260833,
+                      "net":  0.186,
+                      "pf":  1.46,
+                      "setup":  "VALE3_VWAPC_AM_V14",
+                      "symbol":  "VALE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260834,
+                      "net":  0.181,
+                      "pf":  1.85,
+                      "setup":  "VALE3_ORB30_GAP_V11_TP15",
+                      "symbol":  "VALE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260835,
+                      "net":  0.166,
+                      "pf":  1.77,
+                      "setup":  "VALE3_ORB45_GAP_V11",
+                      "symbol":  "VALE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260836,
+                      "net":  0.142,
+                      "pf":  1.59,
+                      "setup":  "VALE3_ORB45_V13",
+                      "symbol":  "VALE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260837,
+                      "net":  0.131,
+                      "pf":  1.39,
+                      "setup":  "VALE3_GAPC_G35",
+                      "symbol":  "VALE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260838,
+                      "net":  0.127,
+                      "pf":  1.38,
+                      "setup":  "VALE3_GAPC_G25",
+                      "symbol":  "VALE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260839,
+                      "net":  0.119,
+                      "pf":  1.34,
+                      "setup":  "VALE3_GAPC_G30_RR20",
+                      "symbol":  "VALE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260840,
+                      "net":  0.118,
+                      "pf":  1.36,
+                      "setup":  "VALE3_GAPC_G75",
+                      "symbol":  "VALE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260841,
+                      "net":  0.117,
+                      "pf":  1.34,
+                      "setup":  "VALE3_GAPC_G35_MT",
+                      "symbol":  "VALE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260842,
+                      "net":  0.114,
+                      "pf":  1.32,
+                      "setup":  "VALE3_GAPC_G30_TP20",
+                      "symbol":  "VALE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260843,
+                      "net":  0.107,
+                      "pf":  1.31,
+                      "setup":  "VALE3_GAPC_G25_MT",
+                      "symbol":  "VALE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260844,
+                      "net":  0.104,
+                      "pf":  1.3,
+                      "setup":  "VALE3_GAPC_G60_TP20",
+                      "symbol":  "VALE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260845,
+                      "net":  0.1,
+                      "pf":  1.29,
+                      "setup":  "VALE3_GAPC_G60_RR20",
+                      "symbol":  "VALE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260846,
+                      "net":  0.171,
+                      "pf":  1.93,
+                      "setup":  "BBAS3_ORB30_LATE",
+                      "symbol":  "BBAS3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260847,
+                      "net":  0.148,
+                      "pf":  1.75,
+                      "setup":  "BBAS3_ORB30_V13_TP20",
+                      "symbol":  "BBAS3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260848,
+                      "net":  0.141,
+                      "pf":  1.7,
+                      "setup":  "BBAS3_ORB45_V13",
+                      "symbol":  "BBAS3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260849,
+                      "net":  0.132,
+                      "pf":  1.67,
+                      "setup":  "BBAS3_ORB30_RR20",
+                      "symbol":  "BBAS3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260850,
+                      "net":  0.151,
+                      "pf":  1.33,
+                      "setup":  "WEGE3_NR5_AM_MT",
+                      "symbol":  "WEGE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260851,
+                      "net":  0.149,
+                      "pf":  1.41,
+                      "setup":  "WEGE3_GAPC_G30_AM",
+                      "symbol":  "WEGE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260852,
+                      "net":  0.119,
+                      "pf":  1.28,
+                      "setup":  "WEGE3_HL_AM_MT",
+                      "symbol":  "WEGE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260853,
+                      "net":  0.119,
+                      "pf":  1.33,
+                      "setup":  "WEGE3_GAPC_G25_MT",
+                      "symbol":  "WEGE3",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260854,
+                      "net":  0.103,
+                      "pf":  1.44,
+                      "setup":  "WEGE3_GAPC_G30_MT_H1",
+                      "symbol":  "WEGE3",
+                      "tf":  60
+                  },
+                  {
+                      "magic":  20260856,
+                      "net":  0.283,
+                      "pf":  1.96,
+                      "setup":  "PETR4_ORB15_GAP_V14_LATE",
+                      "symbol":  "PETR4",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260857,
+                      "net":  0.231,
+                      "pf":  1.73,
+                      "setup":  "PETR4_ORB15_GAP_V12_LATE",
+                      "symbol":  "PETR4",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260858,
+                      "net":  0.158,
+                      "pf":  1.38,
+                      "setup":  "PETR4_GAPC_G90_LATE_SOFT",
+                      "symbol":  "PETR4",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260859,
+                      "net":  0.151,
+                      "pf":  1.44,
+                      "setup":  "PETR4_ORB15_V12_LATE",
+                      "symbol":  "PETR4",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260860,
+                      "net":  0.144,
+                      "pf":  1.4,
+                      "setup":  "PETR4_OUT_DAY_V5_LOATR_H1",
+                      "symbol":  "PETR4",
+                      "tf":  60
+                  },
+                  {
+                      "magic":  20260861,
+                      "net":  0.143,
+                      "pf":  1.32,
+                      "setup":  "PETR4_GAPC_G90_LATE_SOFT_RR18",
+                      "symbol":  "PETR4",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260862,
+                      "net":  0.142,
+                      "pf":  1.56,
+                      "setup":  "BBDC4_VSPIKE_T20_DAY_MT",
+                      "symbol":  "BBDC4",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260863,
+                      "net":  0.141,
+                      "pf":  1.47,
+                      "setup":  "PETR4_OUT_AM_V5_TP15_H1",
+                      "symbol":  "PETR4",
+                      "tf":  60
+                  },
+                  {
+                      "magic":  20260864,
+                      "net":  0.129,
+                      "pf":  1.52,
+                      "setup":  "BBDC4_VSPIKE_T22_DAY_MT",
+                      "symbol":  "BBDC4",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260865,
+                      "net":  0.122,
+                      "pf":  1.4,
+                      "setup":  "PETR4_OUT_AM_V5_H1",
+                      "symbol":  "PETR4",
+                      "tf":  60
+                  },
+                  {
+                      "magic":  20260866,
+                      "net":  0.12,
+                      "pf":  1.26,
+                      "setup":  "PETR4_GAPC_G60_SOFT_M5",
+                      "symbol":  "PETR4",
+                      "tf":  5
+                  },
+                  {
+                      "magic":  20260867,
+                      "net":  0.119,
+                      "pf":  1.29,
+                      "setup":  "PETR4_GAPC_G40_SOFT",
+                      "symbol":  "PETR4",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260868,
+                      "net":  0.109,
+                      "pf":  1.26,
+                      "setup":  "PETR4_GAPC_G90_LATE_SOFT_TP15",
+                      "symbol":  "PETR4",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260869,
+                      "net":  0.105,
+                      "pf":  1.26,
+                      "setup":  "PETR4_GAPC_G40_SOFT_TP15",
+                      "symbol":  "PETR4",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260870,
+                      "net":  0.103,
+                      "pf":  1.34,
+                      "setup":  "PETR4_OUT_AM_V5_RR18_H1",
+                      "symbol":  "PETR4",
+                      "tf":  60
+                  },
+                  {
+                      "magic":  20260871,
+                      "net":  0.101,
+                      "pf":  1.25,
+                      "setup":  "PETR4_GAPC_G30_AM_TP15",
+                      "symbol":  "PETR4",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260872,
+                      "net":  0.1,
+                      "pf":  1.28,
+                      "setup":  "PETR4_ORB15_V10_LATE",
+                      "symbol":  "PETR4",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260873,
+                      "net":  0.119,
+                      "pf":  1.39,
+                      "setup":  "BBDC4_VSPIKE_T24_A12_DAY_V6_MT",
+                      "symbol":  "BBDC4",
+                      "tf":  15
+                  },
+                  {
+                      "magic":  20260874,
+                      "net":  0.108,
+                      "pf":  1.37,
+                      "setup":  "BBDC4_VSPIKE_T20_A14_DAY_V6_MT",
+                      "symbol":  "BBDC4",
+                      "tf":  15
+                  }
+              ]
+}

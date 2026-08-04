@@ -310,13 +310,18 @@ _SYMBOL_TRADE_CFG: dict[str, dict] = {
         "confirm_n":        3,     # v6: era 2 (exige 3 confirmacoes consecutivas)
         "cooldown_sec":    90,     # v6: era 45 (menos overtrading)
         "max_daily":        6,     # v6: era 10 (limite diario menor)
-        "tp_ticks":         4,     # BTC: 4 ticks = R$400 por contrato (4 × R$100)
-        "sl_ticks":         2,
+        # ── v7 (reaplicado após migração): TP/SL p/ liquidez baixa ────────
+        # Com o SL v7 ancorado na cotação oposta (scalper_service), sl_ticks
+        # vira tolerância REAL de ruído: 3 ticks tolerados, alvo 6 (RR 2:1).
+        "tp_ticks":         6,     # v7: era 4
+        "sl_ticks":         3,     # v7: era 2
         "use_atr_sizing":  False,  # ATR do BITN26 pode ser instável com poucos dados
-        # Time Exits BITN26 — movimentos mais lentos → janelas maiores
-        "max_position_time_sec": 120,  # P3: 2 min (ticks chegam devagar)
-        "time_stop_seconds":      30,  # P4: verificar em 30s
+        # Time Exits BITN26 — alvo mais longe precisa de mais tempo
+        "max_position_time_sec": 150,  # v7: era 120
+        "time_stop_seconds":      45,  # v7: era 30
         "minimum_progress_r":    0.3,  # P4: 0.3R mínimo
+        # v7: 09h concentrou perdas (-R$242 em 25 trades) — ruído de abertura
+        "opening_block_minutes": 30,
     },
     # Bitcoin CFD (BTCUSD ICMarkets) — 24h, líquido. Entrada APERTADA de propósito
     # (o histórico do scalper foi de overtrading): score alto, 4 confirmações
@@ -899,6 +904,25 @@ def api_scalper_pause_config():
 
 
 # Registro de fechamento via TP/SL
+# ── v7: dedupe de fechamentos (reaplicado após migração de pasta) ────────
+# O polling do frontend pode disparar register-close várias vezes para o
+# MESMO fechamento — gravava linhas duplicadas no CSV (7x o mesmo SL) e
+# corrompia stats da sessão/supervisor. Dedupe por ticket em janela curta.
+_recent_closes: dict[str, float] = {}
+_CLOSE_DEDUPE_SEC = 90
+
+
+def _is_duplicate_close(ticket, symbol, profit, reason) -> bool:
+    now = time.time()
+    for k in [k for k, ts in _recent_closes.items() if now - ts > _CLOSE_DEDUPE_SEC]:
+        _recent_closes.pop(k, None)
+    key = f"tk:{ticket}" if ticket else f"{symbol}:{round(float(profit), 2)}:{reason}"
+    if key in _recent_closes:
+        return True
+    _recent_closes[key] = now
+    return False
+
+
 @scalper_bp.route("/api/scalper/register-close", methods=["POST"])
 def api_scalper_register_close():
     body   = request.get_json(silent=True) or {}
@@ -906,6 +930,11 @@ def api_scalper_register_close():
     reason = body.get("reason", "MT5")
     symbol = body.get("symbol", "")
     ticket = body.get("ticket")
+
+    if _is_duplicate_close(ticket, symbol, profit, reason):
+        logger.info("register-close DUPLICADO ignorado: ticket=%s symbol=%s profit=%.2f",
+                    ticket, symbol, profit)
+        return jsonify({"ok": True, "deduped": True})
 
     # Servidor autoritativo: havendo ticket, o P&L realizado do MT5 sempre vale
     # mais que o profit flutuante do cliente. Busca com retry antes de gravar —

@@ -1,0 +1,45 @@
+﻿{
+    "file":  "acoes_trades.csv",
+    "ok":  true,
+    "rows":  [
+                 {
+                     "datetime_brt":  "2026-08-03T10:39:57-03:00",
+                     "direcao":  "VENDA",
+                     "entry_price":  "74.38",
+                     "magic":  "20260827",
+                     "profit":  "",
+                     "resultado":  "OPEN",
+                     "setup":  "VALE3_IMP_AM_M5",
+                     "sl":  "75.45",
+                     "symbol":  "VALE3",
+                     "tp1":  "73.30999999999999",
+                     "volume":  "100.0"
+                 },
+                 {
+                     "datetime_brt":  "2026-08-03T10:44:32-03:00",
+                     "direcao":  "COMPRA",
+                     "entry_price":  "42.63",
+                     "magic":  "20260825",
+                     "profit":  "",
+                     "resultado":  "OPEN",
+                     "setup":  "PETR4_VWAP_OPEN_AM",
+                     "sl":  "42.38",
+                     "symbol":  "PETR4",
+                     "tp1":  "43.005",
+                     "volume":  "100.0"
+                 },
+                 {
+                     "datetime_brt":  "2026-08-03T10:46:04-03:00",
+                     "direcao":  "VENDA",
+                     "entry_price":  "74.4",
+                     "magic":  "20260833",
+                     "profit":  "",
+                     "resultado":  "OPEN",
+                     "setup":  "VALE3_VWAPC_AM_V14",
+                     "sl":  "75.77",
+                     "symbol":  "VALE3",
+                     "tp1":  "72.34500000000003",
+                     "volume":  "100.0"
+                 }
+             ]
+}

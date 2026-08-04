@@ -1,18 +1,8 @@
 {
   "symbol": "BITN26",
-  "timestamp": "2026-07-17T19:03:42.575665-03:00",
+  "timestamp": "2026-08-03T20:34:41.091605-03:00",
   "stats": {
-    "n": 4,
-    "wins": 2,
-    "losses": 2,
-    "be": 0,
-    "win_rate": 50.0,
-    "pnl": 40.0,
-    "consecutive_losses": 0,
-    "avg_score": 74.0,
-    "exhaustion_hits": 0,
-    "buys": 0,
-    "sells": 2
+    "n": 0
   },
   "recomendacao": "CONTINUAR",
   "motivo": "Amostra pequena — sem base para intervir.",

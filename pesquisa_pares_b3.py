@@ -170,7 +170,7 @@ if __name__ == "__main__":
     w = _fetch(args.win, args.tf, args.bars)
     d = _fetch(args.wdo, args.tf, args.bars)
     if w is None or d is None:
-        print("Sem dados de um dos símbolos (tente --win WINZ26 --wdo WDOQ26)"); sys.exit(1)
+        print("Sem dados de um dos símbolos (tente --win WINZ26 --wdo WDOU26)"); sys.exit(1)
 
     df = pd.concat([w.rename("WIN"), d.rename("WDO")], axis=1).dropna()
     if len(df) < 500:

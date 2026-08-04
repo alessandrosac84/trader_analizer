@@ -1,0 +1,106 @@
+﻿HTTP=200
+{
+  "account": 59234894,
+  "ai_mode": "advisory",
+  "ai_scorecard": {
+    "cautela": {
+      "n": 0
+    },
+    "executar": {
+      "n": 0
+    }
+  },
+  "chart_tf": 15,
+  "daily_stop_r": -3.0,
+  "enabled": false,
+  "engine": "v7.4.1",
+  "engines": [
+    {
+      "acao": "NEUTRO",
+      "enabled": false,
+      "id": "v7",
+      "label": "V7 \u00b7 GAP_FADE + ORB",
+      "last_msg": "",
+      "magic": 20260714,
+      "position": null,
+      "setup": "\u2014",
+      "status": "monitorando (auto OFF)"
+    },
+    {
+      "acao": "\u2014",
+      "enabled": true,
+      "id": "nr7",
+      "label": "WinGo \u00b7 NR7_BREAK",
+      "last_msg": "trades hoje: 0",
+      "magic": 20260723,
+      "position": null,
+      "setup": "NR7_BREAK",
+      "status": "ativo"
+    },
+    {
+      "acao": "\u2014",
+      "enabled": true,
+      "id": "inside",
+      "label": "WinGo \u00b7 INSIDE_BAR_BRK",
+      "last_msg": "trades hoje: 0",
+      "magic": 20260724,
+      "position": null,
+      "setup": "INSIDE_BAR_BRK",
+      "status": "ativo"
+    },
+    {
+      "acao": "\u2014",
+      "enabled": true,
+      "id": "eod",
+      "label": "WIN_EOD_REV",
+      "last_msg": "trades hoje: 0",
+      "magic": 20260722,
+      "position": null,
+      "setup": "WIN_EOD_REV",
+      "status": "ativo"
+    }
+  ],
+  "is_demo": true,
+  "last_ai": null,
+  "last_eval_ts": "11:59:32",
+  "last_exec_msg": "",
+  "levels": {
+    "or_high": 178800.0,
+    "or_low": 177740.0,
+    "vwap": 178300.168,
+    "y_high": 179230.0,
+    "y_low": 174245.0
+  },
+  "ok": true,
+  "position": null,
+  "signal": {
+    "acao": "NEUTRO",
+    "entrada": 178530.0,
+    "htf_trend": "alta",
+    "janela": "FECHADA",
+    "modo_entrada": null,
+    "regime": "RANGE",
+    "score": 0,
+    "setup": null,
+    "sinais": [
+      "Regime: RANGE (dir +1, exp 0.65) | janela FECHADA",
+      "Fora de janela operacional ou regime n\u00e3o oper\u00e1vel [filtro]"
+    ],
+    "stop": null,
+    "tp1": null
+  },
+  "status": "monitorando (auto OFF)",
+  "symbol": "WINQ26",
+  "today": {
+    "losses": 0,
+    "pnl_brl": 0.0,
+    "pnl_r": 0.0,
+    "trades": 0,
+    "wins": 0
+  },
+  "trades": [],
+  "vol_gap": 1.0,
+  "vol_mult": 1.0,
+  "vol_orb": 2.0
+}
+

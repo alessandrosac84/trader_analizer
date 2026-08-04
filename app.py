@@ -99,6 +99,14 @@ app.register_blueprint(risk_bp)
 from blueprints.newui_bp import newui_bp
 app.register_blueprint(newui_bp)
 
+# ── Saúde do Portfólio (/saude) — acompanhamento paper trading (aditivo) ──
+try:
+    from blueprints.saude_bp import saude_bp
+    app.register_blueprint(saude_bp)
+except Exception as _sd_err:
+    import logging as _lgs
+    _lgs.getLogger(__name__).warning("saude_bp não registrado: %s", _sd_err)
+
 # ── MONITOR CRYPTO (módulo novo, MT5 24h) — aditivo, isolado ────────────────
 # Não altera nenhum módulo existente. Endpoints /api/crypto/* próprios.
 try:
@@ -107,6 +115,29 @@ try:
 except Exception as _cbp_err:
     import logging as _lg
     _lg.getLogger(__name__).warning("crypto_bp não registrado: %s", _cbp_err)
+
+# ── MONITOR V7 (motor estrutural validado — GAP_FADE + ORB, conta demo) ─────
+# Aditivo e isolado: página /v7, endpoints /api/v7/*, magic number próprio.
+# Não altera o Monitor MT5 (v6) nem qualquer fluxo existente.
+try:
+    from blueprints.v7_bp import v7_bp
+    app.register_blueprint(v7_bp)
+    # Inicia o motor junto com o app (iniciar_B3.bat): fica MONITORANDO
+    # (avalia cada candle 15m e mostra na tela /v7). Só EXECUTA ordens
+    # quando o botão AUTO da tela for ligado.
+    from services.v7_engine_runtime import runtime as _v7_runtime
+    _v7_runtime.ensure_started()
+except Exception as _v7_err:
+    import logging as _lg7
+    _lg7.getLogger(__name__).warning("v7_bp não registrado: %s", _v7_err)
+
+# ── MONITOR AÇÕES B3 (scaffold blue chips — isolado de índices/crypto) ─────
+try:
+    from blueprints.acoes_bp import acoes_bp
+    app.register_blueprint(acoes_bp)
+except Exception as _ac_err:
+    import logging as _lgac
+    _lgac.getLogger(__name__).warning("acoes_bp não registrado: %s", _ac_err)
 
 # ── Inicialização única no primeiro request ────────────────────────────────
 _app_initialized = False
@@ -189,6 +220,14 @@ def _startup_once():
             start_bg_reconciler()   # registra fechamentos mesmo com a aba em 2º plano
         except Exception as e:
             logger.warning("Crypto bg reconciler não iniciou: %s", e)
+        try:
+            # Auto-trade no SERVIDOR: avalia todos os ativos com auto ligado,
+            # continuamente, mesmo com o navegador fechado (fix 22/07/2026 —
+            # antes o auto-check só rodava com a aba do painel aberta).
+            from services.crypto_auto_runtime import start_crypto_auto_runtime
+            start_crypto_auto_runtime(app)
+        except Exception as e:
+            logger.warning("Crypto auto runtime não iniciou: %s", e)
         return
     try:
         from services.telegram_notifier import start_periodic_summary
@@ -200,6 +239,26 @@ def _startup_once():
         start_commander()
     except Exception as e:
         logger.warning("Erro ao iniciar Telegram commander: %s", e)
+    try:
+        # WIN_EOD_REV (edge discovery, aprovado 22/07/2026) — paper trading demo.
+        # Runtime ISOLADO (magic próprio): não toca Monitor MT5 nem Monitor V7.
+        from services.win_eod_runtime import start_win_eod_runtime
+        start_win_eod_runtime()
+    except Exception as e:
+        logger.warning("WinEod runtime não iniciou: %s", e)
+    try:
+        # NR7_BREAK + INSIDE_BAR_BRK (🟢 GO v3 23/07/2026) — magics 20260723/24.
+        # Runtime ISOLADO: não altera v6, V7 nem WIN_EOD.
+        from services.win_go_runtime import start_win_go_runtime
+        start_win_go_runtime()
+    except Exception as e:
+        logger.warning("WinGo runtime não iniciou: %s", e)
+    try:
+        # Ações B3 blue chips — magics 20260810+ (isolado de WIN/WDO).
+        from services.acoes_runtime import start_acoes_runtime
+        start_acoes_runtime()
+    except Exception as e:
+        logger.warning("AcoesRuntime não iniciou: %s", e)
     try:
         from services.risk_settings_service import init_cpe_tables
         init_cpe_tables()
@@ -284,6 +343,15 @@ def dashboard():
         llm_mode=Config.LLM_MODE,
         ia_real_pronta=ia_ok,
         use_azure=Config.use_azure_openai(),
+    )
+
+
+@app.route("/setups")
+def setups_ativos():
+    """Inventário GO ao vivo (WIN/WDO/XAU/ETH) — HTML estático em docs/."""
+    return send_from_directory(
+        os.path.join(app.root_path, "docs"),
+        "setups_ativos.html",
     )
 
 
@@ -2257,4 +2325,5 @@ except Exception as _pcm_start_err:
     logger.warning("partial_close_monitor nao pode ser iniciado: %s", _pcm_start_err)
 
 if __name__ == "__main__":
-    app.run(debug=True, use_reloader=False, host="0.0.0.0", port=int(os.getenv("PORT", "5000")))
+    app.run(debug=True, use_reloader=False, threaded=True,
+            host="0.0.0.0", port=int(os.getenv("PORT", "5000")))

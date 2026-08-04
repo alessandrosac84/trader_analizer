@@ -10,10 +10,12 @@ Notifica: ordem aberta, trade fechado (com resultado) e um resumo diário opcion
 """
 import os
 import csv
+import json
 import logging
 import threading
 import time as _time
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +57,10 @@ def notify_entry(symbol, acao, entry, sl, tp, volume, source="auto", ai_motivo=N
     try:
         from services.telegram_notifier import send_async
         src = {"score": "Score técnico", "impulso": "Impulso (rompimento)",
-               "pullback": "Pullback macro/micro", "manual": "Manual"}.get(source, source)
+               "pullback": "Pullback macro/micro", "orderflow": "Order Flow (delta)",
+               "london_handoff": "London Handoff (Ásia→Londres)",
+               "us_drift": "US Drift (edge discovery)",
+               "manual": "Manual"}.get(source, source)
         txt = (f"{_icon(acao)} <b>CRYPTO — ORDEM ABERTA</b>\n"
                f"━━━━━━━━━━━━━━━━━━\n"
                f"🪙 <b>Ativo:</b> {symbol}\n"
@@ -77,9 +82,29 @@ def notify_exit(symbol, acao, entry_price, exit_price, profit_usd, reason, usdbr
         rate = usdbrl or _usdbrl()
         p = float(profit_usd or 0)
         res = "✅ GAIN" if p > 0.01 else ("🛑 LOSS" if p < -0.01 else "➖ BE")
-        reason_txt = {"TP": "🎯 TP atingido", "SL": "🛑 Stop atingido",
-                      "manual": "✋ Fechado manual", "MT5": "🔄 Fechado no broker",
-                      "BE": "➖ Breakeven"}.get(reason, reason or "Fechado")
+        reason_txt = {
+            "TP": "🎯 TP atingido", "SL": "🛑 Stop atingido",
+            "manual": "✋ Fechado manual", "MANUAL": "✋ Fechado manual",
+            "MT5": "🔄 Fechado no broker",
+            "BE": "➖ Breakeven",
+            "GIVEBACK": "🔒 Proteção de lucro (devolveu do pico)",
+            "MICRO": "⚡ MICRO virou contra",
+            "REVERSAO": "⚠️ Reversão de sinal",
+            "SAIDA_ANTECIPADA": "🛡 Saída antecipada (não foi TP)",
+            "TIME_STOP": "⏱ Time-stop",
+            "MANAGER": "🛡 Manager",
+        }.get(reason, None)
+        if reason_txt is None:
+            # reason pode ser "GIVEBACK · Devolveu 55%..."
+            code = str(reason or "").split("·")[0].strip().upper()
+            reason_txt = {
+                "GIVEBACK": "🔒 Proteção de lucro (devolveu do pico)",
+                "MICRO": "⚡ MICRO virou contra",
+                "REVERSAO": "⚠️ Reversão de sinal",
+                "SAIDA_ANTECIPADA": "🛡 Saída antecipada (não foi TP)",
+                "TIME_STOP": "⏱ Time-stop",
+                "MANUAL": "✋ Fechado manual",
+            }.get(code, reason or "Fechado")
         txt = (f"{_icon(acao)} <b>CRYPTO — TRADE FECHADO · {res}</b>\n"
                f"━━━━━━━━━━━━━━━━━━\n"
                f"🪙 <b>Ativo:</b> {symbol}  |  {acao or '—'}\n"
@@ -153,20 +178,107 @@ def _rows_period(period: str):
         return []
 
 
-def _summary_text(rows, titulo):
+def _crypto_api_base() -> str:
+    return (os.getenv("CRYPTO_API_BASE") or "http://127.0.0.1:5001").rstrip("/")
+
+
+def _live_positions() -> list:
+    """Posições abertas: API do runtime crypto (:5001), fallback heartbeat."""
+    out = []
+    try:
+        import urllib.request
+        url = _crypto_api_base() + "/api/crypto/positions"
+        with urllib.request.urlopen(url, timeout=4) as r:
+            d = json.loads(r.read().decode())
+        if d.get("ok"):
+            for p in d.get("items") or []:
+                out.append({
+                    "symbol": p.get("symbol") or "—",
+                    "dir": p.get("type") or p.get("dir") or "?",
+                    "price_open": p.get("price_open"),
+                    "price_current": p.get("price_current"),
+                    "profit": p.get("profit"),
+                    "sl": p.get("sl"),
+                    "tp": p.get("tp"),
+                    "volume": p.get("volume"),
+                    "ticket": p.get("ticket"),
+                    "setup": p.get("comment") or "crypto",
+                })
+            return out
+    except Exception as exc:
+        logger.debug("crypto live positions api: %s", exc)
+    try:
+        hb = Path(__file__).resolve().parent.parent / "logs" / "hb_crypto_runtime.json"
+        if hb.exists():
+            d = json.loads(hb.read_text(encoding="utf-8"))
+            for p in d.get("positions") or []:
+                typ = p.get("type")
+                if typ in (0, "0", "BUY", "buy"):
+                    dir_ = "COMPRA"
+                elif typ in (1, "1", "SELL", "sell"):
+                    dir_ = "VENDA"
+                else:
+                    dir_ = p.get("dir") or (typ if isinstance(typ, str) else "?")
+                out.append({
+                    "symbol": p.get("symbol") or "—",
+                    "dir": dir_,
+                    "price_open": p.get("price_open") or p.get("entry"),
+                    "price_current": p.get("price_current") or p.get("price"),
+                    "profit": p.get("profit"),
+                    "sl": p.get("sl"),
+                    "tp": p.get("tp"),
+                    "volume": p.get("volume"),
+                    "setup": p.get("comment") or p.get("setup") or "crypto",
+                })
+    except Exception as exc:
+        logger.debug("crypto live positions hb: %s", exc)
+    return out
+
+
+def _fmt_open_block(poss: list) -> str:
+    if not poss:
+        return "\n\n📭 Sem posição crypto aberta."
+    rate = _usdbrl()
+    lines = ["\n\n<b>Abertas agora:</b>"]
+    for p in poss:
+        dir_ = p.get("dir") or "?"
+        ic = "📈" if str(dir_).upper().startswith("C") else "📉"
+        pr = p.get("profit")
+        lines.append(
+            f"\n{ic} <b>{p.get('symbol')}</b> {dir_}"
+            f"\n   Entrada {_p(p.get('price_open'))} → agora {_p(p.get('price_current'))}"
+            f"\n   SL {_p(p.get('sl'))} · TP {_p(p.get('tp'))}"
+            f"\n   Lote {p.get('volume') or '—'} · P&L {_money(pr, rate)}"
+        )
+    return "".join(lines)
+
+
+def _summary_text(rows, titulo, open_poss=None):
     def _f(v):
         try: return float(v)
         except Exception: return 0.0
+    rate = _usdbrl()
+    open_poss = open_poss if open_poss is not None else []
+    open_block = _fmt_open_block(open_poss)
     if not rows:
-        return f"🪙 <b>CRYPTO — {titulo}</b>\nNenhum trade no período."
+        base = (
+            f"🪙 <b>CRYPTO — {titulo}</b>\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"📊 <b>Fechados:</b> 0 no período"
+        )
+        if open_poss:
+            float_pnl = round(sum(_f(p.get("profit")) for p in open_poss), 2)
+            base += (
+                f"\n🔴 <b>Abertas:</b> {len(open_poss)}"
+                f"\n💰 <b>P&L flutuante:</b> {_money(float_pnl, rate)}"
+            )
+        return base + open_block
     wins = sum(1 for r in rows if _f(r.get("profit")) > 0)
     losses = sum(1 for r in rows if _f(r.get("profit")) < 0)
     be = sum(1 for r in rows if abs(_f(r.get("profit"))) < 1e-9)
     pnl = round(sum(_f(r.get("profit")) for r in rows), 2)
-    rate = _usdbrl()
     wr = round(wins / (wins + losses) * 100) if (wins + losses) else 0
     emoji = "✅" if pnl > 0 else ("🛑" if pnl < 0 else "➖")
-    # últimos trades
     ult = ""
     for r in rows[-5:][::-1]:
         p = _f(r.get("profit"))
@@ -178,25 +290,50 @@ def _summary_text(rows, titulo):
             f"📊 <b>Trades:</b> {len(rows)}  ·  ✅ {wins}  🛑 {losses}  ➖ {be}\n"
             f"🎯 <b>Win rate:</b> {wr}%\n"
             f"💰 <b>Resultado:</b> {_money(pnl, rate)}"
-            + (f"\n\n<b>Últimos:</b>{ult}" if ult else ""))
+            + (f"\n\n<b>Últimos:</b>{ult}" if ult else "")
+            + open_block)
 
 
 def handle_cy_command(token: str, chat_id: str, text: str) -> None:
-    """Comandos de crypto (/cy*) chamados pelo commander do B3. Só leem o CSV do
-    crypto (dados de hoje/semana/mês) — sem posição ao vivo (isso fica no bot dedicado)."""
+    """Comandos /cy* — CSV fechados + posições ao vivo via API :5001."""
+    def reply(msg: str) -> None:
+        try:
+            import requests
+            r = requests.post(
+                f"https://api.telegram.org/bot{token}/sendMessage",
+                json={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"},
+                timeout=10, verify=False,
+            )
+            if not r.ok:
+                logger.warning("crypto telegram reply: %s %s", r.status_code, r.text[:200])
+                # fallback chat do .env
+                from services.telegram_notifier import send_async
+                send_async(msg)
+        except Exception as exc:
+            logger.warning("crypto telegram reply error: %s", exc)
+            try:
+                from services.telegram_notifier import send_async
+                send_async(msg)
+            except Exception:
+                pass
+
     try:
-        from services.telegram_notifier import send_async
         cmd = (text or "").strip().lower().split()[0] if text else ""
+        open_poss = _live_positions()
         if cmd in ("/cy_semana", "/cy_week"):
-            send_async(_summary_text(_rows_period("week"), "SEMANA"))
+            reply(_summary_text(_rows_period("week"), "SEMANA", open_poss))
         elif cmd in ("/cy_mes", "/cy_mês", "/cy_month"):
-            send_async(_summary_text(_rows_period("month"), "MÊS"))
-        elif cmd in ("/cy_status", "/cy", "/cy_hoje", "/crypto"):
-            send_async(_summary_text(_rows_period("day"), "HOJE"))
+            reply(_summary_text(_rows_period("month"), "MÊS", open_poss))
+        elif cmd in ("/cy_status", "/cy", "/cy_hoje", "/crypto", "/cy_trade", "/cy_pos"):
+            reply(_summary_text(_rows_period("day"), "HOJE", open_poss))
         else:
-            send_async("🪙 <b>Crypto</b>\nComandos: /cy_status (hoje), /cy_semana, /cy_mes")
+            reply("🪙 <b>Crypto</b>\nComandos: /cy_status · /cy_semana · /cy_mes")
     except Exception as exc:
         logger.warning("crypto handle_cy_command: %s", exc)
+        try:
+            reply(f"🪙 Crypto erro: {exc}")
+        except Exception:
+            pass
 
 
 def start_daily_summary_scheduler(hhmm: str = None):

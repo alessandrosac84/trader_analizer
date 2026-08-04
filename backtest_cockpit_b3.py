@@ -11,7 +11,7 @@ anos (candle não tem fluxo). E cobre delta+agressão (o book de 10 níveis não
 no histórico de tick).
 
 Roda NA SUA MÁQUINA com o MT5 (B3) aberto.
-  python backtest_cockpit_b3.py                       # WINZ26 e WDOQ26, ~20 dias
+  python backtest_cockpit_b3.py                       # WINZ26 e WDOU26, ~20 dias
   python backtest_cockpit_b3.py --symbol WINZ26 --days 20
   python backtest_cockpit_b3.py --cost 0.05 --bar 15
 """
@@ -174,7 +174,7 @@ def _resolve(sym):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Backtest do sinal do Cockpit B3 sobre ticks")
-    ap.add_argument("--symbol", default="WINZ26,WDOQ26", help="Contratos (vírgula). Use os ATIVOS")
+    ap.add_argument("--symbol", default="WINZ26,WDOU26", help="Contratos (vírgula). Use os ATIVOS")
     ap.add_argument("--days", type=int, default=20)
     ap.add_argument("--bar", type=int, default=15, help="Tamanho da barra em segundos")
     ap.add_argument("--win", type=int, default=4, help="Janela de confluência (nº de barras)")

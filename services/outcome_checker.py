@@ -25,7 +25,7 @@ def _infer_mt5_symbol(ativo: str) -> "str | None":
     if "WIN" in a:
         return os.getenv("WIN_MT5_SYMBOL", "WINQ26")
     if "WDO" in a:
-        return os.getenv("WDO_MT5_SYMBOL", "WDOM26")
+        return os.getenv("WDO_MT5_SYMBOL", "WDOU26")
     # Ações e outros — usa direto
     for sym in ("PETR4", "RADL3", "VALE3", "ITUB4", "BBDC4", "ABEV3", "WEGE3", "BBAS3",
                 "EURUSD", "GBPUSD", "XAUUSD", "BTCUSD"):

@@ -111,6 +111,13 @@ SYMBOL_CONFIG: dict[str, dict] = {
         # Volatility 60s (P2 Scalper V2) — filtro de mercado morto
         "min_range_60s":             4,     # ticks mínimos em 60s → bloqueia com LOW_VOLATILITY
         "expansion_range_60s":       10,    # ticks > isso → bônus +10pts no score
+        # ── v7 (reaplicado após migração de pasta) — guards DESATIVADOS por
+        # padrão (999): só agem nos símbolos que os configuram explicitamente.
+        # Assim nada muda para BTCUSD/forex (stack crypto intocado).
+        "max_spread_ticks":          999,   # spread (ticks) acima disso → não entra
+        "score_ceiling":             999,   # score >= teto → exaustão (hard-block)
+        "flow30_align_pct":          60.0,  # agressão 30s a favor → bônus (só B3)
+        "flow30_contra_pct":         42.0,  # agressão 30s contra → penalidade (só B3)
     },
 
     # ── Mini Dólar / Dólar Futuro — alta liquidez ─────────────────────────
@@ -153,6 +160,12 @@ SYMBOL_CONFIG: dict[str, dict] = {
         # Volatility 60s BITN26 — limiares menores (BTC tem menos ticks)
         "min_range_60s":              2,    # 2 ticks = R$200 de range mínimo em 60s
         "expansion_range_60s":        6,    # 6 ticks → bônus
+        # ── v7 BITN26 (dados reais, 85 trades): spread é o custo dominante;
+        # score 90+ teve 0% de acerto; VENDA contra o fluxo 30s = 2 win/24.
+        "max_spread_ticks":           2,
+        "score_ceiling":              88,
+        "flow30_align_pct":          58.0,
+        "flow30_contra_pct":         45.0,
     },
 
     # ── Bitcoin CFD (BTCUSD ICMarkets) — 24h, líquido; tick de scalper = US$10 ──
@@ -997,8 +1010,44 @@ def _calc_multi_score(
     else:
         pts["expansion_bonus"] = 0
 
+    # ── 10. Alinhamento do fluxo de 30s (v7) — SÓ ativos B3 ─────────────────
+    # Burst de 2s contra a agressão dominante de 30s = ruído, não início de
+    # movimento (dados BITN26: VENDA 2 win/24 por esse padrão). Não se aplica
+    # a símbolos 24h (BTCUSD/forex) para não alterar o stack crypto.
+    _is_b3_sym = mt5_sym not in _SYMBOLS_24H
+    if _is_b3_sym:
+        aggr30_pct = (aggr30 or {}).get("buy_pct" if is_buy else "sell_pct", 50.0)
+        _fa = scfg.get("flow30_align_pct", 60.0)
+        _fc = scfg.get("flow30_contra_pct", 42.0)
+        if aggr30_pct >= _fa:
+            pts["flow30_align"] = 8
+            reasons.append(f"Fluxo 30s alinhado ({aggr30_pct:.0f}%)")
+        elif aggr30_pct <= _fc:
+            pts["flow30_align"] = -12
+            reasons.append(f"Burst contra fluxo 30s ({aggr30_pct:.0f}% na direção)")
+        else:
+            pts["flow30_align"] = 0
+
+        # ── 11. Penalidade de sessão (v7) — time_w era calculado e ignorado ─
+        _tw = (time_w or {}).get("weight", 100)
+        if _tw <= 25:
+            pts["horario_pen"] = -12
+            reasons.append(f"Sessão {time_w.get('session', '?')} — horário hostil")
+        elif _tw <= 50:
+            pts["horario_pen"] = -6
+            reasons.append(f"Sessão {time_w.get('session', '?')}")
+        else:
+            pts["horario_pen"] = 0
+
     # ── Score final ──────────────────────────────────────────────────────────
     total = round(sum(pts.values()), 1)
+
+    # ── 12. Teto de exaustão (v7) — 999 = desativado (só BITN26 usa 88) ─────
+    _ceiling = scfg.get("score_ceiling", 999)
+    if total >= _ceiling:
+        hard_blocked = True
+        reasons.append(f"Exaustão v7: score {total:.0f} >= teto {_ceiling} — entrada tardia")
+
     return {
         "score":             min(100, max(0, total)),
         "breakdown":         pts,
@@ -1279,6 +1328,8 @@ def get_scalper_data(symbol: str, aggr_seconds: int = 30,
                 "velocity": vel_r,
                 "aggr_5s":  aggr5_r,
                 "aggr_10s": _calc_aggr(mt5_sym, 10),
+                # v7: spread em ticks no snapshot (auditoria de custo por trade)
+                "spread_ticks": round(tick_data["spread"] / tick_size, 1) if tick_size > 0 else None,
             },
             "macro": {
                 "vwap":      vwap_r,
@@ -1455,17 +1506,38 @@ def execute_scalper_trade(symbol: str, acao: str, volume: float,
         tick_size = TICK_SIZE_OVERRIDE.get(mt5_sym) or (
             float(info.trade_tick_size) if info and info.trade_tick_size else 0.01
         )
+
+        # ── v7 (só B3): spread guard + SL ancorado na cotação oposta ─────
+        # Símbolos 24h (BTCUSD/forex) mantêm o comportamento original —
+        # nada muda no stack crypto.
+        _is_b3_exec = mt5_sym not in _SYMBOLS_24H
+        if _is_b3_exec:
+            _max_spread   = _sym_cfg(mt5_sym).get("max_spread_ticks", 999)
+            _spread_ticks = (tick.ask - tick.bid) / tick_size if tick_size > 0 else 0.0
+            if _spread_ticks > _max_spread:
+                return None, (
+                    f"Spread {_spread_ticks:.1f} ticks > máx {_max_spread} — "
+                    f"entrada bloqueada (custo de spread inviabiliza o alvo)."
+                )
+
         acao_up = acao.upper()
+        # v7 (B3): o SL parte da cotação que FECHA a posição (BUY fecha no bid,
+        # SELL no ask). Antes, com spread de 1-2 ticks, um SL de 2 ticks a
+        # partir do preço de entrada tolerava ~0-1 tick de movimento adverso
+        # real → stops quase instantâneos em ruído (causa raiz das perdas do
+        # BITN26). O custo do spread agora fica no SL, não roubado do ruído.
         if acao_up == "COMPRA":
             order_type = mt5.ORDER_TYPE_BUY
             price      = tick.ask
             tp_price   = round(price + tp_ticks * tick_size, 2)
-            sl_price   = round(price - sl_ticks * tick_size, 2)
+            _sl_base   = tick.bid if _is_b3_exec else price
+            sl_price   = round(_sl_base - sl_ticks * tick_size, 2)
         elif acao_up == "VENDA":
             order_type = mt5.ORDER_TYPE_SELL
             price      = tick.bid
             tp_price   = round(price - tp_ticks * tick_size, 2)
-            sl_price   = round(price + sl_ticks * tick_size, 2)
+            _sl_base   = tick.ask if _is_b3_exec else price
+            sl_price   = round(_sl_base + sl_ticks * tick_size, 2)
         else:
             return None, f"Ação inválida: '{acao}'"
 

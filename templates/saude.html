@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<title>Saúde do Portfólio</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{--bg:#060b12;--panel:#0b1420;--line:#122233;--tx:#c8d6e5;--dim:#5f7185;
+        --cy:#22d3ee;--gr:#34d399;--rd:#f87171;--yl:#fbbf24;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--tx);font:13px/1.5 "JetBrains Mono","Cascadia Code",monospace;padding:18px}
+  h1{font-size:16px;color:var(--cy);letter-spacing:1px;margin-bottom:2px}
+  .sub{color:var(--dim);font-size:11px;margin-bottom:14px}
+  .bar{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+  .btn{background:var(--panel);border:1px solid var(--line);color:var(--tx);padding:5px 12px;
+       cursor:pointer;border-radius:4px;font:inherit}
+  .btn.on{border-color:var(--cy);color:var(--cy)}
+  .cards{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 16px;min-width:130px}
+  .card .v{font-size:20px;color:var(--cy)}
+  .card .l{font-size:10px;color:var(--dim);text-transform:uppercase}
+  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:6px}
+  th{font-size:10px;color:var(--dim);text-transform:uppercase;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+  td{padding:8px 10px;border-bottom:1px solid var(--line);font-size:12px}
+  tr:last-child td{border-bottom:none}
+  .esp{color:var(--dim);font-size:10px}
+  .ok{color:var(--gr)} .bad{color:var(--rd)} .warn{color:var(--yl)} .dim{color:var(--dim)}
+  .alerts{margin-top:14px}
+  .alert{background:#1a0f12;border:1px solid #7f1d1d;border-radius:6px;padding:8px 12px;margin-bottom:6px;color:#fca5a5;font-size:12px}
+  .noalert{background:#0d1a14;border:1px solid #14532d;border-radius:6px;padding:8px 12px;color:#86efac;font-size:12px}
+  .foot{margin-top:12px;color:var(--dim);font-size:10px}
+  a.back{color:var(--dim);text-decoration:none;font-size:11px}
+</style>
+</head>
+<body>
+<h1>◆ SAÚDE DO PORTFÓLIO <span class="sub" id="gerado"></span></h1>
+<div class="sub">realizado × backtest por estratégia · paper trading &nbsp;|&nbsp; <a class="back" href="/">← dashboard</a></div>
+
+<div class="bar">
+  Período:
+  <button class="btn" data-d="7">7d</button>
+  <button class="btn on" data-d="21">21d</button>
+  <button class="btn" data-d="30">30d</button>
+  <button class="btn" data-d="90">90d</button>
+  <button class="btn" id="reload">↻ atualizar</button>
+</div>
+
+<div class="cards">
+  <div class="card"><div class="v" id="c_total">—</div><div class="l">trades fechados</div></div>
+  <div class="card"><div class="v" id="c_ok">—</div><div class="l">estratégias ok</div></div>
+  <div class="card"><div class="v" id="c_alertas">—</div><div class="l">alertas</div></div>
+</div>
+
+<table>
+  <thead><tr>
+    <th>Estratégia</th><th>n</th><th>/semana</th><th>win %</th><th>PF</th>
+    <th>R médio</th><th>P&amp;L</th><th>Status</th>
+  </tr></thead>
+  <tbody id="tb"><tr><td colspan="8" class="dim">carregando…</td></tr></tbody>
+</table>
+
+<h1 style="margin-top:18px">◆ MOTORES (pulso ao vivo)</h1>
+<div class="sub">último ciclo de cada motor e o motivo de cada ativo não ter operado</div>
+<table>
+  <thead><tr><th>Motor</th><th>Pulso</th><th>Motivos por ativo (último ciclo)</th></tr></thead>
+  <tbody id="tb_mot"><tr><td colspan="3" class="dim">—</td></tr></tbody>
+</table>
+
+<div class="alerts" id="alerts"></div>
+<div class="foot">Critérios: 🚨 com n≥20 se PF &lt; 60% do backtest OU win% &lt; backtest−10pp ·
+  “silêncio” = 0 trades quando o baseline esperava vários · com n&lt;20 é variância normal, sem julgamento.
+  Valores (esp.) = baseline do backtest que validou a estratégia.</div>
+
+<script>
+let dias = 21;
+function fmt(v, suf){ return (v===null||v===undefined) ? "—" : v + (suf||""); }
+function espTag(v){ return (v===null||v===undefined) ? "" : ` <span class="esp">(${v})</span>`; }
+function statusHtml(s){
+  if (s === "ok") return '<span class="ok">✅ dentro do esperado</span>';
+  if (s === "degradacao") return '<span class="bad">🚨 DEGRADAÇÃO</span>';
+  if (s === "silencio") return '<span class="warn">⚠️ silêncio anômalo</span>';
+  if (s === "sem trades") return '<span class="dim">sem trades</span>';
+  return '<span class="dim">⏳ ' + s + '</span>';
+}
+async function load(){
+  document.getElementById("tb").innerHTML = '<tr><td colspan="8" class="dim">carregando…</td></tr>';
+  try{
+    const r = await fetch("/api/saude?dias=" + dias);
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || "erro");
+    document.getElementById("gerado").textContent = "· " + d.gerado_em;
+    document.getElementById("c_total").textContent = d.total;
+    document.getElementById("c_ok").textContent =
+      d.estrategias.filter(e => e.status === "ok").length + "/" + d.estrategias.length;
+    document.getElementById("c_alertas").textContent = d.alertas.length;
+    document.getElementById("tb").innerHTML = d.estrategias.map(e => {
+      const pnl = Object.entries(e.pnl||{}).map(([m,v]) =>
+        `<span class="${v>=0?'ok':'bad'}">${m} ${v>=0?'+':''}${v}</span>`).join(" · ") || "—";
+      return `<tr>
+        <td>${e.estrategia}</td>
+        <td>${e.n}</td>
+        <td>${fmt(e.freq)}${espTag(e.freq_esp)}</td>
+        <td>${fmt(e.win,"%")}${espTag(e.win_esp)}</td>
+        <td>${fmt(e.pf)}${espTag(e.pf_esp)}</td>
+        <td>${fmt(e.r_med)}${espTag(e.r_esp)}</td>
+        <td>${pnl}</td>
+        <td>${statusHtml(e.status)}</td></tr>`;
+    }).join("");
+    const mot = d.motores || {};
+    const nomes = {crypto_runtime: "Monitor Crypto (runtime servidor)",
+                   win_eod_rev: "WIN EOD-REV", v7_win: "Monitor V7 (WIN)"};
+    document.getElementById("tb_mot").innerHTML = Object.keys(mot).length
+      ? Object.entries(mot).map(([k, m]) => {
+          const age = m.idade_s ?? 99999;
+          const pulso = age < 180 ? '<span class="ok">● vivo</span>'
+                      : age < 900 ? `<span class="warn">● ${Math.round(age/60)} min atrás</span>`
+                      : '<span class="bad">● PARADO</span>';
+          const mots = Object.entries(m.motivos || {})
+            .map(([s, r]) => `<b>${s}</b>: ${r}`).join("<br>") || "—";
+          return `<tr><td>${nomes[k] || k}</td><td>${pulso}</td><td>${mots}</td></tr>`;
+        }).join("")
+      : '<tr><td colspan="3" class="dim">nenhum pulso ainda — motores sobem no restart dos .bat</td></tr>';
+    document.getElementById("alerts").innerHTML = d.alertas.length
+      ? d.alertas.map(a => `<div class="alert">🚨 ${a}</div>`).join("")
+      : '<div class="noalert">✅ nenhum alerta de degradação (ou amostra ainda insuficiente)</div>';
+  }catch(err){
+    document.getElementById("tb").innerHTML =
+      `<tr><td colspan="8" class="bad">erro: ${err.message}</td></tr>`;
+  }
+}
+document.querySelectorAll(".btn[data-d]").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".btn[data-d]").forEach(x => x.classList.remove("on"));
+  b.classList.add("on"); dias = +b.dataset.d; load();
+});
+document.getElementById("reload").onclick = load;
+load();
+setInterval(load, 120000);
+</script>
+</body>
+</html>

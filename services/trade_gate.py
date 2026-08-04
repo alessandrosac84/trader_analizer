@@ -9,12 +9,14 @@ marcado OFF — não importa a origem (painel novo, dashboard clássico, outra a
 motor de análise/execução do Monitor MT5.
 
 Modelo por TOKEN (WIN, WDO, ...): um símbolo é bloqueado se contém um token
-desativado. Habilitado por padrão — só bloqueia o que foi explicitamente desligado.
+desativado. Monitor MT5 sobe com WIN/WDO DESLIGADOS — auto no boot é só
+V7 + Crypto; o painel liga o Monitor sob demanda.
 """
 import threading
 
 _lock = threading.Lock()
-_disabled_tokens: set = set()   # ex.: {"WIN", "WDO"}
+# Boot seguro: Monitor clássico OFF até o usuário ligar TRADES no painel.
+_disabled_tokens: set = {"WIN", "WDO"}
 
 
 def set_token(token: str, enabled: bool) -> None:
