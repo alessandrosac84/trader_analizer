@@ -1,0 +1,37 @@
+PONTO DE RESTAURAÇÃO — 14/08/2026
+=================================
+
+Criado ANTES de implementar a regra de "corte duro incondicional a -0,8R"
+(rede de segurança final contra stops cheios no módulo Crypto).
+
+O QUE ESTÁ GUARDADO AQUI
+------------------------
+Cópias intactas dos arquivos que a nova regra vai alterar:
+
+  - crypto_position_manager.py   (a lógica de gestão de saída do Crypto)
+  - crypto_bp.py                 (quem aplica as decisões de saída)
+
+Estado do git no momento do backup: ver INFO_git.txt
+
+COMO RESTAURAR (se a regra nova causar qualquer problema)
+---------------------------------------------------------
+1. Pare as duas instâncias (B3 na porta 5000 e Crypto na 5001).
+
+2. Copie os dois arquivos desta pasta de volta para os lugares originais,
+   substituindo os que estiverem lá:
+
+   crypto_position_manager.py  ->  services\crypto_position_manager.py
+   crypto_bp.py                ->  blueprints\crypto_bp.py
+
+3. Suba as instâncias de novo (iniciar_B3.bat e iniciar_CRYPTO.bat).
+
+Pronto. O sistema volta a se comportar EXATAMENTE como estava hoje (14/08),
+antes da regra nova.
+
+CONFERÊNCIA DE INTEGRIDADE (opcional)
+-------------------------------------
+Assinatura (md5) dos arquivos originais no momento do backup:
+  crypto_position_manager.py : 5f457499c27353e05152d08dc4abae64
+  crypto_bp.py               : fd8ce5e678119f33724c542026774ee0
+
+Se as cópias baterem com essas assinaturas, o backup está íntegro.
