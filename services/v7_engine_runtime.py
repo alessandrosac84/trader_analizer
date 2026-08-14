@@ -3,7 +3,7 @@ v7_engine_runtime.py — Motor v7.4.1 como SERVIÇO do app (Monitor V7).
 
 O mesmo sistema validado no backtest de 6,6 anos (+0.182 R/trade, PF 1.44):
   GAP_FADE 09:15 (1 contrato, SL/TP fixos) + ORB 10:00-10:45
-  (2 contratos: parcial em +1R + breakeven, trailing 1xATR até 2.5R, time-stop)
+  (1 contrato: BE em +1R, trailing 1xATR até 2.5R, time-stop — sem parcial)
 
 Roda numa thread daemon dentro do Flask e alimenta a página /v7:
   - SEMPRE avalia o mercado a cada candle 15m fechado (mostra regime/sinal na tela)
@@ -36,7 +36,7 @@ _COLS      = ["id", "ts_open", "ts_close", "symbol", "setup", "dir", "volume",
 
 CHECK_SEC      = 10
 VOLUME_GAP     = 1.0    # base — multiplicado por _vol_mult (painel)
-VOLUME_ORB     = 2.0    # base — ORB usa 2x p/ permitir a parcial de 50%
+VOLUME_ORB     = 1.0    # 1 contrato (antes 2.0 p/ parcial 50%; agora BE em +1R)
 PARTIAL_AT_R   = 1.0
 TP2_R          = 2.5
 TRAIL_ATR      = 1.0
@@ -232,7 +232,7 @@ class V7Runtime:
         self._thread = None
         # Auto-trade ON no boot (V7_AUTO_ENABLED=0 para subir desligado)
         self.enabled = os.getenv("V7_AUTO_ENABLED", "1").strip() != "0"
-        self.symbol = os.getenv("WIN_MT5_SYMBOL", "WINQ26")
+        self.symbol = os.getenv("WIN_MT5_SYMBOL", "WINV26")
         self.status = "parado"
         self.account = None
         self.is_demo = None
@@ -245,7 +245,7 @@ class V7Runtime:
         self._next_id = int(time.time()) % 10_000_000
         self._candles_cache = {}      # tf -> (lista, ts)
         # ── config do painel (v7.5) ────────────────────────────────────────
-        self.vol_mult = 1.0           # multiplicador de contratos (1 = base: gap 1 / orb 2)
+        self.vol_mult = 1.0           # multiplicador de contratos (1 = base: gap 1 / orb 1)
         self.chart_tf = 15            # timeframe do GRÁFICO (não muda o motor: sempre 15m)
         self.ai_mode = "advisory"     # 'advisory' (loga, não bloqueia) | 'gate' | 'off'
         self.last_ai = None           # último parecer da IA
@@ -687,7 +687,7 @@ class V7Runtime:
             self.last_exec_msg = "Volume configurado = 0 — não executado"
             return
         tp = float(sig["tp1"]) if setup == "GAP_FADE" else None
-        # ORB: TP não vai na ordem MT5 (gestão software: parcial +1R, final +2.5R).
+        # ORB: TP não vai na ordem MT5 (gestão software: BE +1R, final +2.5R).
         # Calculamos os alvos aqui p/ UI/Telegram/CSV — senão o painel só mostra SL.
         buy = sig["acao"] == "COMPRA"
         orb_tp1 = orb_tp2 = None
@@ -739,8 +739,12 @@ class V7Runtime:
                               f"SL {stop:.0f} | {vol}c · risco R$ {risk_brl:.2f}{_flag}")
         logger.info("V7 EXECUTADO %s", self.last_exec_msg)
         if setup == "ORB" and orb_tp1 and orb_tp2:
-            _tptxt = (f" · Parcial +{PARTIAL_AT_R:.0f}R @ {orb_tp1:.0f}"
-                      f" · Alvo final +{TP2_R}R @ {orb_tp2:.0f}")
+            if vol >= 2:
+                _tptxt = (f" · Parcial +{PARTIAL_AT_R:.0f}R @ {orb_tp1:.0f}"
+                          f" · Alvo final +{TP2_R}R @ {orb_tp2:.0f}")
+            else:
+                _tptxt = (f" · BE +{PARTIAL_AT_R:.0f}R @ {orb_tp1:.0f}"
+                          f" · Alvo +{TP2_R}R @ {orb_tp2:.0f}")
         else:
             _tptxt = f" · Alvo {tp:.0f}" if tp else ""
         self._notify(
@@ -778,16 +782,29 @@ class V7Runtime:
         buy = pos.type == 0
         risk = st["risk"]
         r_now = ((price - st["entry"]) / risk) if buy else ((st["entry"] - price) / risk)
-        if not st["partial_done"] and r_now >= PARTIAL_AT_R and pos.volume >= 2:
-            if self._close(mt5, pos, volume=pos.volume / 2):
-                st["partial_done"] = True
-                p2 = self._our_position(mt5)
-                if p2: self._modify_sl(mt5, p2, st["entry"])
-                _update_row(st["id"], partial_done=1)
-                self.last_exec_msg = "Parcial +1R feita; SL no breakeven"
-                logger.info("V7 parcial +1R; SL -> BE")
-                self._notify("📈 <b>+1R — PARCIAL</b>\nMetade fechada no lucro, "
-                             "stop movido para a entrada (risco zero no restante).")
+        if not st["partial_done"] and r_now >= PARTIAL_AT_R:
+            if pos.volume >= 2:
+                # Volume alto (legado / vol_mult): parcial 50% + BE
+                if self._close(mt5, pos, volume=pos.volume / 2):
+                    st["partial_done"] = True
+                    p2 = self._our_position(mt5)
+                    if p2:
+                        self._modify_sl(mt5, p2, st["entry"])
+                    _update_row(st["id"], partial_done=1)
+                    self.last_exec_msg = "Parcial +1R feita; SL no breakeven"
+                    logger.info("V7 parcial +1R; SL -> BE")
+                    self._notify("📈 <b>+1R — PARCIAL</b>\nMetade fechada no lucro, "
+                                 "stop movido para a entrada (risco zero no restante).")
+            else:
+                # 1 contrato: sem parcial — só BE e segue trail/TP2
+                if self._modify_sl(mt5, pos, st["entry"]):
+                    st["partial_done"] = True
+                    _update_row(st["id"], partial_done=1)
+                    self.last_exec_msg = "ORB +1R: SL no breakeven (1 contrato)"
+                    logger.info("V7 ORB +1R; SL -> BE (sem parcial, vol=%.1f)", pos.volume)
+                    self._notify("📈 <b>+1R — BREAKEVEN</b>\n"
+                                 "Stop na entrada (1 contrato, sem parcial). "
+                                 "Trailing até o alvo final.")
         elif st["partial_done"]:
             if r_now >= TP2_R:
                 self._close(mt5, pos)
@@ -851,7 +868,11 @@ class V7Runtime:
                 "tp": round(next_tp, 1) if next_tp else None,
                 "tp1": round(float(tp1), 1) if tp1 else None,
                 "tp2": round(float(tp2), 1) if tp2 else None,
-                "tp_label": ("TP2 +%.1fR" % TP2_R) if partial else ("TP1 +%.0fR parcial" % PARTIAL_AT_R),
+                "tp_label": (
+                    ("TP2 +%.1fR" % TP2_R) if partial
+                    else (("+%.0fR BE" % PARTIAL_AT_R) if float(pos.volume or 0) < 2
+                          else ("TP1 +%.0fR parcial" % PARTIAL_AT_R))
+                ),
                 "profit_brl": round(pos.profit, 2),
                 "r_now": round(r_now, 2),
                 "partial_done": partial,

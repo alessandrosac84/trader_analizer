@@ -62,7 +62,7 @@ def _get_current_price(mt5_symbol: str) -> "float | None":
 
 
 def _get_mt5_symbol_for(tv_symbol: str) -> "str | None":
-    """Resolve tv_symbol → símbolo MT5 (ex: 'WIN' → 'WINQ26')."""
+    """Resolve tv_symbol → símbolo MT5 (ex: 'WIN' → 'WINV26')."""
     try:
         from services.trade_executor import _mt5_symbol
         return _mt5_symbol(tv_symbol) or tv_symbol

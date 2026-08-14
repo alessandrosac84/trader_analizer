@@ -93,7 +93,19 @@ def api_profit_json():
         return jsonify({"error": str(exc)}), 500
 
 
+@profit_bp.route("/api/profit/huddata")
+def api_profit_huddata():
+    """Alias do JSON p/ o HUD (cache-bust via querystring no client)."""
+    return api_profit_json()
+
+
 @profit_bp.route("/profit")
 def profit_dashboard():
     """Dashboard de monitoramento do Profit Bridge."""
     return render_template("profit.html")
+
+
+@profit_bp.route("/profit/hud")
+def profit_hud():
+    """HUD visual de COMPRA/VENDA (WIN|WDO) com macro/micro + gate calibrado."""
+    return render_template("profit_hud.html")

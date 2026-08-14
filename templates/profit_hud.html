@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trade AI · HUD</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#05070d;--panel:rgba(14,22,34,.82);--line:rgba(53,224,240,.18);--line2:rgba(53,224,240,.42);
+  --cyan:#35e0f0;--cyan-dim:#1c8f9c;--gold:#f0b429;--red:#ff5b6e;--green:#34e0a1;
+  --text:#dcecf5;--muted:#7f96ab;
+  --glow-c:0 0 18px rgba(53,224,240,.35);--glow-g:0 0 18px rgba(52,224,161,.35);--glow-r:0 0 18px rgba(255,91,110,.35);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{
+  font-family:Rajdhani,system-ui,sans-serif;color:var(--text);background:var(--bg);
+  background-image:
+    radial-gradient(1000px 600px at 80% -10%,rgba(53,224,240,.12),transparent 55%),
+    radial-gradient(800px 500px at 10% 110%,rgba(240,180,41,.08),transparent 50%),
+    linear-gradient(transparent 0 96%,rgba(53,224,240,.04) 96% 100%),
+    linear-gradient(90deg,transparent 0 96%,rgba(53,224,240,.04) 96% 100%);
+  background-size:auto,auto,28px 28px,28px 28px;
+}
+.fx{position:fixed;inset:0;pointer-events:none;z-index:40}
+.fx.scan{background:repeating-linear-gradient(transparent 0 3px,rgba(0,0,0,.14) 3px 4px);opacity:.45;mix-blend-mode:overlay}
+.fx.vig{box-shadow:inset 0 0 180px rgba(0,0,0,.7)}
+.mono{font-family:"Share Tech Mono",monospace}
+
+.shell{display:grid;grid-template-rows:56px 1fr 28px;height:100vh}
+.top{
+  display:flex;align-items:center;gap:14px;padding:0 18px;
+  border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(53,224,240,.06),transparent);
+}
+.reactor{position:relative;width:34px;height:34px;flex:none}
+.reactor .r{position:absolute;inset:0;border-radius:50%;border:2px solid var(--cyan);box-shadow:var(--glow-c)}
+.reactor .r2{inset:6px;border-color:rgba(53,224,240,.45);border-style:dashed;animation:spin 8s linear infinite}
+.reactor .core{position:absolute;inset:12px;border-radius:50%;background:radial-gradient(circle,#eaffff,var(--cyan));animation:pulse 2.2s ease-in-out infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{transform:scale(.9);opacity:.85}50%{transform:scale(1.08);opacity:1}}
+.brand b{font-size:18px;letter-spacing:2px}.brand b i{color:var(--cyan);font-style:normal;text-shadow:var(--glow-c)}
+.brand small{display:block;font-family:"Share Tech Mono";font-size:10px;color:var(--muted);letter-spacing:2px}
+.spacer{flex:1}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:5px 11px;border:1px solid var(--line);border-radius:20px;font-family:"Share Tech Mono";font-size:11px;background:rgba(8,14,22,.65)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 1.6s infinite}
+.dot.off{background:var(--red);box-shadow:0 0 8px var(--red);animation:none}
+
+.main{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:14px;min-height:0}
+@media(max-width:820px){.main{grid-template-columns:1fr}}
+
+.card{
+  position:relative;min-height:0;overflow:hidden;
+  background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  padding:16px 16px 14px;backdrop-filter:blur(10px);
+  display:flex;flex-direction:column;gap:12px;
+  transition:border-color .4s, box-shadow .4s;
+}
+.card::before,.card::after{content:"";position:absolute;width:12px;height:12px;border:2px solid var(--cyan);opacity:.5}
+.card::before{top:7px;left:7px;border-right:0;border-bottom:0}
+.card::after{bottom:7px;right:7px;border-left:0;border-top:0}
+.card.buy{border-color:rgba(52,224,161,.45);box-shadow:0 0 36px rgba(52,224,161,.08)}
+.card.sell{border-color:rgba(255,91,110,.45);box-shadow:0 0 36px rgba(255,91,110,.08)}
+.card.wait{border-color:rgba(240,180,41,.28)}
+.card.block{border-color:rgba(127,150,171,.35)}
+
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.instr{font-size:22px;font-weight:700;letter-spacing:2px}
+.instr small{display:block;font-family:"Share Tech Mono";font-size:10px;color:var(--muted);letter-spacing:2px;margin-top:2px}
+
+.verdict{
+  text-align:center;padding:18px 10px;border-radius:12px;
+  border:1px solid rgba(53,224,240,.22);
+  background:rgba(0,0,0,.22);
+  transition:border-color .35s, background .35s;
+}
+.verdict .big{
+  font-size:clamp(34px,4.5vw,48px);font-weight:700;letter-spacing:4px;
+  transition:color .35s, text-shadow .35s, transform .35s;
+}
+.verdict .sub{margin-top:6px;font-family:"Share Tech Mono";font-size:11px;color:var(--muted);min-height:16px}
+.card.buy .verdict{border-color:rgba(52,224,161,.45);background:rgba(52,224,161,.06)}
+.card.buy .verdict .big{color:var(--green);text-shadow:var(--glow-g);animation:throb 2.4s ease-in-out infinite}
+.card.sell .verdict{border-color:rgba(255,91,110,.45);background:rgba(255,91,110,.06)}
+.card.sell .verdict .big{color:var(--red);text-shadow:var(--glow-r);animation:throb 2.4s ease-in-out infinite}
+.card.wait .verdict .big{color:var(--gold)}
+.card.block .verdict .big{color:var(--muted)}
+@keyframes throb{0%,100%{transform:scale(1)}50%{transform:scale(1.035)}}
+
+.score-wrap{display:grid;grid-template-columns:1fr;gap:8px}
+.kpi{display:flex;justify-content:space-between;align-items:baseline}
+.kpi .v{font-family:"Share Tech Mono";font-size:26px;font-weight:700}
+.kpi .l{font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:uppercase}
+
+.bar{
+  position:relative;height:8px;border-radius:99px;background:#132033;overflow:hidden;
+  border:1px solid rgba(53,224,240,.1);
+}
+.bar > i{
+  position:absolute;left:0;top:0;bottom:0;width:0%;
+  border-radius:99px;
+  background:linear-gradient(90deg,var(--cyan-dim),var(--cyan));
+  box-shadow:0 0 12px rgba(53,224,240,.35);
+  will-change:width;
+}
+.bar.green > i{background:linear-gradient(90deg,#1a9e6e,var(--green));box-shadow:0 0 12px rgba(52,224,161,.4)}
+.bar.red > i{background:linear-gradient(90deg,#a33a4a,var(--red));box-shadow:0 0 12px rgba(255,91,110,.4)}
+.bar.gold > i{background:linear-gradient(90deg,#a87a1a,var(--gold))}
+
+/* Macro/Micro bipolar */
+.mm{display:grid;grid-template-columns:1fr 78px 1fr;gap:10px;align-items:center}
+.mmbox{
+  border:1px solid var(--line);border-radius:12px;padding:10px 10px 12px;background:rgba(0,0,0,.2);
+}
+.mmbox .lab{font-family:"Share Tech Mono";font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:6px}
+.mmbox .dir{font-size:16px;font-weight:700;letter-spacing:1px;margin-bottom:8px}
+.bipolar{
+  position:relative;height:10px;border-radius:99px;background:#132033;overflow:hidden;
+  border:1px solid rgba(53,224,240,.1);
+}
+.bipolar .mid{position:absolute;left:50%;top:0;bottom:0;width:1px;background:rgba(220,236,245,.25);z-index:2}
+.bipolar .neg,.bipolar .pos{
+  position:absolute;top:0;bottom:0;width:0%;
+  will-change:width;
+}
+.bipolar .neg{right:50%;background:linear-gradient(270deg,#a33a4a,var(--red));border-radius:99px 0 0 99px;box-shadow:0 0 10px rgba(255,91,110,.35)}
+.bipolar .pos{left:50%;background:linear-gradient(90deg,#1a9e6e,var(--green));border-radius:0 99px 99px 0;box-shadow:0 0 10px rgba(52,224,161,.35)}
+.bridge{
+  text-align:center;font-family:"Share Tech Mono";font-size:9px;letter-spacing:1px;
+  padding:8px 6px;border-radius:20px;border:1px solid var(--line);color:var(--muted);
+  transition:color .3s,border-color .3s,box-shadow .3s;
+}
+.bridge.on{color:var(--green);border-color:rgba(52,224,161,.45);box-shadow:var(--glow-g)}
+.bridge.off{color:var(--red);border-color:rgba(255,91,110,.35)}
+
+.levels{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.lv{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:rgba(0,0,0,.18)}
+.lv .l{font-family:"Share Tech Mono";font-size:9px;letter-spacing:1px;color:var(--muted)}
+.lv .n{margin-top:4px;font-family:"Share Tech Mono";font-size:13px;font-weight:700}
+
+.gate{
+  margin-top:auto;font-family:"Share Tech Mono";font-size:11px;line-height:1.45;
+  padding:10px 12px;border-radius:10px;border:1px dashed var(--line);color:var(--muted);
+  min-height:44px;
+}
+.gate.ok{color:var(--green);border-color:rgba(52,224,161,.4)}
+.gate.bad{color:#ff8fa3;border-color:rgba(255,91,110,.35)}
+
+.foot{
+  display:flex;align-items:center;justify-content:center;gap:16px;
+  border-top:1px solid var(--line);font-family:"Share Tech Mono";font-size:10px;color:var(--muted);letter-spacing:1px;
+}
+</style>
+</head>
+<body>
+<div class="fx scan"></div><div class="fx vig"></div>
+<div class="shell">
+  <header class="top">
+    <div class="reactor"><div class="r"></div><div class="r r2"></div><div class="core"></div></div>
+    <div class="brand"><b>TRADE AI <i>HUD</i></b><small>MONITOR CALIBRADO · DESKTOP</small></div>
+    <div class="spacer"></div>
+    <div class="pill"><span class="dot" id="liveDot"></span><span class="mono" id="clock">--:--:--</span></div>
+    <div class="pill mono" id="ago">bridge —</div>
+  </header>
+
+  <main class="main">
+    <section class="card wait" id="cardWIN" data-asset="WIN"></section>
+    <section class="card wait" id="cardWDO" data-asset="WDO"></section>
+  </main>
+
+  <footer class="foot">
+    <span>MACROS/MICROS ANIMADOS</span><span>·</span><span>GATE MT5</span><span>·</span><span>SEM PISCAR</span>
+  </footer>
+</div>
+
+<script>
+/* ── Smooth state (lerp) — nunca recria o DOM ── */
+const ease = 0.14;
+const state = {
+  WIN: blank("WIN"),
+  WDO: blank("WDO"),
+};
+let lastGenMs = 0;
+let liveOk = false;
+
+function blank(name){
+  return {
+    name,
+    verdict:"AGUARDAR", verdictLabel:"", score:0, scoreT:0,
+    rsi:0, rsiT:0, adx:0, adxT:0,
+    macro:0, macroT:0, // -1..+1
+    micro:0, microT:0,
+    aligned:false, withSig:false, gateOk:false, gateTxt:"",
+    entry:"—", sl:"—", tp:"—",
+    minScore:"—", strength:0, risk:0, regime:"—",
+    tone:"wait",
+  };
+}
+
+function fmt(n, dig){
+  if(n==null || n==="" || Number.isNaN(+n)) return "—";
+  return (+n).toLocaleString("pt-BR",{maximumFractionDigits:dig, minimumFractionDigits:dig});
+}
+function dirToVal(d){
+  d=(d||"neutro").toLowerCase();
+  if(d==="alta") return 1;
+  if(d==="baixa") return -1;
+  return 0;
+}
+function toneOf(v){
+  if(v==="COMPRA") return "buy";
+  if(v==="VENDA") return "sell";
+  if(v==="BLOQUEADO") return "block";
+  return "wait";
+}
+
+function buildCard(el, key){
+  const dig = key==="WIN" ? 0 : 1;
+  el.innerHTML = `
+    <div class="row">
+      <div class="instr">${key}<small>GATE ≥<span data-k="minScore">—</span></small></div>
+      <div class="pill mono">FORÇA <b data-k="strength">0</b>% · RISCO <b data-k="risk">0</b></div>
+    </div>
+    <div class="verdict">
+      <div class="big" data-k="verdict">AGUARDAR</div>
+      <div class="sub" data-k="verdictLabel"></div>
+    </div>
+    <div class="score-wrap">
+      <div class="kpi"><span class="l">Score</span><span class="v" data-k="scoreTxt">0</span></div>
+      <div class="bar" data-bar="score"><i></i></div>
+    </div>
+    <div class="mm">
+      <div class="mmbox">
+        <div class="lab">MACRO · H1</div>
+        <div class="dir" data-k="macroTxt">NEUTRO</div>
+        <div class="bipolar" data-bi="macro"><span class="mid"></span><span class="neg"></span><span class="pos"></span></div>
+      </div>
+      <div class="bridge" data-k="align">—</div>
+      <div class="mmbox">
+        <div class="lab">MICRO · EMA/IFR</div>
+        <div class="dir" data-k="microTxt">NEUTRO</div>
+        <div class="bipolar" data-bi="micro"><span class="mid"></span><span class="neg"></span><span class="pos"></span></div>
+      </div>
+    </div>
+    <div class="score-wrap">
+      <div class="kpi"><span class="l">IFR (RSI)</span><span class="v mono" data-k="rsiTxt">—</span></div>
+      <div class="bar gold" data-bar="rsi"><i></i></div>
+    </div>
+    <div class="score-wrap">
+      <div class="kpi"><span class="l">ADX</span><span class="v mono" data-k="adxTxt">—</span></div>
+      <div class="bar" data-bar="adx"><i></i></div>
+    </div>
+    <div class="levels">
+      <div class="lv"><div class="l">ENTRADA</div><div class="n" data-k="entry">—</div></div>
+      <div class="lv"><div class="l">STOP</div><div class="n down" data-k="sl">—</div></div>
+      <div class="lv"><div class="l">TP1</div><div class="n up" data-k="tp">—</div></div>
+    </div>
+    <div class="gate" data-k="gate">gate…</div>
+  `;
+  el._refs = {};
+  el.querySelectorAll("[data-k]").forEach(n => el._refs[n.getAttribute("data-k")] = n);
+  el._bars = {
+    score: el.querySelector('[data-bar="score"] > i'),
+    rsi: el.querySelector('[data-bar="rsi"] > i'),
+    adx: el.querySelector('[data-bar="adx"] > i'),
+  };
+  el._bi = {
+    macro: {neg: el.querySelector('[data-bi="macro"] .neg'), pos: el.querySelector('[data-bi="macro"] .pos'), dir: el._refs.macroTxt},
+    micro: {neg: el.querySelector('[data-bi="micro"] .neg'), pos: el.querySelector('[data-bi="micro"] .pos'), dir: el._refs.microTxt},
+  };
+  el._dig = dig;
+}
+
+function setTxt(node, v){
+  if(!node) return;
+  const s = String(v ?? "");
+  if(node.textContent !== s) node.textContent = s;
+}
+
+function ingest(key, raw){
+  const s = state[key];
+  const d = raw || {};
+  const dig = key==="WIN" ? 0 : 1;
+  s.verdict = d.verdict || "AGUARDAR";
+  s.verdictLabel = d.verdict_label || "";
+  s.scoreT = Math.min(1, Math.abs(+d.score||0)/11);
+  s._scoreNum = +d.score||0;
+  s.rsiT = d.rsi==null ? 0 : Math.min(1, Math.max(0, +d.rsi/100));
+  s._rsiNum = d.rsi;
+  s.adxT = d.adx==null ? 0 : Math.min(1, Math.max(0, +d.adx/50));
+  s._adxNum = d.adx;
+  s.macroT = dirToVal(d.macro);
+  s.microT = dirToVal(d.micro);
+  s.aligned = !!d.mm_aligned;
+  s.withSig = !!d.mm_with_signal;
+  s.gateOk = !!d.gate_ok;
+  s.gateTxt = s.gateOk
+    ? "✓ GATE MONITOR OK — regras calibradas liberam"
+    : ("✕ GATE — " + ((d.gate_reasons||[]).slice(0,2).join(" · ") || "aguardando"));
+  if(d.position_open){
+    s.gateTxt += ` · POS ${d.position_dir||""} R$ ${fmt(d.position_pnl,2)}`;
+  }
+  const px = d.price!=null ? d.price : d.entry_price;
+  s.entry = fmt(px!=null?px:d.entry_price, dig);
+  s.sl = fmt(d.sl, dig);
+  s.tp = fmt(d.tp1, dig);
+  s.minScore = d.min_score ?? "—";
+  s.strength = Math.round(+d.signal_strength||0);
+  s.risk = Math.round(+d.risk_level||0);
+  s.regime = d.market_regime || "—";
+  s.tone = toneOf(s.verdict);
+}
+
+function paint(el, s){
+  el.classList.remove("buy","sell","wait","block");
+  el.classList.add(s.tone);
+  const r = el._refs;
+  setTxt(r.verdict, s.verdict);
+  setTxt(r.verdictLabel, s.verdictLabel);
+  setTxt(r.minScore, s.minScore);
+  setTxt(r.strength, s.strength);
+  setTxt(r.risk, s.risk);
+  const sc = s._scoreNum||0;
+  setTxt(r.scoreTxt, (sc>0?"+":"")+Math.round(sc));
+  r.scoreTxt.style.color = sc>0 ? "var(--green)" : sc<0 ? "var(--red)" : "var(--text)";
+  setTxt(r.rsiTxt, fmt(s._rsiNum,1));
+  setTxt(r.adxTxt, fmt(s._adxNum,1));
+  setTxt(r.entry, s.entry);
+  setTxt(r.sl, s.sl);
+  setTxt(r.tp, s.tp);
+  setTxt(r.gate, s.gateTxt);
+  r.gate.className = "gate " + (s.gateOk ? "ok" : "bad");
+  const align = r.align;
+  align.className = "bridge " + (s.aligned ? "on" : "off");
+  setTxt(align, s.aligned ? (s.withSig ? "ALINHADOS + SINAL" : "ALINHADOS") : "DIVERGENTES");
+
+  // bars width via transform state (updated in raf)
+  el._bars.score.style.width = (s.score*100).toFixed(2)+"%";
+  el._bars.score.parentElement.className = "bar " + (sc>0?"green":sc<0?"red":"");
+  el._bars.rsi.style.width = (s.rsi*100).toFixed(2)+"%";
+  el._bars.adx.style.width = (s.adx*100).toFixed(2)+"%";
+
+  for(const side of ["macro","micro"]){
+    const v = s[side];
+    const bi = el._bi[side];
+    const pos = Math.max(0, v)*100;
+    const neg = Math.max(0,-v)*100;
+    bi.pos.style.width = pos.toFixed(2)+"%";
+    bi.neg.style.width = neg.toFixed(2)+"%";
+    const label = v>0.2 ? "ALTA" : v<-0.2 ? "BAIXA" : "NEUTRO";
+    setTxt(bi.dir, label);
+    bi.dir.style.color = v>0.2 ? "var(--green)" : v<-0.2 ? "var(--red)" : "var(--gold)";
+  }
+}
+
+function tickAnim(){
+  for(const key of ["WIN","WDO"]){
+    const s = state[key];
+    s.score += (s.scoreT - s.score)*ease;
+    s.rsi   += (s.rsiT   - s.rsi)*ease;
+    s.adx   += (s.adxT   - s.adx)*ease;
+    s.macro += (s.macroT - s.macro)*ease;
+    s.micro += (s.microT - s.micro)*ease;
+    const el = document.getElementById("card"+key);
+    if(el && el._refs) paint(el, s);
+  }
+  requestAnimationFrame(tickAnim);
+}
+
+function tickClock(){
+  const now = new Date();
+  const t = now.toLocaleTimeString("pt-BR",{hour12:false});
+  setTxt(document.getElementById("clock"), t);
+  if(lastGenMs>0){
+    const ago = Math.max(0, Math.floor((Date.now()-lastGenMs)/1000));
+    setTxt(document.getElementById("ago"), liveOk ? `dados ${ago}s` : "sem bridge");
+  }
+}
+
+async function pull(){
+  try{
+    const r = await fetch("/api/profit/huddata?ts="+Date.now(), {cache:"no-store"});
+    if(!r.ok) throw new Error("http "+r.status);
+    const data = await r.json();
+    const gen = Date.parse(data.generated_at || "") || 0;
+    // só avança no tempo — evita relógio/dados “voltando”
+    if(gen && gen < lastGenMs - 2000){
+      liveOk = true;
+      document.getElementById("liveDot").classList.remove("off");
+      return;
+    }
+    if(gen) lastGenMs = Math.max(lastGenMs, gen);
+    ingest("WIN", data.win);
+    ingest("WDO", data.wdo);
+    liveOk = true;
+    document.getElementById("liveDot").classList.remove("off");
+  }catch(e){
+    liveOk = false;
+    document.getElementById("liveDot").classList.add("off");
+    setTxt(document.getElementById("ago"), "sem bridge — :5000");
+  }
+}
+
+buildCard(document.getElementById("cardWIN"), "WIN");
+buildCard(document.getElementById("cardWDO"), "WDO");
+requestAnimationFrame(tickAnim);
+setInterval(tickClock, 250);
+tickClock();
+pull();
+setInterval(pull, 1000);
+</script>
+</body>
+</html>

@@ -994,6 +994,16 @@ def api_autotrade_execute():
                 ),
             })
 
+    # ── Monitor MT5 v6.3: janela A/B + DOW (regras calibradas, sem IA) ────────
+    if _is_win_wdo:
+        try:
+            from services.monitor_mt5_rules import session_allows
+            _ok_m, _why_m = session_allows(_sym_key)
+            if not _ok_m:
+                return jsonify({"ok": False, "result": None, "error": _why_m})
+        except Exception as _mon_exc:
+            logger.warning("monitor session gate falhou (não bloqueia): %s", _mon_exc)
+
     # Proteção pós-abertura: após trade executado entre 09:00-09:30 BRT, aguarda 20 min
     if _abertura_cooldown_active(_sym_key):
         rem = _abertura_cooldown_remaining_min(_sym_key)
@@ -1003,7 +1013,10 @@ def api_autotrade_execute():
         })
 
     from services.trade_executor import execute_trade, DEFAULT_VOLUME, SCORE_MIN
-    from services.signal_validator_ai import validate_signal_with_ai
+    from services.signal_validator_ai import (
+        validate_signal_with_ai,
+        monitor_ai_gate_enabled,
+    )
     from services.trade_log import save_auto_trade
     body = _early_body  # reutiliza o body já lido
 
@@ -1017,9 +1030,10 @@ def api_autotrade_execute():
     interval  = str(body.get("interval", "15"))
     signal    = body.get("signal") or {}   # sinal tecnico completo (opcional)
 
-    # Validacao via Azure OpenAI (nao bloqueia se IA indisponivel)
+    # Validacao via Azure OpenAI — só se MONITOR_AI_GATE=1.
+    # Default OFF: Monitor opera só com score + regras calibradas (BT sem IA).
     ai_result = None
-    if signal and acao in ("COMPRA", "VENDA"):
+    if monitor_ai_gate_enabled() and signal and acao in ("COMPRA", "VENDA"):
         try:
             # Hard timeout via thread — funciona no Windows (signal.alarm nao funciona)
             from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FutTimeout
@@ -1106,6 +1120,12 @@ def api_autotrade_execute():
                 "ok": False, "result": None,
                 "error": f"Validacao IA falhou (fail-closed) — trade nao executado: {ai_exc}",
             })
+    elif signal and acao in ("COMPRA", "VENDA"):
+        ai_result = {
+            "aprovado": True, "confianca": None, "veredito": "OFF",
+            "motivo": "IA do Monitor desligada (MONITOR_AI_GATE=0) — score + regras calibradas.",
+            "alertas": [], "tp1_sugerido": None, "ia_usada": False,
+        }
 
     # ── Partial-close mode: 3 contratos, TPs calculados pelo R/R do SL ──────
     # TPs derivados do risco real (distância entrada→SL), nunca do sinal.
@@ -1179,6 +1199,26 @@ def api_autotrade_execute():
     except Exception as _of_err:
         logger.warning("Order flow check falhou (não bloqueante): %s", _of_err)
 
+    _adx = None
+    _vol_r = None
+    try:
+        if isinstance(signal, dict):
+            if signal.get("adx") is not None:
+                _adx = float(signal.get("adx"))
+            if signal.get("vol_ratio") is not None:
+                _vol_r = float(signal.get("vol_ratio"))
+    except Exception:
+        pass
+    try:
+        from services.monitor_mt5_rules import filters_allowed as _mon_filt
+        _ok_f, _why_f = _mon_filt(
+            tv_symbol, adx=_adx, vol_ratio=_vol_r, require_data=True,
+        )
+        if not _ok_f:
+            return jsonify({"ok": False, "result": None, "error": _why_f})
+    except Exception as _mf_exc:
+        logger.warning("monitor filters gate falhou (não bloqueia): %s", _mf_exc)
+
     result, error = execute_trade(
         tv_symbol=tv_symbol,
         acao=acao,
@@ -1187,6 +1227,8 @@ def api_autotrade_execute():
         sl=sl,
         tp1=tp1,
         volume=volume,
+        adx=_adx,
+        vol_ratio=_vol_r,
     )
 
     # Salva no log de trades
@@ -1981,11 +2023,17 @@ def api_autotrade_trades():
     limit      = min(int(request.args.get("limit", 50)), 200)
     show_all   = request.args.get("all", "0") == "1"   # ?all=1 mostra todos os dias
     today_only = not show_all
+    try:
+        from services.signal_validator_ai import monitor_ai_gate_enabled as _ai_on
+        _monitor_ai = bool(_ai_on())
+    except Exception:
+        _monitor_ai = False
     return jsonify({
         "ok":         True,
         "items":      list_auto_trades(limit, today_only=today_only),
         "stats":      auto_trades_stats(today_only=today_only),
         "today_only": today_only,
+        "ai_gate":    _monitor_ai,   # False = Monitor só score/regras (default)
     })
 
 

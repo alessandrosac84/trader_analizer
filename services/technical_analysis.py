@@ -333,9 +333,11 @@ TARGET_RR = 1.5
 def generate_signal(
     df: pd.DataFrame,
     htf_df: "pd.DataFrame | None" = None,
+    target_rr: "float | None" = None,
 ) -> "dict | None":
     """
     Gera sinal de trading completo (v4).
+    target_rr: piso opcional do TP1 em R (default = TARGET_RR global).
 
     Parametros
     ----------
@@ -655,15 +657,16 @@ def generate_signal(
         entrada = _r(close)
         stop    = _r(close - 1.2 * atr)   # v5: stop mais justo (1.2x vs 1.5x)
 
-        # TP1 (v6.2): piso de TARGET_RR. Usa S/R so se estiver MAIS LONGE que 1.5R.
-        min_tp1 = close + TARGET_RR * (close - stop)   # 1.5R acima da entrada
+        # TP1 (v6.2): piso de TARGET_RR (ou override). Usa S/R só se mais longe.
+        _rr_floor = float(target_rr) if target_rr is not None else float(TARGET_RR)
+        min_tp1 = close + _rr_floor * (close - stop)
         sr_tp1  = _nearest_sr_tp(close, sr_resistances, "above", atr)
         if sr_tp1 is not None and sr_tp1 >= min_tp1:
             tp1 = _r(sr_tp1)
-            sinais.append(f"TP1 na resistencia S/R {tp1} (>= {TARGET_RR}R) [nivel de mercado]")
+            sinais.append(f"TP1 na resistencia S/R {tp1} (>= {_rr_floor}R) [nivel de mercado]")
         else:
             tp1 = _r(min_tp1)
-            sinais.append(f"TP1 fixado em {TARGET_RR}R = {tp1} (S/R proximo encurtaria o alvo) [v6.2]")
+            sinais.append(f"TP1 fixado em {_rr_floor}R = {tp1} (S/R proximo encurtaria o alvo) [v6.2]")
 
         tp2 = _r(close + 3.5 * atr)
         tp3 = _r(close + 6.0 * atr)
@@ -674,15 +677,16 @@ def generate_signal(
         entrada = _r(close)
         stop    = _r(close + 1.2 * atr)   # v5: stop mais justo
 
-        # TP1 (v6.2): piso de TARGET_RR. Usa S/R so se estiver MAIS LONGE que 1.5R.
-        min_tp1 = close - TARGET_RR * (stop - close)   # 1.5R abaixo da entrada
+        # TP1 (v6.2): piso de TARGET_RR (ou override). Usa S/R só se mais longe.
+        _rr_floor = float(target_rr) if target_rr is not None else float(TARGET_RR)
+        min_tp1 = close - _rr_floor * (stop - close)
         sr_tp1  = _nearest_sr_tp(close, sr_supports, "below", atr)
         if sr_tp1 is not None and sr_tp1 <= min_tp1:
             tp1 = _r(sr_tp1)
-            sinais.append(f"TP1 no suporte S/R {tp1} (>= {TARGET_RR}R) [nivel de mercado]")
+            sinais.append(f"TP1 no suporte S/R {tp1} (>= {_rr_floor}R) [nivel de mercado]")
         else:
             tp1 = _r(min_tp1)
-            sinais.append(f"TP1 fixado em {TARGET_RR}R = {tp1} (S/R proximo encurtaria o alvo) [v6.2]")
+            sinais.append(f"TP1 fixado em {_rr_floor}R = {tp1} (S/R proximo encurtaria o alvo) [v6.2]")
 
         tp2 = _r(close - 3.5 * atr)
         tp3 = _r(close - 6.0 * atr)
@@ -718,6 +722,11 @@ def generate_signal(
         "rsi":             _r(rsi, 1) if rsi is not None else None,
         "atr":             _r(atr),
         "adx":             _r(adx, 1) if adx is not None else None,
+        "vol_ratio":       (
+            _r(last_vol / avg_vol, 3)
+            if (last_vol is not None and avg_vol is not None and avg_vol > 0)
+            else None
+        ),
         "plus_di":         _r(plus_di, 1) if plus_di is not None else None,
         "minus_di":        _r(minus_di, 1) if minus_di is not None else None,
         "vwap":            _r(vwap),

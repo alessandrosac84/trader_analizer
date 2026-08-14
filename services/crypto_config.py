@@ -38,19 +38,112 @@ def get_symbols() -> list:
 # macro_adx: corte de ADX (M15) do FILTRO macro, calibrado por ativo no backtest.
 SYMBOL_CFG = {
     "_default": {"score_min": 7, "sl_atr": 1.5, "tp_rr": 1.5, "volume": 0.10, "adx_min": 20, "macro_adx": 25},
-    # Live caps: crypto_edge_setups.LIVE_SL_TP_CAPS — BTC 1000/1200, ETH 12/20,
-    # EUR/GBP 30/45 pips (só execução; não altera régua de backtest).
-    "BTCUSD":   {"score_min": 7, "sl_atr": 1.6, "tp_rr": 1.5, "volume": 0.10, "adx_min": 20, "macro_adx": 30},
-    "ETHUSD":   {"score_min": 7, "sl_atr": 1.6, "tp_rr": 1.5, "volume": 0.10, "adx_min": 20, "macro_adx": 18},
+    # Live caps: crypto_edge_setups.LIVE_SL_TP_CAPS — BTC 300/450, ETH 12/20,
+    # XAU 45/30, EUR/GBP 30/45 pips (só execução; não altera régua de backtest).
+    # Volume default 1.0: em SL apertado mantém lote cheio; SL largo → clamp_live_volume
+    # reduz lote via MAX_RISK (13/08: teto $100 BTC — losses grandes vs WR alto).
+    "BTCUSD":   {"score_min": 7, "sl_atr": 1.6, "tp_rr": 1.5, "volume": 1.0, "adx_min": 20, "macro_adx": 30},
+    "ETHUSD":   {"score_min": 7, "sl_atr": 1.6, "tp_rr": 1.5, "volume": 1.0, "adx_min": 20, "macro_adx": 18},
     "XAUUSD":   {"score_min": 7, "sl_atr": 1.5, "tp_rr": 1.5, "volume": 0.05, "adx_min": 20, "macro_adx": 30},
     "EURUSD":   {"score_min": 8, "sl_atr": 1.4, "tp_rr": 1.5, "volume": 0.10, "adx_min": 22, "macro_adx": 28},
     "GBPUSD":   {"score_min": 8, "sl_atr": 1.4, "tp_rr": 1.5, "volume": 0.10, "adx_min": 22, "macro_adx": 22},
     "USDJPY":   {"score_min": 8, "sl_atr": 1.4, "tp_rr": 1.5, "volume": 0.10, "adx_min": 22, "macro_adx": 99},
 }
 
+# Cap de risco em USD por trade (live). volume × SL_pts × value_per_point ≤ teto.
+# 13/08: BTC $100 — WR alto + loss -$200 apagava o dia; lote 1 só com SL apertado.
+# Sem stop diário (pedido do usuário). BTC_HL_24H NÃO pausado.
+MAX_RISK_USD = {
+    "_default": 80.0,
+    "BTCUSD": 100.0,   # teto ~$100/trade
+    "ETHUSD": 50.0,    # 1.0 × SL≤12 ≈ $12; teto evita outlier
+    "XAUUSD": 120.0,   # 0.05 × ~14 × $100/pt ≈ $70
+    "EURUSD": 50.0,
+    "GBPUSD": 50.0,
+}
+
+# Teto absoluto de lote (mesmo se painel/API mandar 1.0).
+# BTC/ETH = 1.0: se MAX_VOLUME < default/painel, clamp silencioso volta p/ 0.15
+# e o usuário acha que está em 1.0 (incidente 05/08).
+MAX_VOLUME = {
+    "_default": 0.50,
+    "BTCUSD": 1.0,
+    "ETHUSD": 1.0,
+    "XAUUSD": 0.10,
+    "EURUSD": 0.50,
+    "GBPUSD": 0.50,
+}
+
 
 def cfg_for(symbol: str) -> dict:
     return dict(SYMBOL_CFG.get((symbol or "").upper().strip(), SYMBOL_CFG["_default"]))
+
+
+def max_risk_usd(symbol: str) -> float:
+    s = (symbol or "").upper().strip()
+    return float(MAX_RISK_USD.get(s, MAX_RISK_USD["_default"]))
+
+
+def max_volume(symbol: str) -> float:
+    s = (symbol or "").upper().strip()
+    return float(MAX_VOLUME.get(s, MAX_VOLUME["_default"]))
+
+
+def clamp_live_volume(symbol: str, volume: float, sl_pts: float,
+                      value_per_point: float,
+                      volume_min: float = 0.01,
+                      volume_step: float = 0.01) -> tuple:
+    """Ajusta lote ao cap de risco USD + teto de volume. Retorna (vol, note).
+
+    note vazio se não reduziu; senão descreve o clamp (p/ log).
+    """
+    import math
+    try:
+        vol = float(volume or 0)
+    except (TypeError, ValueError):
+        vol = 0.0
+    vmin = max(float(volume_min or 0.01), 0.01)
+    vstep = max(float(volume_step or 0.01), 0.01)
+    vpp = float(value_per_point or 0) or 0.0
+    slp = abs(float(sl_pts or 0))
+    risk_cap = max_risk_usd(symbol)
+    lot_cap = max_volume(symbol)
+    orig = vol
+    notes = []
+
+    if vol <= 0:
+        vol = float(cfg_for(symbol).get("volume", vmin) or vmin)
+
+    if vol > lot_cap + 1e-12:
+        notes.append(f"lote {orig:.2f}->{lot_cap:.2f} (MAX_VOLUME)")
+        vol = lot_cap
+
+    if vpp > 0 and slp > 0 and risk_cap > 0:
+        risk = vol * slp * vpp
+        if risk > risk_cap + 1e-9:
+            max_by_risk = risk_cap / (slp * vpp)
+            # arredonda PARA BAIXO no step do broker
+            max_by_risk = math.floor(max_by_risk / vstep + 1e-12) * vstep
+            if max_by_risk < vmin:
+                # mesmo o lote mínimo estoura o cap → usa mínimo e avisa
+                notes.append(
+                    f"risco min ${vmin * slp * vpp:.0f} > cap ${risk_cap:.0f} "
+                    f"(SL {slp:.0f} pts) — usando {vmin:.2f}"
+                )
+                vol = vmin
+            else:
+                notes.append(
+                    f"risco ${risk:.0f}->${max_by_risk * slp * vpp:.0f} "
+                    f"(cap ${risk_cap:.0f}, SL {slp:.0f} pts) lote {orig:.2f}->{max_by_risk:.2f}"
+                )
+                vol = max_by_risk
+
+    # snap final ao step
+    vol = math.floor(vol / vstep + 1e-12) * vstep
+    if vol < vmin:
+        vol = vmin
+    vol = round(vol, 8)
+    return vol, "; ".join(notes)
 
 
 # ── CAMINHOS DE ENTRADA (backtest_crypto_pro, 1,4 anos COM custos, 18/07/2026) ──

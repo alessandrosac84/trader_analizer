@@ -117,7 +117,7 @@ def api_v7_candles():
             sym = os.getenv("WDO_MT5_SYMBOL", "WDOU26").strip()
         else:
             asset = "WIN"
-            sym = os.getenv("WIN_MT5_SYMBOL", rt.symbol or "WINQ26").strip()
+            sym = os.getenv("WIN_MT5_SYMBOL", rt.symbol or "WINV26").strip()
         candles, err = rt.get_candles(tf=tf, symbol=sym)
         return jsonify({"ok": True, "asset": asset, "symbol": sym,
                         "tf": int(tf) if tf else rt.chart_tf,
@@ -141,7 +141,7 @@ def api_v7_tick():
                 sym = os.getenv("WDO_MT5_SYMBOL", "WDOU26").strip()
             else:
                 a = "WIN"
-                sym = os.getenv("WIN_MT5_SYMBOL", rt.symbol or "WINQ26").strip()
+                sym = os.getenv("WIN_MT5_SYMBOL", rt.symbol or "WINV26").strip()
             t = rt.get_tick(symbol=sym)
             if not t or not t.get("price"):
                 return None

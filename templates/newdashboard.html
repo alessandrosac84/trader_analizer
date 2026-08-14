@@ -272,7 +272,7 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:rgba(240,185,53,.09)}
     <div class="grid g2" id="monPanes">
       <div class="panel" id="paneWIN" data-foco="WIN" data-sym="BMFBOVESPA:WIN1!">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-          <div><span class="mono cy" style="font-size:17px">WINQ26</span> <span class="tag">Mini Índice · 15m</span></div>
+          <div><span class="mono cy" style="font-size:17px">WINV26</span> <span class="tag">Mini Índice · 15m</span></div>
           <span style="display:flex;gap:8px;align-items:center">
             <button class="trbtn" id="trWIN" onclick="toggleTrades('WIN')" title="Ligar/desligar trades automáticos do WIN (independente do WDO)">TRADES: OFF</button>
             <button class="p3btn" id="p3WIN" onclick="toggle3C('WIN')" title="3 contratos: entra com 3, fecha 2 no TP1 e segura 1 até o TP2">3C: —</button>
@@ -302,7 +302,7 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:rgba(240,185,53,.09)}
     <div class="statbar" style="margin-top:16px" id="monStats">
       <div><s>TOTAL</s><b class="cy" id="mTotal">—</b></div><div><s>GAINS</s><b class="up" id="mGains">—</b></div>
       <div><s>STOPS</s><b class="down" id="mStops">—</b></div><div><s>WIN %</s><b class="gd" id="mWin">—</b></div>
-      <div><s>P&amp;L R$</s><b id="mPnl">—</b></div><div><s>IA BLOQ.</s><b class="gd" id="mBlock">—</b></div>
+      <div><s>P&amp;L R$</s><b id="mPnl">—</b></div><div><s>IA: OFF</s><b class="gd" id="mBlock">OFF</b></div>
       <div><s>BE</s><b class="gd" id="mBE">—</b></div><div><s>ABERTOS</s><b class="cy" id="mOpen">—</b></div>
     </div>
     <div class="statbar" style="margin-top:10px" id="monFunnel" title="Funil de sinais de hoje: gerados → executados → bloqueados pela IA">
@@ -640,7 +640,7 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:rgba(240,185,53,.09)}
       <div class="panel" data-ck="W">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
           <div style="display:flex;align-items:center;gap:8px">
-            <input id="ckWsymIn" value="WINQ26" style="width:100px;background:#0d1420;border:1px solid #223;color:#cfe;padding:4px 6px;border-radius:5px;font-family:'Share Tech Mono'">
+            <input id="ckWsymIn" value="WINV26" style="width:100px;background:#0d1420;border:1px solid #223;color:#cfe;padding:4px 6px;border-radius:5px;font-family:'Share Tech Mono'">
             <span class="chip" id="ckWb3">—</span>
           </div>
           <div class="mono" id="ckWpx" style="font-size:20px">—</div>
@@ -896,17 +896,45 @@ const monTF={v:'15'};   // timeframe atual do Monitor
 const mgCtx={};         // side -> {mode, side, entry, sl, tp, sym}
 // ── liga/desliga trades POR ATIVO (independente) ──
 const tradeOn={WIN:false,WDO:false};
-const _monMin={WIN:9,WDO:7};   // gate no cliente; o backend re-checa MIN_SCORE_BY_SYMBOL
+const _monMin={WIN:9,WDO:10};   // alinhado a monitor_mt5_rules / MIN_SCORE_BY_SYMBOL
 const _monLastMs={},_monInFlight={},_monBlockMs={};const _MON_DEBOUNCE=15*60*1000;const _MON_BLOCK_COOLDOWN=45*1000;
 let _monInit=false;
+let _monAiGate=false;          // MONITOR_AI_GATE (default OFF no backend)
 let _monLastClosedId=null;   // som de saída: maior id de trade fechado já visto
 function setTrBtn(side){const b=document.getElementById('tr'+side);if(!b)return;b.textContent='TRADES: '+(tradeOn[side]?'ON':'OFF');b.classList.toggle('on',tradeOn[side]);}
+function _syncAiBadge(){
+  ['WIN','WDO'].forEach(side=>{
+    let el=document.getElementById('aiBadge'+side);
+    if(!el){
+      const tr=document.getElementById('tr'+side);
+      if(!tr||!tr.parentElement)return;
+      el=document.createElement('span');
+      el.id='aiBadge'+side;
+      el.className='tag';
+      el.style.cssText='font-size:10px;letter-spacing:.04em';
+      tr.parentElement.insertBefore(el,tr.nextSibling);
+    }
+    el.textContent=_monAiGate?'IA: ON':'IA: OFF';
+    el.title=_monAiGate?'Gate Azure ativo (pode segurar fills)':'Monitor sem IA — só score + regras calibradas';
+    el.style.color=_monAiGate?'var(--amber)':'var(--mut,#8899aa)';
+    el.style.borderColor=_monAiGate?'var(--amber)':'#334';
+  });
+  const blkLbl=document.querySelector('#monStats s'); // not precise — update IA BLOQ label
+  const mBlock=document.getElementById('mBlock');
+  if(mBlock&&mBlock.previousElementSibling){
+    mBlock.previousElementSibling.textContent=_monAiGate?'IA BLOQ.':'IA: OFF';
+  }
+  const fBloq=document.getElementById('fBloq');
+  if(fBloq&&fBloq.previousElementSibling){
+    fBloq.previousElementSibling.textContent=_monAiGate?'BLOQUEADOS IA':'REGRAS/SCORE';
+  }
+}
 function _syncGate(side){try{post('/api/autotrade/symbol-gate',{token:side,enabled:!!tradeOn[side]});}catch(e){}}
 function loadTradesState(){
   // Monitor MT5 sobe SEMPRE OFF — auto no boot é só V7 + Crypto.
   tradeOn.WIN=false;tradeOn.WDO=false;
   try{localStorage.setItem('mon_trades',JSON.stringify(tradeOn));}catch(e){}
-  setTrBtn('WIN');setTrBtn('WDO');_syncGate('WIN');_syncGate('WDO');
+  setTrBtn('WIN');setTrBtn('WDO');_syncGate('WIN');_syncGate('WDO');_syncAiBadge();
 }
 function toggleTrades(side){tradeOn[side]=!tradeOn[side];setTrBtn(side);try{localStorage.setItem('mon_trades',JSON.stringify(tradeOn));}catch(e){}_syncGate(side);}
 function _setReason(side,r){const e=document.getElementById('trReason'+side);if(e)e.textContent=r||'';}
@@ -917,9 +945,13 @@ async function driveMonitorExecute(side,sym,sig){
   if(_monInFlight[sym]){_setReason(side,'enviando…');return;}
   const wait=_MON_DEBOUNCE-(Date.now()-(_monLastMs[sym]||0));
   if(wait>0){_setReason(side,'anti-reentrada ~'+Math.ceil(wait/60000)+'min');return;}
-  // cooldown após bloqueio/aguardar: evita martelar o mesmo sinal (ex.: feed parado)
+  // cooldown após bloqueio: evita martelar o mesmo sinal (ex.: feed parado)
   const bwait=_MON_BLOCK_COOLDOWN-(Date.now()-(_monBlockMs[sym]||0));
-  if(bwait>0){_setReason(side,'IA segurou · reavalia ~'+Math.ceil(bwait/1000)+'s');return;}
+  if(bwait>0){
+    const why=_monAiGate?'IA segurou':'regra/score segurou';
+    _setReason(side,why+' · reavalia ~'+Math.ceil(bwait/1000)+'s');
+    return;
+  }
   _monInFlight[sym]=true;_setReason(side,'⏳ enviando ordem '+sig.acao+'…');
   const r=await post('/api/autotrade/execute',{tv_symbol:sym,acao:sig.acao,score:sig.score,entrada:sig.entrada||null,stop:sig.stop||null,tp1:sig.tp1||null,volume:1,interval:monTF.v,signal:sig});
   _monInFlight[sym]=false;
@@ -930,17 +962,22 @@ async function loadMonitor(){
   if(!_monInit){_monInit=true;loadTradesState();}
   load3C();   // reflete o estado do 3-contratos por ativo (não bloqueia o resto)
   const at=await api('/api/autotrade/trades?limit=200');   // todos os sinais do dia
+  if(at&&typeof at.ai_gate==='boolean'){_monAiGate=!!at.ai_gate;_syncAiBadge();}
   if(at&&at.stats){const st=at.stats;
     const ger=+(st.total||0),bloq=+(st.bloqueados_ia??st.ia_bloqueados??st.blocked??0),exe=Math.max(0,ger-bloq);
     setTxt('mTotal',exe);setTxt('mGains',st.gains??st.wins??'—');setTxt('mStops',st.stops??st.losses??'—');
     const wr=st.win_rate_pct??st.win_rate;setTxt('mWin',(wr!=null?fmt(wr,0)+'%':'—'));
     const pnl=st.pnl_total_brl??st.pnl_brl;const el=document.getElementById('mPnl');if(el){el.textContent='R$ '+sign(pnl,2);el.className=cls(pnl);}
-    setTxt('mBlock',bloq);_monBEOpen(at.items,exe,st);
+    setTxt('mBlock',_monAiGate?bloq:'OFF');_monBEOpen(at.items,exe,st);
     // Funil de sinais do dia: gerados → executados → bloqueados
-    setTxt('fGer',ger);setTxt('fExec',exe);setTxt('fBloq',bloq);
-    const note=ger===0?'Nenhum sinal atingiu o gatilho hoje — mercado sem setup válido (não é falha do motor).'
-      :exe===0?'Todos os sinais foram segurados pela IA (menos trades, mais qualidade).'
-      :exe+' executado(s) de '+ger+' sinal(is) · '+bloq+' bloqueado(s) pela IA.';
+    setTxt('fGer',ger);setTxt('fExec',exe);setTxt('fBloq',_monAiGate?bloq:'—');
+    const note=!_monAiGate
+      ? (ger===0?'Nenhum sinal atingiu o gatilho hoje — mercado sem setup válido (não é falha do motor).'
+        :exe===0?'Sinais filtrados por score/regras calibradas (IA OFF no Monitor).'
+        :exe+' executado(s) de '+ger+' sinal(is) · IA OFF — só score + regras.')
+      : (ger===0?'Nenhum sinal atingiu o gatilho hoje — mercado sem setup válido (não é falha do motor).'
+        :exe===0?'Todos os sinais foram segurados pela IA (menos trades, mais qualidade).'
+        :exe+' executado(s) de '+ger+' sinal(is) · '+bloq+' bloqueado(s) pela IA.');
     setTxt('fNote',note);
     renderHist('monHist',at.items,true);
     // som de saída: dispara quando um trade fechado NOVO aparece (init silencioso)

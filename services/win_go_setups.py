@@ -261,14 +261,26 @@ def win_imp_cont_signal(df: pd.DataFrame):
     return _sig(d, float(r.Close), sl, 2.0)
 
 
-# Cap TP WDO_HL_1014: SL estrutural largo → TP 1.5R pode passar de ~2–3×ATR
-# (ex. live 20.5 pts SL → TP ~30). Cap 20 pts preserva GO no BT (net +0,12R).
-_WDO_HL_TP_CAP = 20.0
+# Caps live WDO (WinGo): SL estrutural (engolfo/HL/gap) → TP 1.5R pode
+# ir a ~30–40 pts (ex. ENG live SL 28.5 → TP 39). Cap TP 20 = WDO_HL;
+# SL≤25 corta stop absurdo. Só risco live (runtime + sinais WDO_*);
+# régua GO / backtests v19 intactos.
+_WDO_TP_CAP = 20.0
+_WDO_SL_CAP = 25.0
+_WDO_HL_TP_CAP = _WDO_TP_CAP  # alias compat
 
 # Cap TP WIN_PDH_*: SL = low/high barra ant. pode ir a ~3–4×ATR M15
 # (ex. live COMPRA 178770 SL 1170 → TP 1.5R ≈1920). Cap 800 ≈2,5×ATR med
 # (~312) preserva GO PDH_H4 (+0,184R OOS+0,135) e corta cauda gorda.
 _WIN_PDH_TP_CAP = 800.0
+
+# Caps live WIN (WinGo): IMP_CONT usa TP=2R com SL = extremo da barra impulso
+# (≥2×ATR) → TP pode ir a ~2000+ pts (ex. live COMPRA entry 177400 SL 840
+# → TP 2R ≈1680–2100). Cap TP 800 = mesmo WIN_PDH (~2,5×ATR M15 scalp);
+# SL≤500 corta stop estrutural absurdo sem apertar demais vs ATR~312.
+# Só risco live (runtime); régua GO / backtests intactos.
+_WIN_TP_CAP = 800.0
+_WIN_SL_CAP = 400.0  # 07/08: IMP_CONT SL~370–855; teto 400 corta cauda (antes 500)
 
 
 def _apply_tp_cap(sig: dict, cap: float) -> dict:
@@ -281,6 +293,44 @@ def _apply_tp_cap(sig: dict, cap: float) -> dict:
         return sig
     out = dict(sig)
     out["tp"] = entry + cap if sig["dir"] == "COMPRA" else entry - cap
+    return out
+
+
+def apply_wdo_live_caps(sig: dict, entry: float = None) -> dict:
+    """Caps live SL/TP WDO em pts. `entry` = preço fill (ask/bid) se já conhecido."""
+    if not sig:
+        return sig
+    out = dict(sig)
+    e = float(entry if entry is not None else out["entry"])
+    d = out["dir"]
+    sl, tp = float(out["sl"]), float(out["tp"])
+    if _WDO_SL_CAP > 0 and abs(sl - e) > _WDO_SL_CAP + 1e-9:
+        sl = e - _WDO_SL_CAP if d == "COMPRA" else e + _WDO_SL_CAP
+    if _WDO_TP_CAP > 0 and abs(tp - e) > _WDO_TP_CAP + 1e-9:
+        tp = e + _WDO_TP_CAP if d == "COMPRA" else e - _WDO_TP_CAP
+    out["entry"] = e
+    out["sl"] = sl
+    out["tp"] = tp
+    out["risk"] = abs(e - sl)
+    return out
+
+
+def apply_win_live_caps(sig: dict, entry: float = None) -> dict:
+    """Caps live SL/TP WIN em pts. `entry` = preço fill (ask/bid) se já conhecido."""
+    if not sig:
+        return sig
+    out = dict(sig)
+    e = float(entry if entry is not None else out["entry"])
+    d = out["dir"]
+    sl, tp = float(out["sl"]), float(out["tp"])
+    if _WIN_SL_CAP > 0 and abs(sl - e) > _WIN_SL_CAP + 1e-9:
+        sl = e - _WIN_SL_CAP if d == "COMPRA" else e + _WIN_SL_CAP
+    if _WIN_TP_CAP > 0 and abs(tp - e) > _WIN_TP_CAP + 1e-9:
+        tp = e + _WIN_TP_CAP if d == "COMPRA" else e - _WIN_TP_CAP
+    out["entry"] = e
+    out["sl"] = sl
+    out["tp"] = tp
+    out["risk"] = abs(e - sl)
     return out
 
 
@@ -306,7 +356,7 @@ def wdo_hl_1014_signal(df: pd.DataFrame):
         return None
     if not base or not _h4_ok(df, base["dir"]):
         return None
-    return _apply_tp_cap(base, _WDO_HL_TP_CAP)
+    return _apply_tp_cap(base, _WDO_TP_CAP)
 
 
 def wdo_out_1015_mt_signal(df: pd.DataFrame):
@@ -657,7 +707,7 @@ def wdo_imp_1014_mt_signal(df: pd.DataFrame):
 
 
 def wdo_eng_1014_signal(df: pd.DataFrame):
-    """WDO_ENG_1014 — engolfo + vol≥1,3× + H4 · 10–14h · GO v19 (+0,206 R)."""
+    """WDO_ENG_1014 — engolfo + vol≥1,3× + H4 · 10–14h · GO v19 (+0,206 R) · TP≤20 live."""
     if df is None or len(df) < 5:
         return None
     i = len(df) - 1
@@ -682,7 +732,9 @@ def wdo_eng_1014_signal(df: pd.DataFrame):
         return None
     if not base or not _h4_ok(df, base["dir"]):
         return None
-    return base
+    # Live: TP≤20 (mesmo cap WDO_HL); SL estrutural mantido no sinal —
+    # SL cap absurdo só no runtime (apply_wdo_live_caps).
+    return _apply_tp_cap(base, _WDO_TP_CAP)
 
 
 def wdo_gapc_a60_signal(df: pd.DataFrame):

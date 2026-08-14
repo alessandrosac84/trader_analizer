@@ -8,8 +8,8 @@ Diferente do preço puro (que já vimos ser eficiente), o fluxo de ordens é ond
 existe vantagem genuína em bolsa. Este é o teste que diz se o B3 tem solução.
 
 Roda NA SUA MÁQUINA com o MT5 aberto (conta B3/XP).
-  python pesquisa_fluxo_b3.py                     # WINQ26 e WDOU26, últimos 5 dias
-  python pesquisa_fluxo_b3.py --symbol WINQ26 --days 10
+  python pesquisa_fluxo_b3.py                     # WINV26 e WDOU26, últimos 5 dias
+  python pesquisa_fluxo_b3.py --symbol WINV26 --days 10
   python pesquisa_fluxo_b3.py --cost 0.07
 
 Saída:

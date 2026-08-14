@@ -134,16 +134,18 @@ _XAU_STRUCT_TP_CAP = 30.0
 
 # Caps live SL/TP (pts do símbolo) — só no fill/execução; backtests/GOs intactos.
 # ETH (02/08): disc M60 ATR H1 inflava SL~18/TP~36 no M15 → 12/20 (~2×ATR scalp).
-# BTC (03/08): trade live SL~1191 / TP~1827 (~8–13×ATR M15≈143) — MFE real ~380 pts.
-#   Cap SL 1000 / TP 1200 ≈ 7–8×ATR teto operacional (scalp M15; user 800–1200 / 1000–1500).
+# BTC: losses -$200–550 com SL~300–550 × lote 1. Cap pts 300 + MAX_RISK $100
+#   (13/08). TP≤450. Régua GO/backtest intacta. Sem stop diário.
 # EUR/GBP: 30/45 pips — evita TP estrutural absurdo em FX.
-# XAU: TP estrutural via _XAU_STRUCT_TP_CAP nos GOs (30 pts); sem SL cap global aqui.
+# XAU: TP≤30 / SL≤45 em todos os caminhos live.
 _ETH_SL_CAP = 12.0
 _ETH_TP_CAP = 20.0
-_BTC_SL_CAP = 1000.0
-_BTC_TP_CAP = 1200.0
+_BTC_SL_CAP = 300.0
+_BTC_TP_CAP = 450.0
 _FX_SL_CAP = 0.0030   # 30 pips
 _FX_TP_CAP = 0.0045   # 45 pips
+_XAU_SL_CAP = 45.0
+_XAU_TP_CAP = _XAU_STRUCT_TP_CAP  # 30 pts
 
 # symbol -> (sl_cap, tp_cap) | None
 LIVE_SL_TP_CAPS = {
@@ -151,6 +153,7 @@ LIVE_SL_TP_CAPS = {
     "BTCUSD": (_BTC_SL_CAP, _BTC_TP_CAP),
     "EURUSD": (_FX_SL_CAP, _FX_TP_CAP),
     "GBPUSD": (_FX_SL_CAP, _FX_TP_CAP),
+    "XAUUSD": (_XAU_SL_CAP, _XAU_TP_CAP),
 }
 
 

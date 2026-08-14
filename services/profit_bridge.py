@@ -247,6 +247,90 @@ def _build_instrument_block(instrument: str) -> dict:
     ema_alignment = (breakdown.get("ema_alignment", 0) > 0) if breakdown else None
     macd_positive = (breakdown.get("macd", 0) > 0)          if breakdown else None
 
+    # Macro (HTF) / Micro (momentum curto no TF do gráfico)
+    macro = (htf or "neutro").lower() if htf else "neutro"
+    if macro not in ("alta", "baixa"):
+        macro = "neutro"
+    rsi_v = sig.get("rsi") if ok else None
+    ema9 = sig.get("ema9")
+    ema21 = sig.get("ema21")
+    micro = "neutro"
+    if ok and ema9 is not None and ema21 is not None and price is not None:
+        try:
+            e9, e21, px = float(ema9), float(ema21), float(price)
+            if px > e9 > e21:
+                micro = "alta"
+            elif px < e9 < e21:
+                micro = "baixa"
+            elif rsi_v is not None:
+                # desempate IFR
+                if float(rsi_v) >= 55:
+                    micro = "alta"
+                elif float(rsi_v) <= 45:
+                    micro = "baixa"
+        except (TypeError, ValueError):
+            micro = "neutro"
+    elif ok and rsi_v is not None:
+        try:
+            if float(rsi_v) >= 55:
+                micro = "alta"
+            elif float(rsi_v) <= 45:
+                micro = "baixa"
+        except (TypeError, ValueError):
+            pass
+    mm_aligned = macro != "neutro" and micro != "neutro" and macro == micro
+    mm_with_signal = False
+    if action == "COMPRA":
+        mm_with_signal = macro == "alta" and micro == "alta"
+    elif action == "VENDA":
+        mm_with_signal = macro == "baixa" and micro == "baixa"
+
+    # Gate calibrado Monitor MT5 (mesmas regras do robô)
+    gate_ok, gate_reasons = True, []
+    try:
+        from services.monitor_mt5_rules import (
+            session_allows, score_allowed, filters_allowed, rules_for,
+        )
+        cfg = rules_for(instrument)
+        ok_sess, why_s = session_allows(instrument)
+        if not ok_sess:
+            gate_ok = False
+            gate_reasons.append(why_s or "fora da janela")
+        ok_sc, why_sc = score_allowed(instrument, score)
+        if not ok_sc:
+            gate_ok = False
+            gate_reasons.append(why_sc or "score")
+        ok_f, why_f = filters_allowed(
+            instrument,
+            adx=float(sig["adx"]) if ok and sig.get("adx") is not None else None,
+            vol_ratio=float(sig["vol_ratio"]) if ok and sig.get("vol_ratio") is not None else None,
+        )
+        if not ok_f:
+            gate_ok = False
+            gate_reasons.append(why_f or "filtros")
+        if action not in ("COMPRA", "VENDA"):
+            gate_ok = False
+            if "NEUTRO" not in " ".join(gate_reasons):
+                gate_reasons.append("sem direção COMPRA/VENDA")
+        min_sc = int(cfg.get("min_score") or 0)
+    except Exception as exc:
+        _blog.debug("monitor gate(%s): %s", instrument, exc)
+        gate_ok, gate_reasons, min_sc = False, ["gate indisponível"], 0
+
+    # Veredito HUD: COMPRA / VENDA / AGUARDAR / BLOQUEADO
+    if action in ("COMPRA", "VENDA") and gate_ok and mm_with_signal:
+        verdict = action
+        verdict_label = f"{action} · ALINHADO"
+    elif action in ("COMPRA", "VENDA") and gate_ok:
+        verdict = action
+        verdict_label = f"{action} · GATE OK (macro/micro parcial)"
+    elif action in ("COMPRA", "VENDA"):
+        verdict = "BLOQUEADO"
+        verdict_label = " · ".join(gate_reasons[:2]) or "filtros"
+    else:
+        verdict = "AGUARDAR"
+        verdict_label = "sem setup"
+
     return {
         # Campos minimos da spec
         "action":           action,
@@ -269,10 +353,24 @@ def _build_instrument_block(instrument: str) -> dict:
         "rsi":              sig.get("rsi")   if ok else None,
         "adx":              sig.get("adx")   if ok else None,
         "atr":              sig.get("atr")   if ok else None,
+        "vol_ratio":        sig.get("vol_ratio") if ok else None,
+        "ema9":             sig.get("ema9") if ok else None,
+        "ema21":            sig.get("ema21") if ok else None,
+        "price":            price,
         "position_open":    position_open,
         "position_dir":     position_dir,
         "position_pnl":     position_pnl,
         "last_signal_at":   db.get("created_at"),
+        # HUD v2
+        "macro":            macro,
+        "micro":            micro,
+        "mm_aligned":       mm_aligned,
+        "mm_with_signal":   mm_with_signal,
+        "gate_ok":          gate_ok,
+        "gate_reasons":     gate_reasons,
+        "min_score":        min_sc,
+        "verdict":          verdict,
+        "verdict_label":    verdict_label,
     }
 
 
@@ -489,6 +587,11 @@ def stop_bridge() -> None:
 def get_status() -> dict:
     with _status_lock:
         return dict(_status)
+
+
+def get_json_path() -> str:
+    """Caminho absoluto do trade_ai_profit.json (API / dashboard)."""
+    return _JSON_PATH
 
 
 if __name__ == "__main__":

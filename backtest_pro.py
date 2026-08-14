@@ -8,7 +8,7 @@ O que ele responde:
   2. Motor v7 (regime + níveis + confluência) na mesma régua.
   3. Estabilidade por bimestre (walk-forward), por regime, setup e horário.
 
-⚠️ HISTÓRICO: símbolo de contrato (WINQ26) só tem a vida do contrato (~2-5
+⚠️ HISTÓRICO: símbolo de contrato (WINV26) só tem a vida do contrato (~2-5
 meses). Para os 2,7 anos use o CONTRATO CONTÍNUO da corretora, se existir
 (ex.: WIN$, WIN$N, WDO$). Rode `python backtest_pro.py --list` para ver os
 símbolos WIN*/WDO* disponíveis no seu Market Watch e escolha o de maior
@@ -172,11 +172,20 @@ def tick_trigger_ok(symbol, ts, direction):
 def _min_of_day(ts): return ts.hour * 60 + ts.minute
 
 
+def _hours_ok(minute, hours) -> bool:
+    """hours=None → livre; (a,b) → uma janela; [(a,b),...] → união de janelas."""
+    if not hours:
+        return True
+    if isinstance(hours, (list, tuple)) and hours and isinstance(hours[0], (list, tuple)):
+        return any(a <= minute < b for a, b in hours)
+    return hours[0] <= minute < hours[1]
+
+
 def simulate(df15, symbol, engine="v7", exits="managed", use_ticks=False,
              mt5_symbol=None, hours=None):
     """Retorna DataFrame de trades com resultado bruto e líquido em R.
-    hours: (min_inicial, min_final) em minutos do dia — restringe NOVAS
-    entradas à janela (ex.: (9*60+15, 11*60+30) = 09:15-11:30)."""
+    hours: (min_inicial, min_final) OU lista de janelas em minutos do dia —
+    restringe NOVAS entradas (ex.: (9*60+15, 11*60+30) = 09:15-11:30)."""
     h1 = resample_h1(df15)
     daily_refs = build_daily_refs(df15)
     atr_series = compute_indicators(df15)["atr"]
@@ -252,6 +261,9 @@ def simulate(df15, symbol, engine="v7", exits="managed", use_ticks=False,
                     "open_ts": pos["ts"], "close_ts": ts, "dir": pos["dir"],
                     "setup": pos.get("setup"), "regime": pos.get("regime"),
                     "entry_mode": pos["entry_mode"], "hour": pos["ts"].hour,
+                    "score": pos.get("score"), "score_raw": pos.get("score_raw"),
+                    "adx": pos.get("adx"), "htf_trend": pos.get("htf_trend"),
+                    "vol_ratio": pos.get("vol_ratio"),
                     "risk_pts": round(risk, 2), "gross_R": round(gross, 3),
                     "cost_R": round(cost_pts / risk, 3), "net_R": round(net, 3),
                 })
@@ -274,6 +286,9 @@ def simulate(df15, symbol, engine="v7", exits="managed", use_ticks=False,
                        "atr": pending["atr"], "entry_mode": "LIMITE",
                        "setup": pending.get("setup"), "regime": pending.get("regime"),
                        "fixed_exit": pending.get("fixed_exit", False),
+                       "score": pending.get("score"), "score_raw": pending.get("score_raw"),
+                       "adx": pending.get("adx"), "htf_trend": pending.get("htf_trend"),
+                       "vol_ratio": pending.get("vol_ratio"),
                        "legs": [], "closed_frac": 0.0, "partial_done": False, "bars": 0}
                 pending = None
                 continue
@@ -284,7 +299,7 @@ def simulate(df15, symbol, engine="v7", exits="managed", use_ticks=False,
         if minute >= EOD_MIN:
             continue
         # Janela horária opcional (teste de restrição de horário)
-        if hours and not (hours[0] <= minute < hours[1]):
+        if not _hours_ok(minute, hours):
             continue
         # v7 só opera nas janelas A (09:15-11:30, incluindo GAP_FADE às 09:15)
         # e B (14:00-16:30)
@@ -309,11 +324,21 @@ def simulate(df15, symbol, engine="v7", exits="managed", use_ticks=False,
                 _same_day = ts.date() == win.index[-1].date()
                 _gap_tp   = (_buy and o >= _tp1f) or ((not _buy) and o <= _tp1f)
                 if _same_day and not _gap_tp and _risk >= 0.3 * max(_atr_i, 1e-9):
+                    _vol = None
+                    try:
+                        _vv = float(win["Volume"].iloc[-1] or 0)
+                        _va = float(win["Volume"].tail(20).mean() or 0)
+                        _vol = (_vv / _va) if _va > 0 else None
+                    except Exception:
+                        pass
                     pos = {"ts": ts, "dir": sig["acao"], "entry": o,
                            "stop": _stop, "tp1": _tp1f,
                            "risk": _risk,
                            "atr": _atr_i or _risk,
                            "entry_mode": "MERCADO", "setup": "V6", "regime": None,
+                           "score": sig.get("score"), "score_raw": sig.get("score_raw"),
+                           "adx": sig.get("adx"), "htf_trend": sig.get("htf_trend"),
+                           "vol_ratio": _vol,
                            "legs": [], "closed_frac": 0.0, "partial_done": False, "bars": 0}
         else:  # v7
             sig = generate_signal_v7(win, htf_df=hwin, daily_refs=daily_refs,
@@ -420,7 +445,7 @@ def main():
         data = {symbols[0][0]: load_csv(args.csv)}
     else:
         syms = [args.symbol] if args.symbol else \
-               [os.getenv("WIN_MT5_SYMBOL", "WINQ26"), os.getenv("WDO_MT5_SYMBOL", "WDOU26")]
+               [os.getenv("WIN_MT5_SYMBOL", "WINV26"), os.getenv("WDO_MT5_SYMBOL", "WDOU26")]
         symbols = [(s, s) for s in syms]
         data = {}
         for s, _ in symbols:

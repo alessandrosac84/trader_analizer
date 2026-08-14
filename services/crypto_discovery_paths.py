@@ -181,7 +181,7 @@ def eval_path(candles, path: dict, *, df=None, features=None):
         sig = ("VENDA", px + sl_m * a, px - tp_m * a)
     else:
         sig = ("COMPRA", px - sl_m * a, px + tp_m * a)
-    # Live caps (ETH/BTC/EUR/GBP): ATR H1 / estrutural infla SL/TP — cap como XAU/WDO.
+    # Live caps (ETH/BTC/XAU/EUR/GBP): ATR H1 / estrutural / OF 2R infla SL/TP.
     sym = (path.get("symbol") or "").upper().strip()
     try:
         from services.crypto_edge_setups import cap_live_signal, live_caps_for

@@ -18,26 +18,39 @@ BOT_COMMENT    = "TradeAI-DEMO"
 MAX_POSITIONS  = 1          # máximo de posições abertas simultâneas
 DEFAULT_VOLUME = 1.0        # 1 mini contrato
 SCORE_MIN      = 7          # v6: era 4. |score| mínimo GLOBAL (fallback)
-# v6.2 — THRESHOLD POR ATIVO. Backtest MT5 (877 sinais) mostrou perfis OPOSTOS:
-#   WIN so tem edge em |score| ALTO (>=9: +0,056 R; >=10: +0,333 R; <9 negativo);
-#   WDO tem edge em |score| BAIXO (7-8), degradando acima disso.
-# Por isso cada ativo tem seu proprio piso. Ativos sem entrada usam SCORE_MIN.
+# v6.3 — THRESHOLD POR ATIVO (monitor_mt5_rules). Varredura ~6,6a:
+#   WIN: min 9 + janela A/B + sem serunda + RR>=2 → GO
+#   WDO: min 10 (7/9 destroem edge) + A/B + ADX/vol + RR>=2 → GO
+# Ativos sem entrada usam SCORE_MIN. Valores abaixo sao sobrescritos pelas regras.
 MIN_SCORE_BY_SYMBOL = {
-    "BMFBOVESPA:WIN1!": 9,   # WIN: so scores fortes
-    "BMFBOVESPA:WDO1!": 7,   # WDO: opera cedo
+    "BMFBOVESPA:WIN1!": 9,
+    "BMFBOVESPA:WDO1!": 10,
 }
 # v6.1 — RR_MIN recalibrado por replay dos trades reais. O TP1 deste sistema e um
 # ALVO PARCIAL curto (existem TP2/TP3 + fechamento parcial), entao seu RR fica
 # proximo de 1.0 mesmo em trades vencedores. Um piso alto (1.5) BLOQUEAVA os
 # unicos vencedores reais (score 9 e 12, RR~1.0). Agora RR_MIN e apenas um GUARDA
 # DE SANIDADE: bloqueia so setups quebrados (stop 2x+ mais longe que o 1o alvo).
+# Monitor MT5 (v6.3): por ativo pode exigir piso maior via monitor_mt5_rules.target_rr
+# (esticando o TP1) — RR_MIN global continua só sanidade.
 RR_MIN         = 0.5        # v6.1: era 1.5 (piso alto matava os vencedores)
 B3_OPEN        = dt_time(9, 0)
 B3_CLOSE       = dt_time(17, 30)
 
+# Espelha min_score das regras calibradas do Monitor (quando existirem).
+try:
+    from services.monitor_mt5_rules import MONITOR_RULES as _MON_RULES
+    for _k, _r in (_MON_RULES or {}).items():
+        if _k == "WIN":
+            MIN_SCORE_BY_SYMBOL["BMFBOVESPA:WIN1!"] = int(_r.get("min_score", 9))
+        elif _k == "WDO":
+            MIN_SCORE_BY_SYMBOL["BMFBOVESPA:WDO1!"] = int(_r.get("min_score", 10))
+except Exception:
+    pass
+
 # Mapeamento TV_SYMBOL -> MT5_SYMBOL para order_send
 _TV_TO_MT5_TRADE = {
-    "BMFBOVESPA:WIN1!": os.getenv("WIN_MT5_SYMBOL", "WINQ26"),
+    "BMFBOVESPA:WIN1!": os.getenv("WIN_MT5_SYMBOL", "WINV26"),
     "BMFBOVESPA:WDO1!": os.getenv("WDO_MT5_SYMBOL", "WDOU26"),
     "BMFBOVESPA:PETR4": "PETR4",
     "BMFBOVESPA:RADL3": "RADL3",
@@ -102,7 +115,7 @@ def get_open_positions(tv_symbol: str = None) -> "tuple[list, str | None]":
         ours = [dict(p._asdict()) for p in positions if p.magic == MAGIC_NUMBER]
 
         # Fallback: se não achou por símbolo exato, busca por prefixo do símbolo MT5.
-        # Isso cobre casos onde o nome do contrato mudou (ex: WINQ26 → WINZ26).
+        # Isso cobre casos onde o nome do contrato mudou (ex: WINQ26 → WINV26).
         # IMPORTANTE: filtra pelo prefixo para não contaminar outros ativos simultaneamente.
         if not ours and tv_symbol:
             mt5_sym = _mt5_symbol(tv_symbol)
@@ -131,6 +144,8 @@ def execute_trade(
     tp1: "float | None" = None,
     volume: float = DEFAULT_VOLUME,
     check_market_hours: bool = True,
+    adx: "float | None" = None,
+    vol_ratio: "float | None" = None,
 ) -> "tuple[dict | None, str | None]":
     """
     Abre uma posição a mercado via MT5.
@@ -149,6 +164,38 @@ def execute_trade(
     _min_score = MIN_SCORE_BY_SYMBOL.get(tv_symbol.upper().strip(), SCORE_MIN)
     if abs(score or 0) < _min_score:
         return None, f"Score {score} abaixo do mínimo do ativo ({_min_score}) — trade bloqueado."
+
+    # Monitor MT5 v6.3 — sessão / DOW / piso de RR por ativo (sem IA).
+    try:
+        from services.monitor_mt5_rules import (
+            session_allows, rules_for, apply_tp_floor, score_allowed,
+            filters_allowed,
+        )
+        _ok_sc, _why_sc = score_allowed(tv_symbol, score)
+        if not _ok_sc:
+            return None, _why_sc
+        if check_market_hours:
+            _ok_sess, _why_sess = session_allows(tv_symbol)
+            if not _ok_sess:
+                return None, _why_sess
+        # require_data só se o caller passou algum filtro (autotrade com sinal)
+        _req = adx is not None or vol_ratio is not None
+        _ok_f, _why_f = filters_allowed(
+            tv_symbol, adx=adx, vol_ratio=vol_ratio, require_data=_req,
+        )
+        if not _ok_f:
+            return None, _why_f
+        _cfg = rules_for(tv_symbol)
+        _tgt_rr = _cfg.get("target_rr")
+        if (
+            _tgt_rr
+            and entrada is not None
+            and sl is not None
+            and tp1 is not None
+        ):
+            tp1 = apply_tp_floor(acao, float(entrada), float(sl), float(tp1), float(_tgt_rr))
+    except Exception as _mon_exc:
+        logger.warning("monitor_mt5_rules gate falhou (não bloqueia): %s", _mon_exc)
 
     # v6 ASSERTIVIDADE: piso de risco/retorno. Nos dados reais varios trades
     # tinham TP1 mais perto que o stop (RR < 1), exigindo win rate alto p/ lucrar.

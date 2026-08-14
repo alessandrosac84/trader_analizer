@@ -19,7 +19,7 @@ não opera fora das janelas validadas.
 
 Uso (MT5 aberto e logado na conta demo):
     python v7_trader.py                # símbolo do .env (WIN_MT5_SYMBOL)
-    python v7_trader.py --symbol WINQ26
+    python v7_trader.py --symbol WINV26
     set V7_USE_FLOW=1                  # opcional: exige confirmação de fluxo
                                        # (tape) antes de entrar — o backtest
                                        # NÃO usou; default desligado p/ fidelidade
@@ -211,7 +211,7 @@ def main():
     use_flow = os.getenv("V7_USE_FLOW", "0") == "1"
 
     mt5 = mt5_connect()
-    symbol = args.symbol or os.getenv("WIN_MT5_SYMBOL", "WINQ26")
+    symbol = args.symbol or os.getenv("WIN_MT5_SYMBOL", "WINV26")
     mt5.symbol_select(symbol, True)
     print(f"\n=== V7 TRADER (demo) — {symbol} | magic {MAGIC} | "
           f"flow={'ON' if use_flow else 'OFF'} ===")

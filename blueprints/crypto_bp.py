@@ -441,20 +441,34 @@ def _reconcile_closes_inner():
             continue
         cdt = datetime.fromtimestamp(t["close_epoch"], _BRT)
         cday = cdt.strftime("%Y-%m-%d")
-        # tenta casar com uma linha existente (mesmo símbolo + profit ~igual) → seed.
-        # NÃO usamos a data no casamento (o horário do servidor MT5 tem fuso diferente
-        # do BRT do CSV, o que quebraria o match e duplicaria trades).
+        # Casar com linha existente SEM duplicar.
+        # ⚠️ NÃO casar só por símbolo+profit: PnLs parecidos de dias diferentes
+        # (ex. +19.35 de hoje vs +19.09 de 04/08) marcavam o deal como "já no CSV"
+        # e o trade real sumia do relatório. Exigir entry_price quando o MT5 traz.
         matched = None
+        ep_t = t.get("entry_price")
         for r in existing:
             if r.get("_claimed"):
                 continue
-            # tolerância absorve diferença de comissão/swap entre o registro do cliente
-            # e o cálculo do histórico (evita duplicar o MESMO fechamento).
+            if ((r.get("symbol", "") or "").upper() != t["symbol"]):
+                continue
             _tol = max(0.10, 0.02 * abs(t["profit"]))
-            if ((r.get("symbol", "") or "").upper() == t["symbol"]
-                    and abs(_f(r.get("profit")) - t["profit"]) < _tol):
-                matched = r
-                break
+            if abs(_f(r.get("profit")) - t["profit"]) >= _tol:
+                continue
+            if ep_t is not None:
+                ep_r = _f(r.get("entry_price"))
+                if not r.get("entry_price") and ep_r == 0:
+                    continue
+                # ~2 bps ou $1 — evita colidir entradas distintas no mesmo símbolo
+                _etol = max(1.0, abs(float(ep_t)) * 2e-5)
+                if abs(ep_r - float(ep_t)) > _etol:
+                    continue
+            else:
+                # sem entry do MT5: fallback apertado por dia BRT
+                if (r.get("datetime_brt") or "")[:10] != cday:
+                    continue
+            matched = r
+            break
         if matched is not None:
             matched["_claimed"] = True
             _mark_deal_logged(tk)     # já estava no CSV → só marca como conhecido
@@ -525,8 +539,10 @@ def api_lot():
         sym = (b.get("symbol", "") or "").upper()
         if sym:
             try:
+                from services.crypto_config import max_volume as _max_vol
                 v = float(b.get("volume"))
-                _autost(sym)["volume"] = max(0.0, v) or None
+                v = max(0.0, min(v, float(_max_vol(sym))))
+                _autost(sym)["volume"] = v or None
             except Exception:
                 pass
     # devolve o lote efetivo por ativo (definido ou default da config)
@@ -650,7 +666,7 @@ def api_manage():
         _set_close_intent(symbol, code, m.get("reason") or "")
     applied = None
     tp_capped = None
-    # Caps live em posição aberta: encurta TP absurdo (BTC/ETH/FX) sem esperar fill novo
+    # Caps live em posição aberta: encurta TP absurdo (BTC/ETH/XAU/FX) sem esperar fill novo
     if do_apply and not m.get("close"):
         try:
             from services.crypto_edge_setups import live_caps_for, apply_live_caps

@@ -57,7 +57,7 @@ def _mt5():
 
 
 def _symbol():
-    return os.getenv("WIN_MT5_SYMBOL", "WINQ26").strip()
+    return os.getenv("WIN_MT5_SYMBOL", "WINV26").strip()
 
 
 def _notify(txt):

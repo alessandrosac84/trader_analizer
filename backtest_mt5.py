@@ -9,7 +9,7 @@ puxa candles REAIS do MT5 — os mesmos dados que a plataforma usa para operar.
 
 Uso:
   python backtest_mt5.py                         # WIN e WDO, 15m, ~60 dias, regras novas
-  python backtest_mt5.py --symbol WINQ26         # um símbolo específico
+  python backtest_mt5.py --symbol WINV26         # um símbolo específico
   python backtest_mt5.py --tf 5 --bars 8000      # timeframe 5m, mais candles
   python backtest_mt5.py --min-score 4           # compara com o threshold antigo
   python backtest_mt5.py --list                  # lista símbolos WIN/WDO disponíveis
@@ -334,7 +334,7 @@ def _report(symbol, r, min_score, adx_min=22):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Backtest do motor com dados do MT5")
-    ap.add_argument("--symbol", default=None, help="Símbolo MT5 (ex: WINQ26). Vazio = auto WIN+WDO")
+    ap.add_argument("--symbol", default=None, help="Símbolo MT5 (ex: WINV26). Vazio = auto WIN+WDO")
     ap.add_argument("--tf", default="15", help="Timeframe: 1,5,15,30,60")
     ap.add_argument("--bars", type=int, default=6000, help="Qtd de candles a puxar")
     ap.add_argument("--forward", type=int, default=8, help="Velas à frente p/ checar TP/stop")

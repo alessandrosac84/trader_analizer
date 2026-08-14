@@ -76,14 +76,27 @@ def check_ai_health(timeout: float = 10.0) -> dict:
 # Confianca minima da IA para aprovar (abaixo disso = AGUARDAR)
 AI_MIN_CONFIDENCE = 65   # v6: era 55. Setup borderline vira AGUARDAR (mais qualidade)
 
-# v6 ASSERTIVIDADE: comportamento em falha do validador.
+# Monitor MT5 v6.3+: alinhado ao BT calibrado (só score + regras A/B/ADX/vol/RR).
+# Default OFF — o gate Azure fail-closed NÃO bloqueia fills do Monitor.
+# Religue com MONITOR_AI_GATE=1 se quiser validação IA pré-trade de novo.
+# (V7 advisory/gate é independente — ver v7_engine_runtime.ai_mode.)
+import os as _os
+MONITOR_AI_GATE = (_os.getenv("MONITOR_AI_GATE", "0").strip().lower()
+                   in ("1", "true", "yes", "on"))
+
+
+def monitor_ai_gate_enabled() -> bool:
+    """True se o autotrade do Monitor deve chamar a IA e bloquear em AGUARDAR/BLOQUEAR."""
+    return bool(MONITOR_AI_GATE)
+
+
+# v6 ASSERTIVIDADE: comportamento em falha do validador (só aplica se MONITOR_AI_GATE=1).
 # ANTES o validador "falhava aberto" — qualquer erro, timeout, ausencia de
 # Azure ou resposta sem JSON resultava em veredito EXECUTAR, ou seja, o gate
 # de risco aprovava o trade sem realmente validar. Um filtro de risco deve
 # FALHAR FECHADO: na duvida, NAO opera. Com FAIL_CLOSED=True, a falha vira
 # AGUARDAR (impede a execucao automatica no app.py).
-# ⚠️ Consequencia: se o Azure OpenAI nao estiver configurado/disponivel, o
-#    auto-trade do Monitor MT5 fica PARADO ate a IA voltar. Isso e intencional.
+# ⚠️ Com MONITOR_AI_GATE=0 (default), este fail-closed nao e usado no Monitor.
 FAIL_CLOSED = True
 
 # v6.1 — AGENTE ESPECIALISTA WIN/WDO (Monitor MT5).

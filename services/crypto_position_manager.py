@@ -12,8 +12,10 @@ Giveback MFE (todos os símbolos crypto/FX/ouro): escalonado pelo pico em R$ —
   <R$400 → 50% · R$400–999 → 33% · ≥R$1000 → teto absoluto R$250 do pico.
   Conta USD: limiares via usdbrl (CRYPTO_USDBRL → MT5 → AwesomeAPI → 5.20).
 
-Armamento: pico ≥0,6R **OU** peak_brl ≥ R$200 (evita SL gigante impedir o guard
-mesmo com lucro grande em R$). Avalia mesmo com PnL atual negativo/underwater.
+Armamento (13/08): pico ≥ **1R** **OU** peak_pnl ≥ **US$80** — não arma cedo
+em gains miúdos (antes 0,6R / R$200). Avalia mesmo underwater após armado.
+
+Corte defensivo no loss: ≤ −0,7R + micro contra → fecha. Sem stop diário.
 """
 import logging
 
@@ -23,16 +25,17 @@ REVERSAL_SCORE = 8       # |score| do sinal oposto que dispara saída por revers
 TIME_STOP_CANDLES = 40   # candles aberto sem atingir TP1 → sugere revisar
 BREAKEVEN_RR = 1.0       # a partir de 1R de lucro, move o stop para a entrada
 TRAIL_ATR = 1.2          # trailing = preço ∓ TRAIL_ATR × ATR
-# Proteção de lucro (evita "zerar" no breakeven devolvendo tudo)
-GIVEBACK_PEAK_MIN_R = 0.6  # arma se lucro em preço ≥0,6R
-GIVEBACK_ARM_BRL = 200.0   # OU se pico em R$ ≥ isto (SL largo não bloqueia)
+# Proteção de lucro — arma só depois de ganho relevante
+GIVEBACK_PEAK_MIN_R = 1.0   # arma se lucro em preço ≥1R
+GIVEBACK_ARM_USD = 80.0     # OU se pico na conta (USD) ≥ US$80
 # Faixas de giveback pelo pico MFE em R$ (allowed_giveback)
 GIVEBACK_BRL_TIER1 = 400.0    # < 400 → 50% do pico
 GIVEBACK_BRL_TIER2 = 1000.0   # 400–999 → 33%; ≥1000 → teto R$250
 GIVEBACK_BRL_CAP = 250.0
 GIVEBACK_PCT_LOW = 0.50
 GIVEBACK_PCT_MID = 0.33
-MICRO_EXIT_MIN_R    = 0.5  # revERSão pelo MICRO só fecha com lucro ≥0,5R já garantido
+MICRO_EXIT_MIN_R = 0.5     # micro contra com lucro ≥0,5R → fecha
+LOSS_CUT_R = 0.7           # micro contra com loss ≤ −0,7R → corta sangramento
 
 
 def allowed_giveback(peak_pnl_ccy: float, usdbrl: float = 5.2) -> float:
@@ -137,15 +140,15 @@ def manage(pos: dict, signal: dict, atr: float = 0.0, candles_open: int = 0,
             rec, reason = "REVISAR", f"⏰ Aberto há {candles_open} candles sem TP1 — considerar fechar."
 
         # 5) GUARD DE DEVOLUÇÃO (MFE)
-        # Arma por 0,6R OU por pico em R$ (SL gigante não pode silenciar o guard).
-        # Avalia mesmo underwater (cur_pnl/favor ≤ 0) — senão devolve tudo até o stop.
+        # Arma só com ≥1R OU pico ≥ US$80 — gains miúdos respiram; winners grandes protegidos.
+        # Avalia mesmo underwater (cur_pnl ≤ 0) depois de armado.
         info = giveback_band_info(peak_money, rate) if peak_money > 0 else {
             "band": "—", "rule": "—", "allowed_ccy": 0.0, "allowed_brl": 0.0,
             "peak_brl": 0.0, "usdbrl": rate,
         }
         armed_r = risk > 0 and peak_favor >= GIVEBACK_PEAK_MIN_R * risk
-        armed_brl = info["peak_brl"] >= GIVEBACK_ARM_BRL
-        armed = bool(peak_money > 0 and (armed_r or armed_brl))
+        armed_usd = peak_money >= GIVEBACK_ARM_USD
+        armed = bool(peak_money > 0 and (armed_r or armed_usd))
         allowed = float(info["allowed_ccy"] or 0.0)
         given_back = peak_money - cur_pnl if peak_money > 0 else 0.0
         if (not close and armed and allowed > 0 and given_back >= allowed - 1e-9):
@@ -161,25 +164,41 @@ def manage(pos: dict, signal: dict, atr: float = 0.0, candles_open: int = 0,
             close_code = "GIVEBACK"
             logger.info(
                 "GIVEBACK %s: faixa=%s rule=%s peak_brl=%.0f pnl_saida_brl=%.0f "
-                "peak_ccy=%.2f pnl_ccy=%.2f allowed_ccy=%.2f usdbrl=%.4f armed_r=%s armed_brl=%s",
+                "peak_ccy=%.2f pnl_ccy=%.2f allowed_ccy=%.2f usdbrl=%.4f armed_r=%s armed_usd=%s",
                 pos.get("symbol") or "?", info["band"], info["rule"],
                 peak_brl, cur_brl, peak_money, cur_pnl, allowed, rate,
-                armed_r, armed_brl,
+                armed_r, armed_usd,
             )
         else:
             logger.info(
                 "GIVEBACK_CYCLE %s: peak_brl=%.0f faixa=%s allowed_ccy=%.2f "
-                "cur_ccy=%.2f given_back=%.2f armed=%s (r=%s brl=%s) peak_favor=%.2f risk=%.2f",
+                "cur_ccy=%.2f given_back=%.2f armed=%s (r=%s usd=%s) peak_favor=%.2f risk=%.2f",
                 pos.get("symbol") or "?", info["peak_brl"], info["band"],
-                allowed, cur_pnl, given_back, armed, armed_r, armed_brl,
+                allowed, cur_pnl, given_back, armed, armed_r, armed_usd,
                 float(peak_favor or 0.0), risk,
             )
 
-        # 6) REVERSÃO PELO MICRO
+        # 6) REVERSÃO PELO MICRO (com lucro)
         micro_against = (is_buy and micro_dir == "BAIXA") or (not is_buy and micro_dir == "ALTA")
         if (not close and micro_against and risk > 0 and favor >= MICRO_EXIT_MIN_R * risk):
             rec, reason, close = "FECHAR", f"⚡ MICRO virou contra ({micro_dir}) com lucro — fecha antes de devolver.", True
             close_code = "MICRO"
+
+        # 7) CORTE DEFENSIVO NO LOSS (−0,7R + micro contra)
+        # Giveback não age sem pico; isso evita sangrar até o SL quando o micro vira.
+        if (not close and micro_against and risk > 0
+                and favor <= -LOSS_CUT_R * risk):
+            rec, reason, close = (
+                "FECHAR",
+                f"🛡 LOSS-CUT −{LOSS_CUT_R:.1f}R + MICRO {micro_dir} — corta sangramento antes do SL.",
+                True,
+            )
+            close_code = "LOSS_CUT"
+            logger.info(
+                "LOSS_CUT %s: favor=%.2f risk=%.2f r_now=%.2f micro=%s pnl=%.2f",
+                pos.get("symbol") or "?", favor, risk,
+                favor / risk if risk else 0.0, micro_dir, cur_pnl,
+            )
 
         return {"mode": "MANAGE", "recommendation": rec, "reason": reason,
                 "new_sl": new_sl, "close": close, "close_code": close_code,
@@ -187,9 +206,10 @@ def manage(pos: dict, signal: dict, atr: float = 0.0, candles_open: int = 0,
                     "peak_brl": info["peak_brl"], "band": info["band"],
                     "allowed_ccy": allowed, "allowed_brl": info["allowed_brl"],
                     "cur_ccy": cur_pnl, "given_back": given_back,
-                    "armed": armed, "armed_r": armed_r, "armed_brl": armed_brl,
+                    "armed": armed, "armed_r": armed_r, "armed_usd": armed_usd,
                     "peak_pnl": peak_money, "peak_favor": float(peak_favor or 0.0),
-                    "usdbrl": rate,
+                    "usdbrl": rate, "arm_usd": GIVEBACK_ARM_USD,
+                    "arm_r": GIVEBACK_PEAK_MIN_R,
                 },
                 "position": {"type": pos.get("type"), "entry": entry, "current": cur,
                              "sl": sl, "tp": tp, "profit": pos.get("profit")}}

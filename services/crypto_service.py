@@ -491,7 +491,11 @@ def mt5_execution_ready():
 
 
 def execute(symbol: str, acao: str, volume: float, sl: float = None, tp: float = None):
-    """Abre ordem a mercado. Retorna (result_dict, err)."""
+    """Abre ordem a mercado. Retorna (result_dict, err).
+
+    Aplica caps live SL/TP e clamp de risco/lote (MAX_RISK_USD / MAX_VOLUME) —
+    único choke point p/ GO fire, discovery, manual e auto-check.
+    """
     if not MT5_OK:
         return None, "MetaTrader5 não instalado."
     try:
@@ -519,8 +523,9 @@ def execute(symbol: str, acao: str, volume: float, sl: float = None, tp: float =
         tick_size = float(info.trade_tick_size or info.point or 0.00001)
         stops_lvl = int(getattr(info, "trade_stops_level", 0) or 0)
         point     = float(info.point or tick_size)
+        spread    = abs(float(tick.ask) - float(tick.bid))
 
-        # Caps live SL/TP (ETH/BTC/EUR/GBP) — evita ATR H1 discovery / estrutural gigante.
+        # Caps live SL/TP (ETH/BTC/XAU/EUR/GBP) — evita ATR H1 discovery / estrutural gigante.
         # Posição já aberta: crypto_bp/manage encurta TP via modify_sl_tp.
         if sl is not None and tp is not None:
             try:
@@ -530,25 +535,70 @@ def execute(symbol: str, acao: str, volume: float, sl: float = None, tp: float =
             except Exception:
                 pass
 
+        # Preço cruzou o stop do sinal → 10016 se mandarmos assim; não “empurrar”
+        # o SL para o outro lado (abriria trade já inválido).
+        if sl is not None:
+            sl_f = float(sl)
+            if is_buy and sl_f >= price:
+                mt5.shutdown()
+                return None, (f"SL do lado errado p/ COMPRA (sl={sl_f} >= price={price}) "
+                              "— preço já cruzou o stop do GO")
+            if (not is_buy) and sl_f <= price:
+                mt5.shutdown()
+                return None, (f"SL do lado errado p/ VENDA (sl={sl_f} <= price={price}) "
+                              "— preço já cruzou o stop do GO")
+        if tp is not None:
+            tp_f = float(tp)
+            if is_buy and tp_f <= price:
+                mt5.shutdown()
+                return None, (f"TP do lado errado p/ COMPRA (tp={tp_f} <= price={price})")
+            if (not is_buy) and tp_f >= price:
+                mt5.shutdown()
+                return None, (f"TP do lado errado p/ VENDA (tp={tp_f} >= price={price})")
+
         def snap(p):
             if p is None or tick_size == 0:
                 return p
             return round(round(float(p) / tick_size) * tick_size, 10)
 
         def min_dist(p, side):
-            if p is None or stops_lvl == 0:
-                return snap(p)
-            d = stops_lvl * point
+            """Garante distância mínima. BTC/ETH IC frequentemente reportam
+            trade_stops_level=0 mas rejeitam SL/TP dentro do spread (10016)."""
+            if p is None:
+                return None
+            p = float(p)
+            d = max(stops_lvl * point, spread, tick_size * 2)
             if side == "sl":
-                if is_buy and p >= price - d: p = price - d
-                elif not is_buy and p <= price + d: p = price + d
+                if is_buy and p > price - d:
+                    p = price - d
+                elif (not is_buy) and p < price + d:
+                    p = price + d
             else:
-                if is_buy and p <= price + d: p = price + d
-                elif not is_buy and p >= price - d: p = price - d
+                if is_buy and p < price + d:
+                    p = price + d
+                elif (not is_buy) and p > price - d:
+                    p = price - d
             return snap(p)
 
         sl_a = min_dist(snap(sl), "sl") if sl is not None else None
         tp_a = min_dist(snap(tp), "tp") if tp is not None else None
+
+        # Cap risco USD + teto de lote (painel às vezes força 1.0 em BTC/ETH).
+        vol_a = float(volume or 0)
+        try:
+            from services.crypto_config import clamp_live_volume
+            ts = float(info.trade_tick_size or info.point or 0)
+            tv = float(info.trade_tick_value or 0)
+            vpp = (tv / ts) if ts else 0.0
+            sl_pts = abs(float(price) - float(sl_a)) if sl_a is not None else 0.0
+            vmin = float(getattr(info, "volume_min", 0) or 0.01)
+            vstep = float(getattr(info, "volume_step", 0) or 0.01)
+            vol_a, vnote = clamp_live_volume(
+                symbol, vol_a, sl_pts, vpp, volume_min=vmin, volume_step=vstep)
+            if vnote:
+                logger.warning("crypto execute %s volume clamp: %s", symbol, vnote)
+        except Exception as exc:
+            logger.warning("crypto execute volume clamp falhou %s: %s", symbol, exc)
 
         _IOC = getattr(mt5, "SYMBOL_FILLING_IOC", 2)
         _FOK = getattr(mt5, "SYMBOL_FILLING_FOK", 1)
@@ -560,7 +610,7 @@ def execute(symbol: str, acao: str, volume: float, sl: float = None, tp: float =
             pass
 
         req = {
-            "action": mt5.TRADE_ACTION_DEAL, "symbol": symbol, "volume": float(volume),
+            "action": mt5.TRADE_ACTION_DEAL, "symbol": symbol, "volume": float(vol_a),
             "type": otype, "price": price, "deviation": 30, "magic": MAGIC_CRYPTO,
             "comment": BOT_COMMENT, "type_time": mt5.ORDER_TIME_GTC, "type_filling": filling,
         }

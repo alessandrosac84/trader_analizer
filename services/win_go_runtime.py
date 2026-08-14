@@ -30,6 +30,9 @@ from services.win_go_setups import (
     win_volspike_am_signal, win_ib_brk_v15_signal, win_hl_mid_signal,
     wdo_out_gap_day_signal, wdo_out_power_signal, wdo_imp_1014_mt_signal,
     wdo_eng_1014_signal, wdo_gapc_a60_signal,
+    apply_wdo_live_caps,
+    apply_win_live_caps,
+    _WIN_TP_CAP,
 )
 from services.b3_discovery_paths import make_wingo_signal, win_wdo_disc_paths
 
@@ -235,7 +238,7 @@ def _mt5():
 def _symbol_for(asset: str) -> str:
     if (asset or "WIN").upper() == "WDO":
         return os.getenv("WDO_MT5_SYMBOL", "WDOU26").strip()
-    return os.getenv("WIN_MT5_SYMBOL", "WINQ26").strip()
+    return os.getenv("WIN_MT5_SYMBOL", "WINV26").strip()
 
 
 def _notify(txt):
@@ -327,6 +330,41 @@ def _order(mt5, sym, action, volume, price, sl, tp, magic, comment, closing_tick
             return r, None
         time.sleep(1)
     return None, f"retcode={getattr(r, 'retcode', '?')}" if r else "sem resposta"
+
+
+def _cap_open_win_tps(mt5):
+    """Encurta TP de posições WIN WinGo acima do cap live (não mexe no SL)."""
+    sym = _symbol_for("WIN")
+    for p in _asset_positions(mt5, sym, "WIN"):
+        entry = float(p.price_open)
+        cur_tp = float(p.tp or 0)
+        cur_sl = float(p.sl or 0)
+        if cur_tp <= 0 or abs(cur_tp - entry) <= _WIN_TP_CAP + 1e-9:
+            continue
+        buy = int(p.type) == 0  # POSITION_TYPE_BUY
+        new_tp = entry + _WIN_TP_CAP if buy else entry - _WIN_TP_CAP
+        req = {
+            "action": mt5.TRADE_ACTION_SLTP,
+            "symbol": sym,
+            "position": int(p.ticket),
+            "sl": cur_sl,
+            "tp": float(new_tp),
+        }
+        r = mt5.order_send(req)
+        if r is not None and r.retcode == mt5.TRADE_RETCODE_DONE:
+            logger.info(
+                "WinGo WIN TP_CAP ticket=%s: %.0f → %.0f (cap=%.0f)",
+                p.ticket, cur_tp, new_tp, _WIN_TP_CAP,
+            )
+            _notify(
+                f"✂️ <b>WIN TP cap</b> ticket {p.ticket}\n"
+                f"TP {cur_tp:.0f} → {new_tp:.0f} (≤{_WIN_TP_CAP:.0f} pts)"
+            )
+        else:
+            logger.warning(
+                "WinGo WIN TP_CAP falhou ticket=%s: %s",
+                p.ticket, getattr(r, "comment", r),
+            )
 
 
 def _reconcile(mt5):
@@ -439,6 +477,7 @@ def _loop():
                 time.sleep(CHECK_SEC)
                 continue
             _reconcile(mt5)
+            _cap_open_win_tps(mt5)
 
             # Após EOD: só fecha até zerar (sem janela curta 17:55–18:15)
             if past_eod:
@@ -482,6 +521,12 @@ def _loop():
                         continue
                     buy = sig["dir"] == "COMPRA"
                     px = tick.ask if buy else tick.bid
+                    # Caps live WDO (TP≤20 / SL≤25) e WIN (TP≤800 / SL≤500) —
+                    # todos setups WinGo+disc; backtests/régua GO intactos.
+                    if asset == "WDO":
+                        sig = apply_wdo_live_caps(sig, px)
+                    elif asset == "WIN":
+                        sig = apply_win_live_caps(sig, px)
                     otype = mt5.ORDER_TYPE_BUY if buy else mt5.ORDER_TYPE_SELL
                     r, err = _order(mt5, sym, otype, vol, px, sig["sl"], sig["tp"],
                                     cfg["magic"], cfg["comment"])

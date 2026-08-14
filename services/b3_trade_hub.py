@@ -84,7 +84,7 @@ _WINGO_UI = {
 
 
 def _sym():
-    return os.getenv("WIN_MT5_SYMBOL", "WINQ26").strip()
+    return os.getenv("WIN_MT5_SYMBOL", "WINV26").strip()
 
 
 def _ensure_mt5():

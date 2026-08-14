@@ -225,7 +225,7 @@ def evaluate_symbol(mt5, symbol: str, state: ShadowState):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--symbols", default=None,
-                    help="ex. WINQ26,WDOU26 (default: .env WIN_MT5_SYMBOL/WDO_MT5_SYMBOL)")
+                    help="ex. WINV26,WDOU26 (default: .env WIN_MT5_SYMBOL/WDO_MT5_SYMBOL)")
     ap.add_argument("--once", action="store_true")
     args = ap.parse_args()
 
@@ -238,7 +238,7 @@ def main():
         print("MT5 não inicializou:", mt5.last_error()); return
 
     symbols = (args.symbols.split(",") if args.symbols else
-               [os.getenv("WIN_MT5_SYMBOL", "WINQ26"), os.getenv("WDO_MT5_SYMBOL", "WDOU26")])
+               [os.getenv("WIN_MT5_SYMBOL", "WINV26"), os.getenv("WDO_MT5_SYMBOL", "WDOU26")])
     symbols = [s.strip() for s in symbols if s.strip()]
     for s in symbols:
         mt5.symbol_select(s, True)
