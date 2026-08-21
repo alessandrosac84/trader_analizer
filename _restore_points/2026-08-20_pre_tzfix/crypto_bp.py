@@ -240,40 +240,6 @@ def _now():
     return datetime.now(_BRT)
 
 
-_srv_off = {"val": None, "ts": 0.0}
-
-
-def _server_utc_offset():
-    """Offset (segundos) entre a hora do SERVIDOR da corretora e a UTC real.
-
-    od.time (deal do MT5) vem em hora do servidor (ICMarkets ~GMT+2/+3), NÃO em
-    UTC. Sem corrigir, fromtimestamp(od.time, BRT) gravava o trade da noite no dia
-    seguinte (o total de hoje 'congelava' após ~21h BRT). Aqui medimos o offset
-    comparando a hora de um tick do servidor com a UTC real, e cacheamos por 1h."""
-    if _srv_off["val"] is not None and (time.time() - _srv_off["ts"]) < 3600:
-        return _srv_off["val"]
-    off = 0
-    try:
-        import MetaTrader5 as mt5
-        tk = None
-        for s in ("BTCUSD", "EURUSD", "XAUUSD"):
-            tk = mt5.symbol_info_tick(s)
-            if tk and tk.time:
-                break
-        if tk and tk.time:
-            off = round((int(tk.time) - int(time.time())) / 3600.0) * 3600
-    except Exception:
-        off = 0
-    _srv_off["val"] = off
-    _srv_off["ts"] = time.time()
-    return off
-
-
-def _close_dt_brt(close_epoch):
-    """Converte a hora de fechamento (epoch do servidor) para BRT correto."""
-    return datetime.fromtimestamp(int(close_epoch) - _server_utc_offset(), _BRT)
-
-
 def _is_weekend():
     return _now().weekday() >= 5
 
@@ -473,7 +439,7 @@ def _reconcile_closes_inner():
         tk = t.get("out_ticket")
         if tk is None or tk in _logged_deals:
             continue
-        cdt = _close_dt_brt(t["close_epoch"])
+        cdt = datetime.fromtimestamp(t["close_epoch"], _BRT)
         cday = cdt.strftime("%Y-%m-%d")
         # Casar com linha existente SEM duplicar.
         # ⚠️ NÃO casar só por símbolo+profit: PnLs parecidos de dias diferentes
@@ -2468,7 +2434,7 @@ def _rebuild_from_history(hours: int = 120) -> int:
     # reimporta cada posição fechada (na ordem de fechamento), casada por posição
     n = 0
     for t in trades:
-        cdt = _close_dt_brt(t["close_epoch"])
+        cdt = datetime.fromtimestamp(t["close_epoch"], _BRT)
         entry = {
             "id": _next_id(), "datetime_brt": cdt.strftime("%Y-%m-%d %H:%M:%S"),
             "symbol": t["symbol"], "direcao": t.get("direcao", "?"),

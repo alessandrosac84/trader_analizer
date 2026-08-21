@@ -42,14 +42,6 @@ LOSS_CUT_R = 0.7           # micro contra com loss ≤ −0,7R → corta sangram
 # capar o stop cheio. É o último recurso: só age se NENHUMA regra anterior fechou.
 HARD_CUT_R = 0.8           # loss ≤ −0,8R (qualquer condição) → fecha (backstop)
 HARD_CUT_ENABLED = True    # liga/desliga a rede de segurança sem apagar código
-# Proteção de QUASE-ALVO (14/08): COMPLEMENTA o giveback, não o substitui.
-# O giveback só arma em ≥1R OU ≥US$80 — cego pra trades cujo TP fica a <1R e que
-# chegam pertíssimo do alvo (ex.: pico 0,74R = 81% do TP, US$78: não armava e
-# devolvia tudo). Esta regra arma pela % do CAMINHO até o TP, e trava/fecha o lucro.
-TP_NEAR_ENABLED = True
-TP_NEAR_ARM_FRAC = 0.80     # pico atingiu ≥80% do caminho até o TP → arma proteção
-TP_NEAR_GIVEBACK_FRAC = 0.34  # devolveu ≥1/3 do que andou desde o pico → fecha
-TP_NEAR_LOCK_FRAC = 0.50    # enquanto não devolve, trava o stop em 50% do pico (lucro)
 
 
 def allowed_giveback(peak_pnl_ccy: float, usdbrl: float = 5.2) -> float:
@@ -191,49 +183,6 @@ def manage(pos: dict, signal: dict, atr: float = 0.0, candles_open: int = 0,
                 allowed, cur_pnl, given_back, armed, armed_r, armed_usd,
                 float(peak_favor or 0.0), risk,
             )
-
-        # 5b) PROTEÇÃO DE QUASE-ALVO — arma pela % do caminho até o TP.
-        # COMPLEMENTA o giveback (não o substitui): pega o caso do trade que chega
-        # perto do alvo mas com pico < 1R e < US$80, que o giveback deixa passar.
-        if TP_NEAR_ENABLED and not close and tp and risk > 0:
-            tp_dist = abs(entry - float(tp))
-            pk = float(peak_favor or 0.0)
-            if tp_dist > 0 and pk > 0:
-                peak_prog = pk / tp_dist
-                if peak_prog >= TP_NEAR_ARM_FRAC:
-                    given_back_px = pk - favor  # devolvido (em preço) desde o pico
-                    if given_back_px >= TP_NEAR_GIVEBACK_FRAC * pk:
-                        rec, reason, close = (
-                            "FECHAR",
-                            f"🎯 QUASE-ALVO: pico a {peak_prog:.0%} do TP e devolveu "
-                            f"{given_back_px / pk:.0%} — trava o lucro antes de virar prejuízo.",
-                            True,
-                        )
-                        close_code = "TP_NEAR"
-                        logger.info(
-                            "TP_NEAR close %s: peak_prog=%.2f peak_favor=%.4f favor=%.4f "
-                            "given_back=%.4f risk=%.4f",
-                            pos.get("symbol") or "?", peak_prog, pk, favor,
-                            given_back_px, risk,
-                        )
-                    else:
-                        # armado, ainda não devolveu o gatilho → trava o stop em lucro
-                        lock = TP_NEAR_LOCK_FRAC * pk
-                        lock_sl = (entry + lock) if is_buy else (entry - lock)
-                        better = (is_buy and lock_sl > (new_sl or sl)) or \
-                                 (not is_buy and lock_sl < (new_sl or sl or 1e18))
-                        if better:
-                            if rec == "MANTER":
-                                rec = "TRAILING"
-                            new_sl = round(lock_sl, 5)
-                            reason = (
-                                f"🎯 QUASE-ALVO: pico a {peak_prog:.0%} do TP — stop travado "
-                                f"em +{TP_NEAR_LOCK_FRAC:.0%} do pico (lucro protegido)."
-                            )
-                            logger.info(
-                                "TP_NEAR lock %s: peak_prog=%.2f lock_sl=%.5f (sl anterior=%.5f)",
-                                pos.get("symbol") or "?", peak_prog, lock_sl, sl,
-                            )
 
         # 6) REVERSÃO PELO MICRO (com lucro)
         micro_against = (is_buy and micro_dir == "BAIXA") or (not is_buy and micro_dir == "ALTA")

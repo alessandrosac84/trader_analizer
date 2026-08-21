@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Opening Engine — WIN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#05070d;--panel:rgba(14,22,34,.62);--line:rgba(53,224,240,.18);--line-strong:rgba(53,224,240,.42);
+--cyan:#35e0f0;--gold:#f0b429;--red:#ff5b6e;--green:#34e0a1;--amber:#ffcf5c;--purple:#a98bff;
+--text:#dcecf5;--muted:#7f96ab;--glow-cyan:0 0 18px rgba(53,224,240,.35)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Rajdhani',system-ui,sans-serif;background:var(--bg);color:var(--text);letter-spacing:.3px;padding:20px 26px;min-height:100vh}
+.mono{font-family:'Share Tech Mono',monospace}
+a{color:var(--cyan);text-decoration:none}
+.head{display:flex;align-items:center;gap:16px;border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:18px}
+.head h1{font-size:24px;font-weight:700;letter-spacing:1px}.head h1 span{color:var(--cyan);text-shadow:var(--glow-cyan)}
+.head .sub{color:var(--muted);font-size:12px}.mono.sys{font-family:'Share Tech Mono';font-size:12px;color:var(--muted)}
+.btn{background:transparent;border:1px solid var(--line);color:var(--cyan);border-radius:8px;padding:7px 14px;cursor:pointer;font-family:'Share Tech Mono';font-size:12px;transition:.15s}
+.btn:hover{background:rgba(53,224,240,.1);box-shadow:var(--glow-cyan)}
+.spacer{flex:1}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--line);border-radius:20px;font-size:12px;font-family:'Share Tech Mono';background:rgba(8,14,22,.6)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green)}
+.dot.off{background:var(--red);box-shadow:0 0 8px var(--red)}.dot.wait{background:var(--amber);box-shadow:0 0 8px var(--amber)}
+.grid{display:grid;grid-template-columns:340px 1fr;gap:18px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px}
+.panel h2{font-size:13px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:14px;font-weight:600}
+.signal{text-align:center;padding:8px 0 4px}
+.signal .big{font-size:52px;font-weight:700;letter-spacing:3px;line-height:1}
+.signal.long .big{color:var(--green);text-shadow:0 0 22px rgba(52,224,161,.5)}
+.signal.short .big{color:var(--red);text-shadow:0 0 22px rgba(255,91,110,.5)}
+.signal.wait .big{color:var(--amber);text-shadow:0 0 22px rgba(255,207,92,.4)}
+.signal .cls{font-family:'Share Tech Mono';font-size:13px;color:var(--muted);margin-top:6px}
+.bars{margin-top:18px}
+.bar-row{display:flex;align-items:center;gap:10px;margin:10px 0}
+.bar-row .lbl{width:56px;font-size:12px;font-family:'Share Tech Mono'}
+.bar-track{flex:1;height:16px;background:rgba(255,255,255,.05);border-radius:8px;overflow:hidden;border:1px solid var(--line)}
+.bar-fill{height:100%;border-radius:8px;transition:width .4s}
+.bar-fill.buy{background:linear-gradient(90deg,var(--green),#0f6e56)}
+.bar-fill.sell{background:linear-gradient(90deg,var(--red),#7a2233)}
+.bar-row .val{width:44px;text-align:right;font-family:'Share Tech Mono';font-size:14px;font-weight:600}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:9px 8px;border-bottom:1px solid rgba(53,224,240,.08)}
+th{color:var(--muted);font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600}
+.tag{display:inline-block;padding:2px 9px;border-radius:12px;font-size:11px;font-family:'Share Tech Mono'}
+.tag.COMPRA{background:rgba(52,224,161,.15);color:var(--green)}
+.tag.VENDA{background:rgba(255,91,110,.15);color:var(--red)}
+.tag.NEUTRO{background:rgba(127,150,171,.15);color:var(--muted)}
+.nodata{opacity:.45}
+.ctx{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:4px}
+.ctx .c{background:rgba(8,14,22,.5);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.ctx .c .k{font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
+.ctx .c .v{font-size:18px;font-family:'Share Tech Mono';margin-top:3px}
+.note{color:var(--muted);font-size:12px;font-family:'Share Tech Mono'}
+#probe{white-space:pre-wrap;font-family:'Share Tech Mono';font-size:12px;color:var(--text);background:rgba(8,14,22,.5);border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:10px;display:none}
+.warn{color:var(--amber);font-family:'Share Tech Mono';font-size:13px;padding:10px 0}
+</style>
+</head>
+<body>
+<div class="head">
+  <h1>OPENING <span>ENGINE</span></h1>
+  <span class="sub">abertura do WIN · score determinístico 0–100</span>
+  <span class="spacer"></span>
+  <span class="pill"><span class="dot" id="statusDot"></span> <span id="statusTxt" class="mono">—</span></span>
+  <button class="btn" id="toggleBtn">LIGADO</button>
+  <button class="btn" id="probeBtn">PROBE MT5</button>
+  <a class="btn" href="/newdashboard">← HUD</a>
+</div>
+
+<div id="warnBox"></div>
+
+<div class="grid">
+  <div class="panel">
+    <h2>Veredito</h2>
+    <div class="signal wait" id="signalBox">
+      <div class="big" id="signalTxt">—</div>
+      <div class="cls" id="classTxt">aguardando dados</div>
+    </div>
+    <div class="bars">
+      <div class="bar-row"><span class="lbl">COMPRA</span><div class="bar-track"><div class="bar-fill buy" id="buyBar" style="width:0"></div></div><span class="val" id="buyVal">0</span></div>
+      <div class="bar-row"><span class="lbl">VENDA</span><div class="bar-track"><div class="bar-fill sell" id="sellBar" style="width:0"></div></div><span class="val" id="sellVal">0</span></div>
+    </div>
+    <div class="note" id="availTxt" style="margin-top:14px"></div>
+    <pre id="probe"></pre>
+  </div>
+
+  <div>
+    <div class="panel" style="margin-bottom:18px">
+      <h2>Fatores do score</h2>
+      <table>
+        <thead><tr><th>Fator</th><th>Lado</th><th>Pontos</th><th>Leitura</th></tr></thead>
+        <tbody id="factorsBody"><tr><td colspan="4" class="note">carregando…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="panel">
+      <h2>Contexto de mercado</h2>
+      <div class="ctx" id="ctxBox"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const FACT_LABEL={contexto:"Contexto diário",gap:"Gap de abertura",value_area:"Posição vs VA (POC/VAH/VAL)",opening_range:"Opening Range (5min)",volume:"Volume",agressao:"Agressão (T&T)",price_action:"Price Action",externo:"Contexto externo (WDO)"};
+let enabled=true;
+function n(v,d){return (v===null||v===undefined)?'—':(typeof v==='number'?v.toLocaleString('pt-BR',{maximumFractionDigits:d===undefined?0:d}):v);}
+
+async function refresh(){
+  try{
+    const r=await fetch('/api/opening/status');const s=await r.json();
+    render(s);
+  }catch(e){document.getElementById('statusTxt').textContent='erro de rede';}
+}
+function render(s){
+  const dot=document.getElementById('statusDot'),st=document.getElementById('statusTxt');
+  st.textContent=(s.status||'—')+(s.window?(' · '+s.window):'');
+  dot.className='dot'+(s.status==='ATIVO'?'':(s.status==='SEM_MT5'||s.status==='ERRO'?' off':' wait'));
+  const wb=document.getElementById('warnBox');
+  wb.innerHTML = s.erro ? ('<div class="warn">⚠ '+s.erro+'</div>') : '';
+  const sc=s.score;
+  if(!sc){document.getElementById('factorsBody').innerHTML='<tr><td colspan=4 class="note">sem score (fora da janela ou MT5 off)</td></tr>';renderCtx(s);return;}
+  // sinal
+  const box=document.getElementById('signalBox');
+  const sig=sc.signal||'WAIT';
+  box.className='signal '+(sig==='LONG'?'long':(sig==='SHORT'?'short':'wait'));
+  document.getElementById('signalTxt').textContent=sig;
+  document.getElementById('classTxt').textContent=sc.classe+' · dominante '+sc.dominant+' · força '+sc.strength;
+  // barras
+  document.getElementById('buyBar').style.width=sc.buy+'%';
+  document.getElementById('sellBar').style.width=sc.sell+'%';
+  document.getElementById('buyVal').textContent=sc.buy;
+  document.getElementById('sellVal').textContent=sc.sell;
+  document.getElementById('availTxt').textContent='Fatores com dado: '+sc.fatores_com_dado+'/'+sc.fatores_total+(sc.fatores_com_dado<sc.fatores_total?' — alguns dados não vieram do feed (veja PROBE).':'');
+  // fatores
+  const tb=document.getElementById('factorsBody');tb.innerHTML='';
+  for(const key in FACT_LABEL){
+    const f=sc.factors[key];if(!f)continue;
+    const tr=document.createElement('tr');if(!f.avail)tr.className='nodata';
+    tr.innerHTML='<td>'+FACT_LABEL[key]+'</td><td><span class="tag '+f.side+'">'+f.side+'</span></td><td class="mono">'+(f.pts>0?'+'+f.pts:'0')+'</td><td class="note">'+(f.note||'')+(f.avail?'':' · sem dado')+'</td>';
+    tb.appendChild(tr);
+  }
+  renderCtx(s);
+}
+function renderCtx(s){
+  const refs=s.refs||{},t=s.today||{},ag=s.aggr,w=s.wdo;
+  const gap=(t.open&&refs.prev_close)?(((t.open-refs.prev_close)/refs.prev_close*100).toFixed(2)+'%'):'—';
+  const items=[
+    ['Viés diário',s.daily_bias||'—'],
+    ['Abertura hoje',n(t.open)],
+    ['Fech. anterior',n(refs.prev_close)],
+    ['Gap',gap],
+    ['POC',n(refs.poc)],['VAH',n(refs.vah)],['VAL',n(refs.val)],
+    ['Máx/Mín ant.',n(refs.prev_high)+' / '+n(refs.prev_low)],
+    ['Opening Range',(t.or_high?n(t.or_high)+' / '+n(t.or_low):'formando…')],
+    ['Último preço',n(t.last)],
+    ['Agressão',ag?((ag.ratio>=0?'+':'')+(ag.ratio*100).toFixed(0)+'% '+(ag.fonte||'MT5')):'sem feed (ligue o ProfitFlow)'],
+    ['WDO',w?w.dir:'—'],
+  ];
+  document.getElementById('ctxBox').innerHTML=items.map(i=>'<div class="c"><div class="k">'+i[0]+'</div><div class="v">'+i[1]+'</div></div>').join('');
+}
+document.getElementById('toggleBtn').onclick=async()=>{
+  enabled=!enabled;
+  const r=await fetch('/api/opening/toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled})});
+  const j=await r.json();enabled=j.enabled;
+  document.getElementById('toggleBtn').textContent=enabled?'LIGADO':'DESLIGADO';
+};
+document.getElementById('probeBtn').onclick=async()=>{
+  const pre=document.getElementById('probe');pre.style.display='block';pre.textContent='consultando MT5…';
+  try{const r=await fetch('/api/opening/probe');const j=await r.json();pre.textContent=JSON.stringify(j,null,2);}
+  catch(e){pre.textContent='erro: '+e;}
+};
+refresh();setInterval(refresh,5000);
+</script>
+</body>
+</html>

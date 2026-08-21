@@ -1,0 +1,2 @@
+Backup ANTES da correcao de timezone do close_epoch (trades da noite indo pro dia seguinte).
+Restaurar: copie crypto_bp.py de volta para blueprints/ e reinicie a instancia crypto.

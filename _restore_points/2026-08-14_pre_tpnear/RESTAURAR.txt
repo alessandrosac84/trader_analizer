@@ -1,0 +1,3 @@
+Backup ANTES da regra de proteção de quase-alvo (TP_NEAR).
+Restaurar: copie crypto_position_manager.py de volta para services/ e reinicie.
+Este backup JÁ contém o corte -0,8R (HARD_CUT).

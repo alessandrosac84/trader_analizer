@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monitor PROFIT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+:root{--bg:#05070d;--panel:rgba(14,22,34,.62);--line:rgba(53,224,240,.18);--line-strong:rgba(53,224,240,.42);
+--cyan:#35e0f0;--gold:#f0b429;--red:#ff5b6e;--green:#34e0a1;--amber:#ffcf5c;--purple:#a98bff;
+--text:#dcecf5;--muted:#7f96ab;--glow:0 0 18px rgba(53,224,240,.35)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Rajdhani',system-ui,sans-serif;background:var(--bg);color:var(--text);letter-spacing:.3px;padding:18px 22px;min-height:100vh}
+.mono{font-family:'Share Tech Mono',monospace}a{color:var(--cyan);text-decoration:none}
+.head{display:flex;align-items:center;gap:14px;border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:16px}
+.head h1{font-size:23px;font-weight:700;letter-spacing:1px}.head h1 span{color:var(--gold);text-shadow:0 0 18px rgba(240,180,41,.35)}
+.head .sub{color:var(--muted);font-size:12px}.spacer{flex:1}
+.btn{background:transparent;border:1px solid var(--line);color:var(--cyan);border-radius:8px;padding:6px 12px;cursor:pointer;font-family:'Share Tech Mono';font-size:12px}
+.btn:hover{background:rgba(53,224,240,.1);box-shadow:var(--glow)}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--line);border-radius:20px;font-size:12px;font-family:'Share Tech Mono';background:rgba(8,14,22,.6)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green)}.dot.off{background:var(--red)}.dot.wait{background:var(--amber)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+.panel h2{font-size:12px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:10px;font-weight:600;display:flex;align-items:center;gap:8px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.chartbox{height:230px;width:100%}
+.assetcol{display:flex;flex-direction:column;gap:12px}
+.asset-h{display:flex;align-items:baseline;gap:10px}.asset-h b{font-size:20px}.asset-h .sym{color:var(--muted);font-family:'Share Tech Mono';font-size:12px}.asset-h .px{margin-left:auto;font-family:'Share Tech Mono';font-size:18px}
+.tag{display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-family:'Share Tech Mono';font-weight:600}
+.COMPRA{background:rgba(52,224,161,.15);color:var(--green)}.VENDA{background:rgba(255,91,110,.15);color:var(--red)}.NEUTRO{background:rgba(127,150,171,.15);color:var(--muted)}
+.row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(53,224,240,.07);font-size:13px}.row .k{color:var(--muted)}
+.verd{margin-top:8px;padding:9px 11px;border-radius:10px;font-size:13px;border:1px solid var(--line)}
+.verd.CONFIRMADO,.verd.CONFIRMADO_FORTE{background:rgba(52,224,161,.1);border-color:rgba(52,224,161,.3);color:var(--green)}
+.verd.DIVERGENTE,.verd.DIVERGENTE_FORTE{background:rgba(255,91,110,.1);border-color:rgba(255,91,110,.3);color:var(--red)}
+.verd.SEM_FLUXO,.verd.NEUTRO{background:rgba(127,150,171,.08);color:var(--muted)}
+.flowwrap{display:grid;grid-template-columns:1.2fr 1fr;gap:16px;margin-bottom:16px}
+.gauge{display:flex;align-items:center;gap:16px}
+.gnum{font-size:40px;font-weight:700;font-family:'Share Tech Mono'}
+.flowbar{height:24px;border-radius:12px;overflow:hidden;display:flex;border:1px solid var(--line);margin:8px 0}
+.flowbar .b{background:linear-gradient(90deg,#0f6e56,var(--green))}.flowbar .s{background:linear-gradient(90deg,var(--red),#7a2233)}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.kpi{background:rgba(8,14,22,.5);border:1px solid var(--line);border-radius:10px;padding:9px 11px}.kpi .v{font-size:19px;font-family:'Share Tech Mono';font-weight:600}.kpi .l{font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-top:2px}
+.opp{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px}
+.opp .lbl{font-weight:600;font-size:16px;width:54px}.opp .state{font-family:'Share Tech Mono';font-size:13px}
+.opp.hot{border-color:rgba(52,224,161,.4);background:rgba(52,224,161,.06)}
+.opp.warn{border-color:rgba(255,91,110,.35);background:rgba(255,91,110,.05)}
+.sim{display:flex;align-items:center;gap:10px;font-family:'Share Tech Mono';font-size:13px}.sim .lock{color:var(--amber)}
+.muted{color:var(--muted);font-size:12px;font-family:'Share Tech Mono')}
+.warn{color:var(--amber);font-family:'Share Tech Mono';font-size:13px;padding:6px 0}
+</style>
+</head>
+<body>
+<div class="head">
+  <h1>MONITOR <span>PROFIT</span></h1>
+  <span class="sub">one-page · score v6 · fluxo do Profit · oportunidades</span>
+  <span class="spacer"></span>
+  <span class="pill"><span class="dot" id="dot"></span> <span id="st" class="mono">—</span></span>
+  <button class="btn" onclick="refreshAll()">↻</button>
+  <a class="btn" href="/newdashboard">← HUD</a>
+</div>
+<div id="warn"></div>
+
+<!-- FLUXO em destaque + KPIs -->
+<div class="flowwrap">
+  <div class="panel">
+    <h2><span style="color:var(--gold)">◆</span> Fluxo do Profit — agressão ao vivo (WIN)</h2>
+    <div id="flowBox" class="muted">carregando…</div>
+  </div>
+  <div class="panel">
+    <h2>Estado do sistema</h2>
+    <div class="kpis" id="kpis">
+      <div class="kpi"><div class="v" id="kFlow">—</div><div class="l">Saldo fluxo</div></div>
+      <div class="kpi"><div class="v" id="kWin">—</div><div class="l">WIN sinal</div></div>
+      <div class="kpi"><div class="v" id="kWdo">—</div><div class="l">WDO sinal</div></div>
+      <div class="kpi"><div class="v" id="kSim">OFF</div><div class="l">Simulador</div></div>
+    </div>
+    <div class="muted" id="opsHint" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<!-- Gráficos + cards por ativo -->
+<div class="grid2">
+  <div class="assetcol">
+    <div class="panel"><div class="asset-h"><b>WIN</b><span class="sym" id="winSym"></span><span class="px" id="winPx">—</span></div><div id="chartWin" class="chartbox"></div></div>
+    <div class="panel" id="cardWin"><div class="muted">carregando…</div></div>
+  </div>
+  <div class="assetcol">
+    <div class="panel"><div class="asset-h"><b>WDO</b><span class="sym" id="wdoSym"></span><span class="px" id="wdoPx">—</span></div><div id="chartWdo" class="chartbox"></div></div>
+    <div class="panel" id="cardWdo"><div class="muted">carregando…</div></div>
+  </div>
+</div>
+
+<!-- Oportunidades -->
+<div class="panel" style="margin-bottom:16px">
+  <h2>⚡ Oportunidades</h2>
+  <div id="opps"><div class="muted">avaliando…</div></div>
+</div>
+
+<!-- Simulador -->
+<div class="panel">
+  <h2>🔒 Execução — Simulador do Profit (bloqueio triplo · desligado)</h2>
+  <div class="sim"><span class="lock">🔒</span> <span id="simState">—</span></div>
+  <div id="simReasons" class="muted" style="margin-top:6px"></div>
+</div>
+
+<script>
+const charts={};
+function mkChart(id){
+  const el=document.getElementById(id);
+  const c=LightweightCharts.createChart(el,{width:el.clientWidth,height:230,layout:{background:{color:'transparent'},textColor:'#7f96ab'},
+    grid:{vertLines:{color:'rgba(53,224,240,.06)'},horzLines:{color:'rgba(53,224,240,.06)'}},
+    timeScale:{timeVisible:true,secondsVisible:false,borderColor:'rgba(53,224,240,.18)'},
+    rightPriceScale:{borderColor:'rgba(53,224,240,.18)'}});
+  const s=c.addCandlestickSeries({upColor:'#34e0a1',downColor:'#ff5b6e',borderVisible:false,wickUpColor:'#34e0a1',wickDownColor:'#ff5b6e'});
+  return {c,s};
+}
+function n(v,d){return(v===null||v===undefined)?'—':(typeof v==='number'?v.toLocaleString('pt-BR',{maximumFractionDigits:d===undefined?0:d}):v);}
+async function loadCandles(asset,id){
+  try{const r=await fetch('/api/profit-monitor/candles?asset='+asset+'&tf=15');const j=await r.json();
+    if(j.ok&&j.candles){if(!charts[id])charts[id]=mkChart(id);charts[id].s.setData(j.candles);
+      document.getElementById(asset==='WIN'?'winSym':'wdoSym').textContent=j.symbol||'';}
+  }catch(e){}
+}
+async function refreshStatus(){
+  try{const r=await fetch('/api/profit-monitor/status');const s=await r.json();render(s);}
+  catch(e){document.getElementById('st').textContent='erro de rede';}
+}
+function render(s){
+  document.getElementById('dot').className='dot'+(s.status==='OK'?'':' off');
+  document.getElementById('st').textContent=s.status||'—';
+  document.getElementById('warn').innerHTML=s.erro?('<div class="warn">⚠ '+s.erro+'</div>'):'';
+  // fluxo
+  const f=s.flow;const fb=document.getElementById('flowBox');
+  if(f&&!f.stale){
+    const tot=(f.buy||0)+(f.sell||0);const bp=tot?Math.round((f.buy/tot)*100):50;
+    const rc=(f.ratio>=0?'var(--green)':'var(--red)');
+    fb.innerHTML='<div class="gauge"><div class="gnum" style="color:'+rc+'">'+(f.ratio>=0?'+':'')+Math.round(f.ratio*100)+'%</div>'+
+      '<div style="flex:1"><div class="flowbar"><div class="b" style="width:'+bp+'%"></div><div class="s" style="width:'+(100-bp)+'%"></div></div>'+
+      '<div class="row"><span class="k">Compra agressora</span><span class="mono" style="color:var(--green)">'+n(f.buy)+'</span></div>'+
+      '<div class="row"><span class="k">Venda agressora</span><span class="mono" style="color:var(--red)">'+n(f.sell)+'</span></div></div></div>';
+    document.getElementById('kFlow').textContent=(f.ratio>=0?'+':'')+Math.round(f.ratio*100)+'%';
+    document.getElementById('kFlow').style.color=rc;
+  } else { fb.innerHTML='<div class="warn">Fluxo do Profit indisponível'+(f&&f.stale?' (ProfitFlow parado?)':' — ligue o iniciar_PROFIT_FLOW.bat')+'.</div>';document.getElementById('kFlow').textContent='—'; }
+  // cards por ativo + oportunidades
+  const opps=[];
+  for(const [label,cardId,pxId,kId] of [['WIN','cardWin','winPx','kWin'],['WDO','cardWdo','wdoPx','kWdo']]){
+    const a=(s.ativos||{})[label];if(!a){continue;}
+    const v=a.v6||{};const fl=a.fluxo||{};const acao=v.acao||'NEUTRO';
+    document.getElementById(kId).innerHTML='<span class="tag '+acao+'" style="font-size:12px">'+acao+'</span>';
+    let body='';
+    if(v.ok){
+      body='<div class="asset-h" style="margin-bottom:6px"><b style="font-size:16px">'+label+'</b><span class="sym">'+(a.symbol||'')+'</span></div>'+
+        '<div class="row"><span class="k">Sinal v6 · score</span><span><span class="tag '+acao+'">'+acao+'</span> '+n(v.score)+'</span></div>'+
+        '<div class="row"><span class="k">Passa no gate calibrado</span><span class="mono">'+(v.gate_passa?'SIM':'não')+'</span></div>'+
+        '<div class="row"><span class="k">Entrada / Stop / TP1</span><span class="mono">'+n(v.entrada)+' / '+n(v.stop)+' / '+n(v.tp1)+'</span></div>'+
+        '<div class="verd '+(fl.estado||'NEUTRO')+'"><b>Fluxo: '+(fl.estado||'—').replace(/_/g,' ')+'</b> · '+(fl.nota||'')+'</div>';
+      // oportunidade: gate passa + fluxo confirma
+      const conf=(fl.estado||'').startsWith('CONFIRMADO');
+      const div=(fl.estado||'').startsWith('DIVERGENTE');
+      if(v.gate_passa&&conf) opps.push({label,cls:'hot',txt:acao+' com gate OK e '+fl.estado.replace(/_/g,' ')});
+      else if(v.gate_passa&&div) opps.push({label,cls:'warn',txt:acao+' passa gate MAS fluxo diverge — cautela'});
+      else if(v.gate_passa) opps.push({label,cls:'',txt:acao+' passa gate · fluxo neutro'});
+    } else { body='<div class="muted">'+(v.motivo||'sem dados')+'</div>'; }
+    document.getElementById(cardId).innerHTML=body;
+  }
+  // painel oportunidades
+  const oe=document.getElementById('opps');
+  oe.innerHTML=opps.length?opps.map(o=>'<div class="opp '+o.cls+'"><div class="lbl">'+o.label+'</div><div class="state">'+o.txt+'</div></div>').join('')
+    :'<div class="muted">Nenhum setup ativo agora — aguardando gate + fluxo alinharem.</div>';
+  document.getElementById('opsHint').textContent=opps.length?(opps.length+' oportunidade(s) no radar'):'Sem oportunidade no momento.';
+  // simulador
+  const sim=s.sim||{};
+  document.getElementById('kSim').textContent=sim.allowed?'PRONTO':'OFF';
+  document.getElementById('simState').textContent=(sim.estado||'—')+' · conta: '+(sim.conta||'—');
+  document.getElementById('simReasons').innerHTML=(sim.motivos_bloqueio&&sim.motivos_bloqueio.length)?('Bloqueado por: '+sim.motivos_bloqueio.join(' · ')):'Pronto para simulador.';
+}
+function refreshAll(){loadCandles('WIN','chartWin');loadCandles('WDO','chartWdo');refreshStatus();}
+window.addEventListener('resize',()=>{for(const k in charts){const el=document.getElementById(k);if(el)charts[k].c.applyOptions({width:el.clientWidth});}});
+refreshAll();setInterval(refreshStatus,5000);setInterval(()=>{loadCandles('WIN','chartWin');loadCandles('WDO','chartWdo');},60000);
+</script>
+</body>
+</html>

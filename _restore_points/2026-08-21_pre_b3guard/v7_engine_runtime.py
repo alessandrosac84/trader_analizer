@@ -777,28 +777,6 @@ class V7Runtime:
             self.last_exec_msg = "Zeragem EOD (16:55)"
             self._notify("🕐 <b>ZERAGEM 16:55</b> — posição encerrada no fim do pregão.")
             return
-        # ── PROTEÇÃO DE LUCRO (giveback + quase-alvo) — vale p/ ORB e GAP_FADE ──
-        # Só protege lucro: nunca alarga stop nem fecha no prejuízo.
-        if st and price:
-            try:
-                from services.b3_profit_guard import check as _pg_check
-                _entry = float(st.get("entry") or pos.price_open or 0)
-                _sl = float(pos.sl or 0)
-                _tp = float(st.get("tp") or (getattr(pos, "tp", 0) or 0) or 0)
-                _buy = pos.type == 0
-                _risk = float(st.get("risk") or 0) or (abs(_entry - _sl) if _sl else 0)
-                _favor = (price - _entry) if _buy else (_entry - price)
-                st["peak_favor"] = max(float(st.get("peak_favor") or 0.0), _favor)
-                _g = _pg_check(_entry, price, _sl, _tp, st["peak_favor"], _risk, _buy)
-                if _g["close"]:
-                    self._close(mt5, pos)
-                    self.last_exec_msg = _g["reason"]
-                    self._notify(f"🛡 <b>PROTEÇÃO {_g['code']}</b>\n{_g['reason']}")
-                    return
-                if _g["new_sl"]:
-                    self._modify_sl(mt5, pos, _g["new_sl"])
-            except Exception as _pgexc:
-                logger.debug("b3_profit_guard v7: %s", _pgexc)
         if not st or st["setup"] != "ORB" or not price:
             return                            # GAP_FADE: MT5 gerencia SL/TP
         buy = pos.type == 0

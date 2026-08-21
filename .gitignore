@@ -91,3 +91,7 @@ data/*.db
 data/*.db-journal
 data/*.db-wal
 data/*.db-shm
+
+# --- ProfitDLL (binário licenciado + SDK Nelogica) — não versionar ---
+profit_sdk/
+data/profit_aggression.json

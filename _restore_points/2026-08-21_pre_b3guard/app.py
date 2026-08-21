@@ -272,13 +272,6 @@ def _startup_once():
     except Exception as e:
         logger.warning("OpeningEngine não iniciou: %s", e)
     try:
-        # PROTEÇÃO DE LUCRO do Monitor MT5 (giveback+quase-alvo) — daemon isolado,
-        # só age em posições magic 20260505, só protege lucro.
-        from services.monitor_position_guard import start_monitor_position_guard
-        start_monitor_position_guard()
-    except Exception as e:
-        logger.warning("MonitorPositionGuard não iniciou: %s", e)
-    try:
         # NR7_BREAK + INSIDE_BAR_BRK (🟢 GO v3 23/07/2026) — magics 20260723/24.
         # Runtime ISOLADO: não altera v6, V7 nem WIN_EOD.
         from services.win_go_runtime import start_win_go_runtime

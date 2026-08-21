@@ -527,9 +527,6 @@ def _mt5_hub_positions(since: str):
             return out, open_rows
         magic_to_setup = {int(v["magic"]): v["label"] for v in ENGINES.values()}
         magic_to_setup.setdefault(20260722, "WIN_EOD_REV")
-        # Monitor MT5 clássico (magic 20260505) — incluído no relatório e rotulado,
-        # já que agora ele opera WIN/WDO junto do V7. Só afeta a AGREGAção do relatório.
-        magic_to_setup.setdefault(20260505, "Monitor MT5")
         start = datetime.strptime(since, "%Y-%m-%d")
         # margem: ENTRADA CSV pode ser D-1 no fuso local vs deal
         deals = mt5.history_deals_get(start - timedelta(days=2), datetime.now()) or []
