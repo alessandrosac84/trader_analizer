@@ -50,8 +50,6 @@ TP_NEAR_ENABLED = True
 TP_NEAR_ARM_FRAC = 0.80     # pico atingiu ≥80% do caminho até o TP → arma proteção
 TP_NEAR_GIVEBACK_FRAC = 0.34  # devolveu ≥1/3 do que andou desde o pico → fecha
 TP_NEAR_LOCK_FRAC = 0.50    # enquanto não devolve, trava o stop em 50% do pico (lucro)
-NEAR_TP_ARM_R = 0.6         # FALLBACK: arma também se o pico ≥0,6R, mesmo SEM TP fixo na
-                            # corretora (setups de saída gerida têm tp=0 → % do TP não dá)
 
 
 def allowed_giveback(peak_pnl_ccy: float, usdbrl: float = 5.2) -> float:
@@ -197,16 +195,13 @@ def manage(pos: dict, signal: dict, atr: float = 0.0, candles_open: int = 0,
         # 5b) PROTEÇÃO DE QUASE-ALVO — arma pela % do caminho até o TP.
         # COMPLEMENTA o giveback (não o substitui): pega o caso do trade que chega
         # perto do alvo mas com pico < 1R e < US$80, que o giveback deixa passar.
-        if TP_NEAR_ENABLED and not close and risk > 0:
+        if TP_NEAR_ENABLED and not close and tp and risk > 0:
+            tp_dist = abs(entry - float(tp))
             pk = float(peak_favor or 0.0)
-            tp_dist = abs(entry - float(tp)) if tp else 0.0
-            peak_prog = (pk / tp_dist) if tp_dist > 0 else (pk / risk)  # % do TP, ou R se sem TP
-            # ARMA por % do TP (≥80%) OU, sem TP fixo na corretora, por R (≥0,6R).
-            armed_near = ((tp_dist > 0 and peak_prog >= TP_NEAR_ARM_FRAC)
-                          or (pk / risk) >= NEAR_TP_ARM_R)
-            if pk > 0 and armed_near:
-                given_back_px = pk - favor  # devolvido (em preço) desde o pico
-                if True:
+            if tp_dist > 0 and pk > 0:
+                peak_prog = pk / tp_dist
+                if peak_prog >= TP_NEAR_ARM_FRAC:
+                    given_back_px = pk - favor  # devolvido (em preço) desde o pico
                     if given_back_px >= TP_NEAR_GIVEBACK_FRAC * pk:
                         rec, reason, close = (
                             "FECHAR",

@@ -237,7 +237,7 @@ def _mt5():
 
 def _symbol_for(asset: str) -> str:
     if (asset or "WIN").upper() == "WDO":
-        return os.getenv("WDO_MT5_SYMBOL", "WDOU26").strip()
+        return os.getenv("WDO_MT5_SYMBOL", "WDOV26").strip()
     return os.getenv("WIN_MT5_SYMBOL", "WINV26").strip()
 
 

@@ -17,7 +17,6 @@ from __future__ import annotations
 
 ENABLED = True
 NEAR_TP_ARM_FRAC = 0.80      # pico atingiu ≥80% do caminho até o TP → arma
-NEAR_TP_ARM_R = 0.6          # FALLBACK: arma também se pico ≥0,6R (sem TP fixo)
 NEAR_TP_GIVEBACK = 0.34      # devolveu ≥1/3 do pico → fecha
 NEAR_TP_LOCK = 0.50          # trava stop em +50% do pico enquanto não devolve
 GIVEBACK_ARM_R = 1.0         # pico ≥1R → arma giveback
@@ -38,23 +37,24 @@ def check(entry: float, price: float, sl: float, tp: float,
     r_now = favor / risk
     given_back = pk - favor           # quanto devolveu do pico (em pontos)
 
-    # 1) QUASE-ALVO — arma por % do caminho até o TP OU, sem TP fixo, por R (≥0,6R)
-    tp_dist = abs(entry - float(tp)) if tp else 0.0
-    prog = (pk / tp_dist) if tp_dist > 0 else (pk / risk)
-    armed = (tp_dist > 0 and prog >= NEAR_TP_ARM_FRAC) or (pk / risk) >= NEAR_TP_ARM_R
-    if armed:
-        if given_back >= NEAR_TP_GIVEBACK * pk:
-            out.update(close=True, code="TP_NEAR",
-                       reason=f"🎯 QUASE-ALVO: pico a {prog:.0%} do TP e devolveu "
-                              f"{given_back / pk:.0%} — trava o lucro.")
-            return out
-        lock = NEAR_TP_LOCK * pk
-        lock_sl = (entry + lock) if buy else (entry - lock)
-        better = (buy and (not sl or lock_sl > sl)) or ((not buy) and (not sl or lock_sl < sl))
-        if better:
-            out.update(new_sl=round(lock_sl, 1),
-                       reason=f"🎯 QUASE-ALVO: pico a {prog:.0%} do TP — "
-                              f"stop travado em +{NEAR_TP_LOCK:.0%} do pico.")
+    # 1) QUASE-ALVO — arma pela % do caminho até o TP
+    if tp:
+        tp_dist = abs(entry - float(tp))
+        if tp_dist > 0:
+            prog = pk / tp_dist
+            if prog >= NEAR_TP_ARM_FRAC:
+                if given_back >= NEAR_TP_GIVEBACK * pk:
+                    out.update(close=True, code="TP_NEAR",
+                               reason=f"🎯 QUASE-ALVO: pico a {prog:.0%} do TP e devolveu "
+                                      f"{given_back / pk:.0%} — trava o lucro.")
+                    return out
+                lock = NEAR_TP_LOCK * pk
+                lock_sl = (entry + lock) if buy else (entry - lock)
+                better = (buy and (not sl or lock_sl > sl)) or ((not buy) and (not sl or lock_sl < sl))
+                if better:
+                    out.update(new_sl=round(lock_sl, 1),
+                               reason=f"🎯 QUASE-ALVO: pico a {prog:.0%} do TP — "
+                                      f"stop travado em +{NEAR_TP_LOCK:.0%} do pico.")
 
     # 2) GIVEBACK (MFE) — pico ≥1R
     if not out["close"] and (pk / risk) >= GIVEBACK_ARM_R:

@@ -51,7 +51,7 @@ except Exception:
 # Mapeamento TV_SYMBOL -> MT5_SYMBOL para order_send
 _TV_TO_MT5_TRADE = {
     "BMFBOVESPA:WIN1!": os.getenv("WIN_MT5_SYMBOL", "WINV26"),
-    "BMFBOVESPA:WDO1!": os.getenv("WDO_MT5_SYMBOL", "WDOU26"),
+    "BMFBOVESPA:WDO1!": os.getenv("WDO_MT5_SYMBOL", "WDOV26"),
     "BMFBOVESPA:PETR4": "PETR4",
     "BMFBOVESPA:RADL3": "RADL3",
     "FX:EURUSD":        "EURUSD",

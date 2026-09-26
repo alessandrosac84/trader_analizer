@@ -32,7 +32,7 @@ def _win_symbol():
 
 
 def _wdo_symbol():
-    return os.getenv("WDO_MT5_SYMBOL", "WDOU26").strip()
+    return os.getenv("WDO_MT5_SYMBOL", "WDOV26").strip()
 
 
 # ── FLUXO do Profit (lido do profit_flow.py, sem carregar a DLL aqui) ───────

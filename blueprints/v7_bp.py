@@ -114,7 +114,7 @@ def api_v7_candles():
         tf = request.args.get("tf")
         asset = (request.args.get("asset") or "WIN").upper().strip()
         if asset == "WDO":
-            sym = os.getenv("WDO_MT5_SYMBOL", "WDOU26").strip()
+            sym = os.getenv("WDO_MT5_SYMBOL", "WDOV26").strip()
         else:
             asset = "WIN"
             sym = os.getenv("WIN_MT5_SYMBOL", rt.symbol or "WINV26").strip()
@@ -138,7 +138,7 @@ def api_v7_tick():
 
         def _one(a):
             if a == "WDO":
-                sym = os.getenv("WDO_MT5_SYMBOL", "WDOU26").strip()
+                sym = os.getenv("WDO_MT5_SYMBOL", "WDOV26").strip()
             else:
                 a = "WIN"
                 sym = os.getenv("WIN_MT5_SYMBOL", rt.symbol or "WINV26").strip()

@@ -199,7 +199,7 @@ def engines_status():
         mt5 = _ensure_mt5()
         if mt5.terminal_info() is not None:
             win_sym = _sym()
-            wdo_sym = os.getenv("WDO_MT5_SYMBOL", "WDOU26").strip()
+            wdo_sym = os.getenv("WDO_MT5_SYMBOL", "WDOV26").strip()
             open_pos = []
             price_by_sym = {}
             for sym in (win_sym, wdo_sym):
@@ -303,7 +303,7 @@ def close_by_magic(magic: int, asset: str = None):
         if mt5.terminal_info() is None:
             return False, "MT5 offline"
         win_sym = _sym()
-        wdo_sym = os.getenv("WDO_MT5_SYMBOL", "WDOU26").strip()
+        wdo_sym = os.getenv("WDO_MT5_SYMBOL", "WDOV26").strip()
         want = (asset or "").upper().strip() or None
         p = None
         sym = win_sym
